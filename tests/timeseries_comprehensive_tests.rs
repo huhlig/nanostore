@@ -31,6 +31,7 @@ use nanokv::table::timeseries::{TimeSeriesConfig, TimeSeriesTable};
 use nanokv::txn::TransactionId;
 use nanokv::types::TableId;
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 // Helper function to create a transaction ID for testing
@@ -66,6 +67,7 @@ fn test_basic_insert_and_scan() {
     for (ts, value) in &points {
         table.append_point(series_key, *ts, *value, tx_id).unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let mut cursor = table.scan_series(series_key, 0, 500).unwrap();
 
@@ -100,6 +102,7 @@ fn test_insert_multiple_series() {
         .append_point(b"memory.usage", 100, b"50.0", tx_id)
         .unwrap();
     table.append_point(b"disk.io", 100, b"1000", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"cpu.usage", 0, 200).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -151,6 +154,7 @@ fn test_time_range_query_full_range() {
             .append_point(b"sensor", i * 100, format!("{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 0, 1000).unwrap();
     assert_eq!(cursor.count(), 10);
@@ -174,6 +178,7 @@ fn test_time_range_query_partial_range() {
             .append_point(b"sensor", i * 100, format!("{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 200, 600).unwrap();
     assert_eq!(cursor.count(), 4);
@@ -209,6 +214,7 @@ fn test_time_range_query_no_overlap() {
             .append_point(b"sensor", i * 100, format!("{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 1000, 2000).unwrap();
     assert_eq!(cursor.count(), 0);
@@ -233,6 +239,7 @@ fn test_time_range_query_boundary_inclusive() {
         .append_point(b"sensor", 200, b"middle", tx_id)
         .unwrap();
     table.append_point(b"sensor", 300, b"last", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     // Range is [start, end) so use 301 to include 300
     let cursor = table.scan_series(b"sensor", 100, 301).unwrap();
@@ -253,6 +260,7 @@ fn test_time_range_query_single_point() {
 
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"only", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 100, 101).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -278,6 +286,7 @@ fn test_latest_before_basic() {
     table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
     table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
     table.append_point(b"sensor", 300, b"30.5", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let result = table.latest_before(b"sensor", 250).unwrap();
     assert!(result.is_some());
@@ -301,6 +310,7 @@ fn test_latest_before_exact_timestamp() {
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
     table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let result = table.latest_before(b"sensor", 200).unwrap();
     assert!(result.is_some());
@@ -322,6 +332,7 @@ fn test_latest_before_before_all_points() {
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
     table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let result = table.latest_before(b"sensor", 50).unwrap();
     assert!(result.is_none());
@@ -342,6 +353,7 @@ fn test_latest_before_after_all_points() {
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
     table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let result = table.latest_before(b"sensor", 300).unwrap();
     assert!(result.is_some());
@@ -391,6 +403,7 @@ fn test_bucket_creation_across_boundaries() {
     table
         .append_point(b"sensor", (bucket_size * 2) as i64, b"bucket2", tx_id)
         .unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table
         .scan_series(b"sensor", 0, (bucket_size * 3) as i64)
@@ -416,6 +429,7 @@ fn test_bucket_rolling_with_many_inserts() {
             .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 0, 10000).unwrap();
     assert_eq!(cursor.count(), 100);
@@ -441,6 +455,7 @@ fn test_table_statistics() {
             .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let stats = table.stats().unwrap();
     assert_eq!(stats.entry_count, Some(10));
@@ -466,6 +481,7 @@ fn test_table_verify() {
             .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let report = table.verify().unwrap();
     assert!(report.errors.is_empty());
@@ -517,6 +533,7 @@ fn test_empty_time_range() {
 
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"value", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 200, 200).unwrap();
     assert_eq!(cursor.count(), 0);
@@ -543,6 +560,7 @@ fn test_negative_timestamps_scan() {
         .append_point(b"sensor", 3000, b"epoch", tx_id)
         .unwrap();
     table.append_point(b"sensor", 4000, b"new", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 1500, 2500).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -574,6 +592,7 @@ fn test_negative_timestamps_latest_before() {
     table
         .append_point(b"sensor", 3000, b"third", tx_id)
         .unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let result = table.latest_before(b"sensor", 2500).unwrap();
     assert!(result.is_some());
@@ -598,6 +617,7 @@ fn test_cursor_iteration_stops_at_end() {
             .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 500).unwrap();
     let mut count = 0;
@@ -626,6 +646,7 @@ fn test_cursor_next_beyond_end() {
 
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"value", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 200).unwrap();
     assert!(cursor.valid());
@@ -654,6 +675,7 @@ fn test_concurrent_series_independence() {
     table.append_point(b"series_a", 200, b"a2", tx_id).unwrap();
     table.append_point(b"series_b", 150, b"b1", tx_id).unwrap();
     table.append_point(b"series_b", 250, b"b2", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor_a = table.scan_series(b"series_a", 0, 300).unwrap();
     assert_eq!(cursor_a.count(), 2);
@@ -680,6 +702,7 @@ fn test_large_number_of_points() {
             .append_point(b"sensor", i, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 0, 10000).unwrap();
     assert_eq!(cursor.count(), 10000);
@@ -703,6 +726,7 @@ fn test_timestamp_ordering_in_scan() {
     table
         .append_point(b"sensor", 200, b"second", tx_id)
         .unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 400).unwrap();
     assert!(cursor.valid());
@@ -743,6 +767,7 @@ fn test_value_key_preservation() {
             .append_point(b"sensor", i as i64 * 100, value, tx_id)
             .unwrap();
     }
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 500).unwrap();
     let mut idx = 0;
@@ -771,6 +796,7 @@ fn test_empty_series_key() {
 
     let tx_id = create_tx_id();
     table.append_point(b"", 100, b"value", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"", 0, 200).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -790,6 +816,7 @@ fn test_zero_timestamp() {
 
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 0, b"epoch", tx_id).unwrap();
+    table.commit_versions(tx_id, LogSequenceNumber::from(1)).unwrap();
 
     let cursor = table.scan_series(b"sensor", 0, 1).unwrap();
     assert_eq!(cursor.count(), 1);
