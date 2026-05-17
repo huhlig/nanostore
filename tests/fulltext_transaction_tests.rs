@@ -27,7 +27,9 @@
 
 use nanokv::kvdb::Database;
 use nanokv::table::{FullTextSearch, TableEngineKind, TableOptions, TextField, TextQuery};
+use nanokv::txn::TransactionId;
 use nanokv::types::{Durability, KeyEncoding};
+use nanokv::wal::LogSequenceNumber;
 use nanokv::vfs::MemoryFileSystem;
 
 fn fulltext_table_options() -> TableOptions {

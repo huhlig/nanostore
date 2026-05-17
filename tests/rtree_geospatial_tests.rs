@@ -422,6 +422,7 @@ fn test_rtree_delete_geometry_removes_entry() {
             b"point1",
             GeometryRef::Point(GeoPoint { x: 1.0, y: 1.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree
@@ -429,6 +430,7 @@ fn test_rtree_delete_geometry_removes_entry() {
             b"point2",
             GeometryRef::Point(GeoPoint { x: 2.0, y: 2.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree.delete_geometry(b"point1", TransactionId::from(0), LogSequenceNumber::from(1)).unwrap();
@@ -469,6 +471,7 @@ fn test_rtree_delete_geometry_missing_id_is_noop() {
             b"point1",
             GeometryRef::Point(GeoPoint { x: 1.0, y: 1.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree.delete_geometry(b"missing", TransactionId::from(0), LogSequenceNumber::from(1)).unwrap();

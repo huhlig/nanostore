@@ -445,6 +445,7 @@ fn test_rtree_insert_and_query() {
             b"point1",
             GeometryRef::Point(GeoPoint { x: 1.0, y: 2.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree
@@ -452,6 +453,7 @@ fn test_rtree_insert_and_query() {
             b"point2",
             GeometryRef::Point(GeoPoint { x: 5.0, y: 5.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree
@@ -459,6 +461,7 @@ fn test_rtree_insert_and_query() {
             b"point3",
             GeometryRef::Point(GeoPoint { x: 10.0, y: 10.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
 
@@ -487,6 +490,7 @@ fn test_rtree_nearest_neighbor() {
             b"point1",
             GeometryRef::Point(GeoPoint { x: 0.0, y: 0.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree
@@ -494,6 +498,7 @@ fn test_rtree_nearest_neighbor() {
             b"point2",
             GeometryRef::Point(GeoPoint { x: 10.0, y: 10.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
     rtree
@@ -501,6 +506,7 @@ fn test_rtree_nearest_neighbor() {
             b"point3",
             GeometryRef::Point(GeoPoint { x: 20.0, y: 20.0 }),
             TransactionId::from(0),
+            LogSequenceNumber::from(1),
         )
         .unwrap();
 

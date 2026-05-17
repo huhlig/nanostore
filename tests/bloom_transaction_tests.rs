@@ -25,6 +25,7 @@ use nanokv::kvdb::Database;
 use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanokv::types::{Durability, KeyEncoding};
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::txn::TransactionId;
 use nanokv::wal::LogSequenceNumber;
 
 fn bloom_table_options() -> TableOptions {
@@ -113,7 +114,7 @@ fn test_bloom_multiple_inserts_same_transaction() {
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     txn.with_bloom(bloom_id, |bloom| {
         for i in 0..100u32 {
-            bloom.insert_key(&i.to_le_bytes())?;
+            bloom.insert_key(&i.to_le_bytes(), TransactionId::from(1), LogSequenceNumber::from(1))?;
         }
         // All should be visible in write set
         for i in 0..100u32 {
@@ -351,7 +352,7 @@ fn test_with_table_sets_context() {
     txn.with_table(bloom_id);
 
     // Now we can call ApproximateMembership methods directly
-    txn.insert_key(b"key1", TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)), LogSequenceNumber::from(1)).unwrap();
+    txn.insert_key(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     assert!(txn.might_contain(b"key1").unwrap());
 
     txn.commit().unwrap();
@@ -400,7 +401,7 @@ fn test_bloom_stats_through_transaction() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
             for i in 0..50u32 {
-                bloom.insert_key(&i.to_le_bytes())?;
+                bloom.insert_key(&i.to_le_bytes(), TransactionId::from(1), LogSequenceNumber::from(1))?;
             }
             Ok(())
         })
@@ -463,7 +464,7 @@ fn test_bloom_false_positive_rate_through_transaction() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
             for i in 0..100u32 {
-                bloom.insert_key(&i.to_le_bytes())?;
+                bloom.insert_key(&i.to_le_bytes(), TransactionId::from(1), LogSequenceNumber::from(1))?;
             }
             Ok(())
         })

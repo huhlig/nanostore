@@ -21,6 +21,7 @@
 
 use nanokv::kvdb::{Database, DatabaseErrorKind};
 use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
+use nanokv::txn::TransactionId;
 use nanokv::types::{Bound, Durability, KeyBuf, KeyEncoding, ScanBounds};
 use nanokv::vfs::MemoryFileSystem;
 use nanokv::wal::LogSequenceNumber;

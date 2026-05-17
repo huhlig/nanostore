@@ -24,7 +24,7 @@
 //! 5. Table context management works correctly
 
 use nanokv::table::{TableEngineRegistry, TimeSeries};
-use nanokv::txn::{ConflictDetector, Transaction};
+use nanokv::txn::{ConflictDetector, Transaction, TransactionId};
 use nanokv::types::{Durability, IsolationLevel, TableId};
 use nanokv::vfs::MemoryFileSystem;
 use nanokv::wal::LogSequenceNumber;
@@ -87,7 +87,7 @@ fn test_timeseries_append_multiple_points() {
     for i in 0..5 {
         let timestamp = 1000i64 + i * 100;
         let value = format!("temperature:{}.5", 20 + i);
-        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
+        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1));
         assert!(result.is_ok(), "append_point {} should succeed", i);
     }
 
@@ -108,7 +108,7 @@ fn test_timeseries_append_multiple_series() {
         let value = format!("temperature:{}.5", 20 + sensor_id);
 
         let result =
-            TimeSeries::append_point(&mut txn, series_key.as_bytes(), timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
+            TimeSeries::append_point(&mut txn, series_key.as_bytes(), timestamp, value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1));
         assert!(
             result.is_ok(),
             "append_point for sensor {} should succeed",
@@ -249,7 +249,7 @@ fn test_timeseries_commit_with_operations() {
     for i in 0..3 {
         let timestamp = 1000i64 + i * 100;
         let value = format!("temperature:{}.5", 20 + i);
-        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1))).unwrap();
+        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     }
 
     txn.clear_table_context();
@@ -274,7 +274,7 @@ fn test_timeseries_rollback_with_operations() {
     for i in 0..3 {
         let timestamp = 1000i64 + i * 100;
         let value = format!("temperature:{}.5", 20 + i);
-        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1))).unwrap();
+        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     }
 
     txn.clear_table_context();
@@ -349,7 +349,7 @@ fn test_timeseries_timestamp_ordering() {
     let timestamps = [1500i64, 1000i64, 2000i64, 1200i64];
     for (i, &timestamp) in timestamps.iter().enumerate() {
         let value = format!("temperature:{}.5", 20 + i);
-        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
+        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1));
         assert!(
             result.is_ok(),
             "append_point with timestamp {} should succeed",
@@ -373,7 +373,7 @@ fn test_timeseries_negative_timestamps() {
     let timestamps = [-1000i64, -500i64, 0i64, 500i64, 1000i64];
     for (i, &timestamp) in timestamps.iter().enumerate() {
         let value = format!("temperature:{}.5", 20 + i);
-        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
+        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1));
         assert!(
             result.is_ok(),
             "append_point with timestamp {} should succeed",
