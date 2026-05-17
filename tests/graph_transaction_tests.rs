@@ -71,7 +71,7 @@ fn test_graph_transaction_add_edge_without_context() {
     let mut txn = create_test_transaction();
 
     // Attempt to add edge without setting table context should fail
-    let result = GraphAdjacency::add_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1");
+    let result = GraphAdjacency::add_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1));
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("no table context"));
@@ -82,7 +82,7 @@ fn test_graph_transaction_remove_edge_without_context() {
     let mut txn = create_test_transaction();
 
     // Attempt to remove edge without setting table context should fail
-    let result = GraphAdjacency::remove_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1");
+    let result = GraphAdjacency::remove_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1));
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("no table context"));
@@ -183,9 +183,9 @@ fn test_graph_transaction_multiple_operations() {
 
     // These will write to WAL but won't actually execute since table doesn't exist
     // The test verifies the API works correctly
-    let _ = GraphAdjacency::add_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1");
-    let _ = GraphAdjacency::add_edge(&mut txn, b"node2", b"follows", b"node3", b"edge2");
-    let _ = GraphAdjacency::remove_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1");
+    let _ = GraphAdjacency::add_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1));
+    let _ = GraphAdjacency::add_edge(&mut txn, b"node2", b"follows", b"node3", b"edge2", TransactionId::from(1), LogSequenceNumber::from(1));
+    let _ = GraphAdjacency::remove_edge(&mut txn, b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1));
 
     txn.clear_table_context();
 }
@@ -221,8 +221,8 @@ fn test_graph_transaction_edge_data_encoding() {
 
     for (source, label, target, edge_id) in test_cases {
         // These operations write to WAL with encoded edge data
-        let _ = GraphAdjacency::add_edge(&mut txn, source, label, target, edge_id);
-        let _ = GraphAdjacency::remove_edge(&mut txn, source, label, target, edge_id);
+        let _ = GraphAdjacency::add_edge(&mut txn, source, label, target, edge_id, TransactionId::from(1), LogSequenceNumber::from(1));
+        let _ = GraphAdjacency::remove_edge(&mut txn, source, label, target, edge_id, TransactionId::from(1), LogSequenceNumber::from(1));
     }
 
     txn.clear_table_context();
@@ -236,11 +236,11 @@ fn test_graph_transaction_isolation() {
 
     // Each transaction should have independent graph write sets
     txn1.with_table(table_id);
-    let _ = GraphAdjacency::add_edge(&mut txn1, b"node1", b"follows", b"node2", b"edge1");
+    let _ = GraphAdjacency::add_edge(&mut txn1, b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1));
     txn1.clear_table_context();
 
     txn2.with_table(table_id);
-    let _ = GraphAdjacency::add_edge(&mut txn2, b"node3", b"follows", b"node4", b"edge2");
+    let _ = GraphAdjacency::add_edge(&mut txn2, b"node3", b"follows", b"node4", b"edge2", TransactionId::from(1), LogSequenceNumber::from(1));
     txn2.clear_table_context();
 
     // Transactions should be independent (verified by successful operation)
@@ -255,8 +255,8 @@ fn test_graph_transaction_with_empty_edge_components() {
     txn.with_table(table_id);
 
     // Test with empty components (should be allowed at API level)
-    let _ = GraphAdjacency::add_edge(&mut txn, b"", b"", b"", b"");
-    let _ = GraphAdjacency::remove_edge(&mut txn, b"", b"", b"", b"");
+    let _ = GraphAdjacency::add_edge(&mut txn, b"", b"", b"", b"", TransactionId::from(1), LogSequenceNumber::from(1));
+    let _ = GraphAdjacency::remove_edge(&mut txn, b"", b"", b"", b"", TransactionId::from(1), LogSequenceNumber::from(1));
 
     txn.clear_table_context();
 }

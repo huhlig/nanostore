@@ -68,7 +68,7 @@ fn test_timeseries_append_point_basic() {
     let timestamp = 1000i64;
     let value_key = b"temperature:25.5";
 
-    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key);
+    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key, TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(result.is_ok(), "append_point should succeed");
 
     // Clear table context
@@ -87,7 +87,7 @@ fn test_timeseries_append_multiple_points() {
     for i in 0..5 {
         let timestamp = 1000i64 + i * 100;
         let value = format!("temperature:{}.5", 20 + i);
-        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes());
+        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
         assert!(result.is_ok(), "append_point {} should succeed", i);
     }
 
@@ -108,7 +108,7 @@ fn test_timeseries_append_multiple_series() {
         let value = format!("temperature:{}.5", 20 + sensor_id);
 
         let result =
-            TimeSeries::append_point(&mut txn, series_key.as_bytes(), timestamp, value.as_bytes());
+            TimeSeries::append_point(&mut txn, series_key.as_bytes(), timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
         assert!(
             result.is_ok(),
             "append_point for sensor {} should succeed",
@@ -128,7 +128,7 @@ fn test_timeseries_without_table_context() {
     let timestamp = 1000i64;
     let value_key = b"temperature:25.5";
 
-    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key);
+    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key, TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(
         result.is_err(),
         "append_point should fail without table context"
@@ -249,7 +249,7 @@ fn test_timeseries_commit_with_operations() {
     for i in 0..3 {
         let timestamp = 1000i64 + i * 100;
         let value = format!("temperature:{}.5", 20 + i);
-        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes()).unwrap();
+        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1))).unwrap();
     }
 
     txn.clear_table_context();
@@ -274,7 +274,7 @@ fn test_timeseries_rollback_with_operations() {
     for i in 0..3 {
         let timestamp = 1000i64 + i * 100;
         let value = format!("temperature:{}.5", 20 + i);
-        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes()).unwrap();
+        TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1))).unwrap();
     }
 
     txn.clear_table_context();
@@ -298,7 +298,7 @@ fn test_timeseries_after_commit_fails() {
     let series_key = b"sensor-1";
     let timestamp = 1000i64;
     let value_key = b"temperature:25.5";
-    TimeSeries::append_point(&mut txn, series_key, timestamp, value_key).unwrap();
+    TimeSeries::append_point(&mut txn, series_key, timestamp, value_key, TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
     // Commit
     txn.commit().unwrap();
@@ -322,7 +322,7 @@ fn test_timeseries_mixed_with_regular_operations() {
     let series_key = b"sensor-1";
     let timestamp = 1000i64;
     let value_key = b"temperature:25.5";
-    TimeSeries::append_point(&mut txn, series_key, timestamp, value_key).unwrap();
+    TimeSeries::append_point(&mut txn, series_key, timestamp, value_key, TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     txn.clear_table_context();
 
     // Do another regular operation
@@ -349,7 +349,7 @@ fn test_timeseries_timestamp_ordering() {
     let timestamps = [1500i64, 1000i64, 2000i64, 1200i64];
     for (i, &timestamp) in timestamps.iter().enumerate() {
         let value = format!("temperature:{}.5", 20 + i);
-        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes());
+        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
         assert!(
             result.is_ok(),
             "append_point with timestamp {} should succeed",
@@ -373,7 +373,7 @@ fn test_timeseries_negative_timestamps() {
     let timestamps = [-1000i64, -500i64, 0i64, 500i64, 1000i64];
     for (i, &timestamp) in timestamps.iter().enumerate() {
         let value = format!("temperature:{}.5", 20 + i);
-        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes());
+        let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value.as_bytes(, TransactionId::from(1), LogSequenceNumber::from(1)));
         assert!(
             result.is_ok(),
             "append_point with timestamp {} should succeed",
@@ -396,7 +396,7 @@ fn test_timeseries_empty_series_key() {
     let timestamp = 1000i64;
     let value_key = b"temperature:25.5";
 
-    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key);
+    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key, TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(
         result.is_ok(),
         "append_point with empty series key should succeed"
@@ -417,7 +417,7 @@ fn test_timeseries_empty_value_key() {
     let timestamp = 1000i64;
     let value_key = b"";
 
-    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key);
+    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, value_key, TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(
         result.is_ok(),
         "append_point with empty value key should succeed"
@@ -438,7 +438,7 @@ fn test_timeseries_large_value_key() {
     // Create a large value key (1KB)
     let value_key = vec![b'x'; 1024];
 
-    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, &value_key);
+    let result = TimeSeries::append_point(&mut txn, series_key, timestamp, &value_key, TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(
         result.is_ok(),
         "append_point with large value key should succeed"

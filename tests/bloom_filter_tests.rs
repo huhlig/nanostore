@@ -19,8 +19,10 @@
 use nanokv::pager::{PageSize, Pager, PagerConfig};
 use nanokv::table::ApproximateMembership;
 use nanokv::table::bloom::PagedBloomFilter;
+use nanokv::txn::TransactionId;
 use nanokv::types::TableId;
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 fn create_test_pager() -> Arc<Pager<MemoryFileSystem>> {
@@ -339,7 +341,7 @@ fn test_approximate_membership_trait() {
     .unwrap();
 
     // Test ApproximateMembership trait methods
-    filter.insert_key(b"test_key").unwrap();
+    filter.insert_key(b"test_key", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     assert!(filter.might_contain(b"test_key").unwrap());
 
     let fpr = filter.false_positive_rate();

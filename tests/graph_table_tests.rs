@@ -40,7 +40,7 @@ fn test_graph_basic_operations() {
             b"follows",
             b"bob",
             b"edge1",
-            TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)),
+            TransactionId::from(1),
             LogSequenceNumber::from(1),
         )
         .unwrap();
@@ -50,7 +50,7 @@ fn test_graph_basic_operations() {
             b"follows",
             b"charlie",
             b"edge2",
-            TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)),
+            TransactionId::from(1),
             LogSequenceNumber::from(1),
         )
         .unwrap();
@@ -60,7 +60,7 @@ fn test_graph_basic_operations() {
             b"follows",
             b"charlie",
             b"edge3",
-            TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)),
+            TransactionId::from(1),
             LogSequenceNumber::from(1),
         )
         .unwrap();
@@ -83,7 +83,7 @@ fn test_graph_basic_operations() {
             b"follows",
             b"bob",
             b"edge1",
-            TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)),
+            TransactionId::from(1),
             LogSequenceNumber::from(1),
         )
         .unwrap();
@@ -106,7 +106,7 @@ fn test_graph_directed() {
             b"follows",
             b"bob",
             b"edge1",
-            TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)),
+            TransactionId::from(1),
             LogSequenceNumber::from(1),
         )
         .unwrap();

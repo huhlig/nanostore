@@ -23,6 +23,7 @@ use nanokv::kvdb::{Database, DatabaseErrorKind};
 use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanokv::types::{Bound, Durability, KeyBuf, KeyEncoding, ScanBounds};
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 
 /// Helper to create default table options for tests
 fn default_table_options() -> TableOptions {
@@ -593,7 +594,7 @@ fn test_transaction_bloom_insert_commit() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
 
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"member-1")?;
+            bloom.insert_key(b"member-1", TransactionId::from(1), LogSequenceNumber::from(1))?;
             assert!(bloom.might_contain(b"member-1")?);
             Ok(())
         })
@@ -621,7 +622,7 @@ fn test_transaction_bloom_insert_rollback() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
 
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"member-rollback")?;
+            bloom.insert_key(b"member-rollback", TransactionId::from(1), LogSequenceNumber::from(1))?;
             assert!(bloom.might_contain(b"member-rollback")?);
             Ok(())
         })
@@ -653,7 +654,7 @@ fn test_transaction_mixed_kv_and_bloom_commit() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.put(table_id, b"key1", b"value1").unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"key1")?;
+            bloom.insert_key(b"key1", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();

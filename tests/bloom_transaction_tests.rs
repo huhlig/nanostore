@@ -25,6 +25,7 @@ use nanokv::kvdb::Database;
 use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanokv::types::{Durability, KeyEncoding};
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 
 fn bloom_table_options() -> TableOptions {
     TableOptions {
@@ -62,7 +63,7 @@ fn test_bloom_insert_and_might_contain_in_transaction() {
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     txn.with_bloom(bloom_id, |bloom| {
-        bloom.insert_key(b"key1")?;
+        bloom.insert_key(b"key1", TransactionId::from(1), LogSequenceNumber::from(1))?;
         assert!(bloom.might_contain(b"key1")?);
         Ok(())
     })
@@ -85,7 +86,7 @@ fn test_bloom_write_set_visibility_uncommitted() {
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     txn.with_bloom(bloom_id, |bloom| {
-        bloom.insert_key(b"uncommitted-key")?;
+        bloom.insert_key(b"uncommitted-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
         // Should see own uncommitted write
         assert!(bloom.might_contain(b"uncommitted-key")?);
         Ok(())
@@ -145,7 +146,7 @@ fn test_bloom_rollback_discards_all_inserts() {
     {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"committed-key")?;
+            bloom.insert_key(b"committed-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -156,7 +157,7 @@ fn test_bloom_rollback_discards_all_inserts() {
     {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"rolled-back-key")?;
+            bloom.insert_key(b"rolled-back-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -189,7 +190,7 @@ fn test_mixed_kv_and_bloom_atomic_commit() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.put(kv_id, b"kv-key", b"kv-value").unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"bloom-key")?;
+            bloom.insert_key(b"bloom-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -219,7 +220,7 @@ fn test_mixed_kv_and_bloom_atomic_rollback() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.put(kv_id, b"kv-key", b"kv-value").unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"bloom-key")?;
+            bloom.insert_key(b"bloom-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -312,7 +313,7 @@ fn test_bloom_get_returns_empty_for_present_key() {
     {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"present-key")?;
+            bloom.insert_key(b"present-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -350,7 +351,7 @@ fn test_with_table_sets_context() {
     txn.with_table(bloom_id);
 
     // Now we can call ApproximateMembership methods directly
-    txn.insert_key(b"key1").unwrap();
+    txn.insert_key(b"key1", TransactionId::from(1, TransactionId::from(1), LogSequenceNumber::from(1)), LogSequenceNumber::from(1)).unwrap();
     assert!(txn.might_contain(b"key1").unwrap());
 
     txn.commit().unwrap();
@@ -367,7 +368,7 @@ fn test_clear_table_context() {
     txn.clear_table_context();
 
     // Should error without table context
-    let result = txn.insert_key(b"key1");
+    let result = txn.insert_key(b"key1", TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(result.is_err());
 }
 
@@ -425,7 +426,7 @@ fn test_bloom_verify_through_transaction() {
     {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"test-key")?;
+            bloom.insert_key(b"test-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -490,13 +491,13 @@ fn test_multiple_bloom_tables_in_same_transaction() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
 
         txn.with_bloom(bloom1_id, |bloom| {
-            bloom.insert_key(b"key-in-bloom1")?;
+            bloom.insert_key(b"key-in-bloom1", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
 
         txn.with_bloom(bloom2_id, |bloom| {
-            bloom.insert_key(b"key-in-bloom2")?;
+            bloom.insert_key(b"key-in-bloom2", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -534,7 +535,7 @@ fn test_bloom_insert_not_visible_to_other_transaction_before_commit() {
 
     let mut txn1 = db.begin_write(Durability::WalOnly).unwrap();
     txn1.with_bloom(bloom_id, |bloom| {
-        bloom.insert_key(b"secret-key")?;
+        bloom.insert_key(b"secret-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
         Ok(())
     })
     .unwrap();
@@ -571,7 +572,7 @@ fn test_bloom_insert_wal_recorded() {
     {
         let mut txn = db.begin_write(Durability::SyncOnCommit).unwrap();
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"durable-key")?;
+            bloom.insert_key(b"durable-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
             Ok(())
         })
         .unwrap();
@@ -596,7 +597,7 @@ fn test_bloom_insert_empty_key() {
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     txn.with_bloom(bloom_id, |bloom| {
-        bloom.insert_key(b"")?;
+        bloom.insert_key(b"", TransactionId::from(1), LogSequenceNumber::from(1))?;
         assert!(bloom.might_contain(b"")?);
         Ok(())
     })
@@ -618,8 +619,8 @@ fn test_bloom_insert_duplicate_key_same_transaction() {
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     txn.with_bloom(bloom_id, |bloom| {
-        bloom.insert_key(b"dup-key")?;
-        bloom.insert_key(b"dup-key")?; // Insert again
+        bloom.insert_key(b"dup-key", TransactionId::from(1), LogSequenceNumber::from(1))?;
+        bloom.insert_key(b"dup-key", TransactionId::from(1), LogSequenceNumber::from(1))?; // Insert again
         assert!(bloom.might_contain(b"dup-key")?);
         Ok(())
     })
@@ -644,7 +645,7 @@ fn test_bloom_insert_large_key() {
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     txn.with_bloom(bloom_id, |bloom| {
-        bloom.insert_key(&large_key)?;
+        bloom.insert_key(&large_key, TransactionId::from(1), LogSequenceNumber::from(1))?;
         assert!(bloom.might_contain(&large_key)?);
         Ok(())
     })

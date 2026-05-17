@@ -30,6 +30,7 @@ use std::io::Cursor;
 pub struct PageId(u64);
 
 impl PageId {
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
         self.0
     }

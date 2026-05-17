@@ -364,9 +364,9 @@ fn test_bloom_filter_insert_and_lookup() {
         None,
     )
     .unwrap();
-    bloom.insert_key(b"key1").unwrap();
-    bloom.insert_key(b"key2").unwrap();
-    bloom.insert_key(b"key3").unwrap();
+    bloom.insert_key(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    bloom.insert_key(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    bloom.insert_key(b"key3", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     assert!(bloom.might_contain(b"key1").unwrap());
     assert!(bloom.might_contain(b"key2").unwrap());
     assert!(bloom.might_contain(b"key3").unwrap());
@@ -389,7 +389,7 @@ fn test_bloom_filter_false_positive_rate() {
     .unwrap();
     for i in 0..num_items {
         let key = format!("key{}", i);
-        bloom.insert_key(key.as_bytes()).unwrap();
+        bloom.insert_key(key.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     }
     let fpr = bloom.false_positive_rate();
     assert!(fpr > 0.0 && fpr < 0.1);
@@ -414,9 +414,9 @@ fn test_hnsw_vector_insert_and_search() {
         config,
     )
     .unwrap();
-    hnsw.insert_vector(b"id1", &[1.0, 0.0, 0.0, 0.0]).unwrap();
-    hnsw.insert_vector(b"id2", &[0.0, 1.0, 0.0, 0.0]).unwrap();
-    hnsw.insert_vector(b"id3", &[0.0, 0.0, 1.0, 0.0]).unwrap();
+    hnsw.insert_vector(b"id1", &[1.0, 0.0, 0.0, 0.0], TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    hnsw.insert_vector(b"id2", &[0.0, 1.0, 0.0, 0.0], TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    hnsw.insert_vector(b"id3", &[0.0, 0.0, 1.0, 0.0], TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
     let options = nanokv::table::VectorSearchOptions {
         limit: 2,
@@ -520,9 +520,9 @@ fn test_timeseries_append_and_scan() {
         config,
     )
     .unwrap();
-    table.append_point(b"cpu.usage", 1000, b"value1").unwrap();
-    table.append_point(b"cpu.usage", 2000, b"value2").unwrap();
-    table.append_point(b"cpu.usage", 3000, b"value3").unwrap();
+    table.append_point(b"cpu.usage", 1000, b"value1", TransactionId::from(1)).unwrap();
+    table.append_point(b"cpu.usage", 2000, b"value2", TransactionId::from(1)).unwrap();
+    table.append_point(b"cpu.usage", 3000, b"value3", TransactionId::from(1)).unwrap();
     // append_point uses TransactionId::from(1), so commit with matching ID
     table
         .commit_versions(TransactionId::from(1), LogSequenceNumber::from(1))
@@ -558,14 +558,14 @@ fn test_fulltext_index_and_search() {
         text: "The quick brown fox jumps over the lazy dog",
         boost: 1.0,
     }];
-    fulltext.index_document(b"doc1", &fields).unwrap();
+    fulltext.index_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
     let fields2 = vec![nanokv::table::TextField {
         name: "content",
         text: "The lazy cat sleeps on the warm mat",
         boost: 1.0,
     }];
-    fulltext.index_document(b"doc2", &fields2).unwrap();
+    fulltext.index_document(b"doc2", &fields2, TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
     let query = nanokv::table::TextQuery {
         query: "lazy",
@@ -582,13 +582,13 @@ fn test_graph_add_edge_and_traverse() {
     let config = GraphConfig::default();
     let mut graph = MemoryGraphTable::new(TableId::from(1), "test_graph".to_string(), config);
     graph
-        .add_edge(b"alice", b"follows", b"bob", b"edge1")
+        .add_edge(b"alice", b"follows", b"bob", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     graph
-        .add_edge(b"alice", b"follows", b"charlie", b"edge2")
+        .add_edge(b"alice", b"follows", b"charlie", b"edge2", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     graph
-        .add_edge(b"bob", b"follows", b"david", b"edge3")
+        .add_edge(b"bob", b"follows", b"david", b"edge3", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     graph
         .commit_versions(TransactionId::from(1), LogSequenceNumber::from(1))
@@ -633,9 +633,9 @@ fn test_table_with_bloom_filter() {
         None,
     )
     .unwrap();
-    bloom.insert_key(b"user1").unwrap();
-    bloom.insert_key(b"user2").unwrap();
-    bloom.insert_key(b"user3").unwrap();
+    bloom.insert_key(b"user1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    bloom.insert_key(b"user2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    bloom.insert_key(b"user3", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
     for key in [b"user1".as_ref(), b"user2".as_ref(), b"user3".as_ref()] {
         if bloom.might_contain(key).unwrap() {
@@ -815,7 +815,7 @@ fn test_bloom_filter_definitely_not_contains() {
         None,
     )
     .unwrap();
-    bloom.insert_key(b"key1").unwrap();
+    bloom.insert_key(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     assert!(!bloom.might_contain(b"key_not_exists").unwrap());
 }
 
@@ -837,7 +837,7 @@ fn test_vector_search_dimension_mismatch() {
         config,
     )
     .unwrap();
-    let result = hnsw.insert_vector(b"id1", &[1.0, 0.0, 0.0]);
+    let result = hnsw.insert_vector(b"id1", &[1.0, 0.0, 0.0], TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(result.is_err());
 }
 
@@ -1052,7 +1052,7 @@ fn test_property_bloom_filter_no_false_negatives() {
     for _ in 0..1000 {
         let mut key = [0u8; 8];
         rng.fill_bytes(&mut key);
-        bloom.insert_key(&key).unwrap();
+        bloom.insert_key(&key, TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
         inserted.push(key.to_vec());
     }
 
@@ -1185,7 +1185,7 @@ fn test_benchmark_bloom_filter() {
     let start = Instant::now();
     for i in 0..count {
         let key = format!("key{}", i);
-        bloom.insert_key(key.as_bytes()).unwrap();
+        bloom.insert_key(key.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     }
     let duration = start.elapsed();
     let ops_per_sec = count as f64 / duration.as_secs_f64();

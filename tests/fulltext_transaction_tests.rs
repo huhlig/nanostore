@@ -80,7 +80,7 @@ fn test_fulltext_index_document_in_transaction() {
                 boost: 0.5,
             },
         ];
-        fulltext.index_document(b"doc1", &fields)?;
+        fulltext.index_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
         Ok(())
     })
     .unwrap();
@@ -105,7 +105,7 @@ fn test_fulltext_write_set_tracking() {
             text: "Visible Test",
             boost: 1.0,
         }];
-        fulltext.index_document(b"doc1", &fields)?;
+        fulltext.index_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
         Ok(())
     });
     assert!(result.is_ok());
@@ -130,7 +130,7 @@ fn test_fulltext_update_document_in_transaction() {
             text: "Original Title",
             boost: 1.0,
         }];
-        fulltext.index_document(b"doc1", &fields)?;
+        fulltext.index_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
 
         // Update document
         let fields = vec![TextField {
@@ -138,7 +138,7 @@ fn test_fulltext_update_document_in_transaction() {
             text: "Updated Title",
             boost: 1.0,
         }];
-        fulltext.update_document(b"doc1", &fields)?;
+        fulltext.update_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
 
         Ok(())
     })
@@ -164,10 +164,10 @@ fn test_fulltext_delete_document_in_transaction() {
             text: "Delete Me",
             boost: 1.0,
         }];
-        fulltext.index_document(b"doc1", &fields)?;
+        fulltext.index_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
 
         // Delete document
-        fulltext.delete_document(b"doc1")?;
+        fulltext.delete_document(b"doc1", TransactionId::from(1), LogSequenceNumber::from(1))?;
         Ok(())
     })
     .unwrap();
@@ -192,7 +192,7 @@ fn test_fulltext_rollback_discards_changes() {
             text: "Rollback Test",
             boost: 1.0,
         }];
-        fulltext.index_document(b"doc1", &fields)?;
+        fulltext.index_document(b"doc1", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
         Ok(())
     })
     .unwrap();
@@ -244,7 +244,7 @@ fn test_fulltext_multiple_operations_in_transaction() {
                     boost: 0.5,
                 },
             ];
-            fulltext.index_document(doc_id.as_bytes(), &fields)?;
+            fulltext.index_document(doc_id.as_bytes(), &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
         }
 
         // Update one document
@@ -253,10 +253,10 @@ fn test_fulltext_multiple_operations_in_transaction() {
             text: "Updated Document 2",
             boost: 1.0,
         }];
-        fulltext.update_document(b"doc2", &fields)?;
+        fulltext.update_document(b"doc2", &fields, TransactionId::from(1), LogSequenceNumber::from(1))?;
 
         // Delete one document
-        fulltext.delete_document(b"doc4")?;
+        fulltext.delete_document(b"doc4", TransactionId::from(1), LogSequenceNumber::from(1))?;
 
         Ok(())
     })
@@ -328,7 +328,7 @@ fn test_fulltext_operations_without_table_context() {
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
     // Don't set table context - operations should fail
-    let result = FullTextSearch::index_document(&mut txn, b"doc1", &[]);
+    let result = FullTextSearch::index_document(&mut txn, b"doc1", &[], TransactionId::from(1), LogSequenceNumber::from(1));
     assert!(result.is_err());
 }
 
