@@ -25,7 +25,9 @@
 //! The implementation uses a HashMap to store blobs by key, with memory tracking
 //! and optional size limits.
 
-use crate::table::{Table, TableCapabilities, TableEngineKind, TableResult, TableStatistics};
+use crate::snap::Snapshot;
+use crate::table::{Table, TableCapabilities, TableEngineKind, TableError, TableResult, TableStatistics};
+use crate::txn::{TransactionId, VersionChain};
 use crate::types::{TableId, ValueBuf};
 use crate::wal::LogSequenceNumber;
 use std::collections::HashMap;
@@ -40,15 +42,26 @@ const DEFAULT_MAX_BLOB_SIZE: u64 = 16 * 1024 * 1024;
 /// Default inline threshold (4KB - blobs smaller than this should be stored inline).
 const DEFAULT_INLINE_THRESHOLD: usize = 4 * 1024;
 
-/// In-memory blob storage table.
+/// Blob metadata for MVCC versioning.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct BlobMetadata {
+    /// Blob data
+    data: Vec<u8>,
+    /// Size in bytes
+    size: u64,
+}
+
+/// In-memory blob storage table with MVCC support.
 ///
 /// Stores blobs in a HashMap with memory tracking and size limits.
-/// Suitable for ephemeral blob storage that doesn't need persistence.
+/// Uses metadata-only versioning: the VersionChain stores BlobMetadata,
+/// not the raw blob data, for efficient MVCC support.
 pub struct MemoryBlob {
     id: TableId,
     name: String,
-    /// Shared blob data protected by RwLock for concurrent reads
-    data: Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>,
+    /// Shared blob metadata with version chains protected by RwLock for concurrent reads
+    /// Maps key -> VersionChain of BlobMetadata
+    metadata: Arc<RwLock<HashMap<Vec<u8>, VersionChain>>>,
     /// Memory usage tracking
     memory_usage: Arc<RwLock<usize>>,
     /// Memory budget in bytes
@@ -82,7 +95,7 @@ impl MemoryBlob {
         Self {
             id,
             name,
-            data: Arc::new(RwLock::new(HashMap::new())),
+            metadata: Arc::new(RwLock::new(HashMap::new())),
             memory_usage: Arc::new(RwLock::new(0)),
             memory_budget,
             max_blob_size,
@@ -110,59 +123,167 @@ impl MemoryBlob {
         key.len() + value.len() + std::mem::size_of::<Vec<u8>>() * 2
     }
 
-    /// Get a value by key.
+    /// Get a value by key (non-transactional, returns latest committed version).
     pub fn get(&self, key: &[u8]) -> TableResult<Option<ValueBuf>> {
-        let store = self.data.read().unwrap();
-        Ok(store.get(key).map(|v| ValueBuf(v.clone())))
+        let store = self.metadata.read().unwrap();
+        if let Some(chain) = store.get(key) {
+            // Find the latest committed version
+            let mut current = Some(chain);
+            while let Some(version) = current {
+                if version.commit_lsn.is_some() {
+                    // Deserialize metadata
+                    let metadata: BlobMetadata = postcard::from_bytes(&version.value)
+                        .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
+                    return Ok(Some(ValueBuf(metadata.data)));
+                }
+                current = version.prev_version.as_deref();
+            }
+        }
+        Ok(None)
     }
 
-    /// Put a key-value pair.
+    /// Get a value by key with snapshot visibility.
+    pub fn get_snapshot(&self, key: &[u8], snapshot: &Snapshot) -> TableResult<Option<ValueBuf>> {
+        let store = self.metadata.read().unwrap();
+        if let Some(chain) = store.get(key) {
+            if let Some(value) = chain.find_visible_version(snapshot) {
+                // Deserialize metadata
+                let metadata: BlobMetadata = postcard::from_bytes(value)
+                    .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
+                return Ok(Some(ValueBuf(metadata.data)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Put a key-value pair (non-transactional, creates uncommitted version).
     pub fn put(&self, key: &[u8], value: &[u8]) -> TableResult<u64> {
+        self.put_tx(key, value, TransactionId::from(0))
+    }
+
+    /// Put a key-value pair with transaction tracking.
+    pub fn put_tx(&self, key: &[u8], value: &[u8], tx_id: TransactionId) -> TableResult<u64> {
         // Check value size limit
         if value.len() as u64 > self.max_blob_size {
-            return Err(crate::table::TableError::Other(format!(
+            return Err(TableError::Other(format!(
                 "Value size {} exceeds maximum {}",
                 value.len(),
                 self.max_blob_size
             )));
         }
 
-        let mut store = self.data.write().unwrap();
+        let mut store = self.metadata.write().unwrap();
+
+        // Create metadata
+        let metadata = BlobMetadata {
+            data: value.to_vec(),
+            size: value.len() as u64,
+        };
+
+        // Serialize metadata
+        let metadata_bytes = postcard::to_allocvec(&metadata)
+            .map_err(|e| TableError::Other(format!("Failed to serialize metadata: {}", e)))?;
 
         // Calculate memory delta
         let new_size = Self::estimate_entry_size(key, value);
         let old_size = store
             .get(key)
-            .map(|v| Self::estimate_entry_size(key, v))
+            .and_then(|chain| {
+                // Get size of latest committed version
+                let mut current = Some(chain);
+                while let Some(version) = current {
+                    if version.commit_lsn.is_some() {
+                        if let Ok(meta) = postcard::from_bytes::<BlobMetadata>(&version.value) {
+                            return Some(Self::estimate_entry_size(key, &meta.data));
+                        }
+                    }
+                    current = version.prev_version.as_deref();
+                }
+                None
+            })
             .unwrap_or(0);
         let delta = new_size as isize - old_size as isize;
 
         // Check memory budget
         let new_usage = (self.get_memory_usage() as isize + delta) as usize;
         if new_usage > self.memory_budget {
-            return Err(crate::table::TableError::Other(format!(
+            return Err(TableError::Other(format!(
                 "Memory budget exceeded: {} > {}",
                 new_usage, self.memory_budget
             )));
         }
 
-        // Store the value
-        store.insert(key.to_vec(), value.to_vec());
+        // Create or prepend to version chain
+        let new_chain = if let Some(existing_chain) = store.remove(key) {
+            existing_chain.prepend(metadata_bytes, tx_id)
+        } else {
+            VersionChain::new(metadata_bytes, tx_id)
+        };
+
+        store.insert(key.to_vec(), new_chain);
         self.update_memory_usage(delta);
 
         Ok(value.len() as u64 + key.len() as u64 + 16) // +16 for overhead
     }
 
-    /// Delete a key.
+    /// Delete a key (non-transactional).
     pub fn delete(&self, key: &[u8]) -> TableResult<bool> {
-        let mut store = self.data.write().unwrap();
-        if let Some(value) = store.remove(key) {
-            let size = Self::estimate_entry_size(key, &value);
-            self.update_memory_usage(-(size as isize));
+        self.delete_tx(key, TransactionId::from(0))
+    }
+
+    /// Delete a key with transaction tracking.
+    pub fn delete_tx(&self, key: &[u8], tx_id: TransactionId) -> TableResult<bool> {
+        let mut store = self.metadata.write().unwrap();
+        if let Some(existing_chain) = store.get(key) {
+            // Create a tombstone (empty metadata)
+            let tombstone = BlobMetadata {
+                data: Vec::new(),
+                size: 0,
+            };
+            let tombstone_bytes = postcard::to_allocvec(&tombstone)
+                .map_err(|e| TableError::Other(format!("Failed to serialize tombstone: {}", e)))?;
+
+            // Prepend tombstone to version chain
+            let new_chain = existing_chain.clone().prepend(tombstone_bytes, tx_id);
+            store.insert(key.to_vec(), new_chain);
+
+            // Update memory usage (tombstone is small)
+            self.update_memory_usage(-(Self::estimate_entry_size(key, &[]) as isize));
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    /// Commit all uncommitted versions for a transaction.
+    pub fn commit_versions(&self, _tx_id: TransactionId, commit_lsn: LogSequenceNumber) -> TableResult<()> {
+        let mut store = self.metadata.write().unwrap();
+        for chain in store.values_mut() {
+            Self::commit_all_uncommitted(chain, commit_lsn);
+        }
+        Ok(())
+    }
+
+    /// Recursively commit all uncommitted versions in a chain.
+    fn commit_all_uncommitted(chain: &mut VersionChain, commit_lsn: LogSequenceNumber) {
+        if chain.commit_lsn.is_none() {
+            chain.commit(commit_lsn);
+        }
+        if let Some(prev) = chain.prev_version.as_mut() {
+            Self::commit_all_uncommitted(prev, commit_lsn);
+        }
+    }
+
+    /// Vacuum obsolete versions older than the minimum visible LSN.
+    pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
+        let mut store = self.metadata.write().unwrap();
+        let mut total_removed = 0;
+
+        for chain in store.values_mut() {
+            total_removed += chain.vacuum(min_visible_lsn);
+        }
+
+        Ok(total_removed)
     }
 
     /// Get the maximum inline size.
@@ -197,7 +318,7 @@ impl Table for MemoryBlob {
             reverse_scan: false,
             range_delete: false,
             merge_operator: false,
-            mvcc_native: false,
+            mvcc_native: true,
             append_optimized: false,
             memory_resident: true,
             disk_resident: false,
@@ -207,11 +328,11 @@ impl Table for MemoryBlob {
     }
 
     fn stats(&self) -> TableResult<TableStatistics> {
-        let data = self.data.read().unwrap();
+        let metadata = self.metadata.read().unwrap();
         let memory_usage = self.get_memory_usage();
 
         Ok(TableStatistics {
-            row_count: Some(data.len() as u64),
+            row_count: Some(metadata.len() as u64),
             total_size_bytes: Some(memory_usage as u64),
             key_stats: None,
             value_stats: None,

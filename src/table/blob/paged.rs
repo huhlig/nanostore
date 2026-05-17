@@ -26,23 +26,38 @@
 //! with pages linked together to form complete blobs.
 
 use crate::pager::{Page, PageId, PageType, Pager};
-use crate::table::{Table, TableCapabilities, TableEngineKind, TableResult, TableStatistics};
+use crate::snap::Snapshot;
+use crate::table::{Table, TableCapabilities, TableEngineKind, TableError, TableResult, TableStatistics};
+use crate::txn::{TransactionId, VersionChain};
 use crate::types::{TableId, ValueBuf};
 use crate::vfs::FileSystem;
+use crate::wal::LogSequenceNumber;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-/// Paged blob storage table.
+/// Blob metadata for MVCC versioning.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct BlobMetadata {
+    /// First page ID of the blob data
+    first_page_id: PageId,
+    /// Size in bytes
+    size: u64,
+    /// Number of pages used
+    page_count: usize,
+}
+
+/// Paged blob storage table with MVCC support.
 ///
-/// Stores blobs as linked pages in the pager. This is the primary implementation
-/// for disk-resident blob storage that uses the page cache and WAL.
+/// Stores blobs as linked pages in the pager. Uses metadata-only versioning:
+/// the VersionChain stores BlobMetadata (page references), not the actual blob data.
+/// This allows efficient MVCC without duplicating large blob content.
 pub struct PagedBlob<FS: FileSystem> {
     id: TableId,
     name: String,
     page_size: usize,
     pager: Arc<Pager<FS>>,
-    /// Index mapping keys to their first page ID
-    index: Arc<RwLock<HashMap<Vec<u8>, PageId>>>,
+    /// Index mapping keys to their metadata version chains
+    index: Arc<RwLock<HashMap<Vec<u8>, VersionChain>>>,
 }
 
 impl<FS: FileSystem> PagedBlob<FS> {
@@ -57,18 +72,8 @@ impl<FS: FileSystem> PagedBlob<FS> {
         }
     }
 
-    /// Get a value by key.
-    ///
-    /// Reads the blob data by following the linked page chain starting from
-    /// the first page ID stored in the index.
-    pub fn get(&self, key: &[u8]) -> TableResult<Option<ValueBuf>> {
-        let index = self.index.read().unwrap();
-        let first_page_id = match index.get(key) {
-            Some(id) => *id,
-            None => return Ok(None),
-        };
-        drop(index);
-
+    /// Read blob data from linked pages.
+    fn read_blob_data(&self, first_page_id: PageId) -> TableResult<Vec<u8>> {
         let mut result = Vec::new();
         let mut current_page_id = first_page_id;
 
@@ -78,8 +83,8 @@ impl<FS: FileSystem> PagedBlob<FS> {
 
             // Read the next page ID (first 8 bytes) and the blob data
             if data.len() < 8 {
-                return Err(crate::table::TableError::corruption(
-                    "PagedBlob::get",
+                return Err(TableError::corruption(
+                    "PagedBlob::read_blob_data",
                     "page_too_small",
                     "Page data is too small to contain next page ID",
                 ));
@@ -87,8 +92,8 @@ impl<FS: FileSystem> PagedBlob<FS> {
 
             let next_page_id =
                 PageId::from(u64::from_le_bytes(data[..8].try_into().map_err(|_| {
-                    crate::table::TableError::corruption(
-                        "PagedBlob::get",
+                    TableError::corruption(
+                        "PagedBlob::read_blob_data",
                         "invalid_page_id",
                         "Failed to parse next page ID",
                     )
@@ -103,17 +108,54 @@ impl<FS: FileSystem> PagedBlob<FS> {
             current_page_id = next_page_id;
         }
 
-        Ok(Some(ValueBuf(result)))
+        Ok(result)
     }
 
-    /// Put a key-value pair.
-    ///
-    /// Stores the blob data in linked pages. The first 8 bytes of each page
-    /// contain the next page ID (0 for the last page).
-    pub fn put(&mut self, key: &[u8], value: &[u8]) -> TableResult<u64> {
+    /// Get a value by key (non-transactional, returns latest committed version).
+    pub fn get(&self, key: &[u8]) -> TableResult<Option<ValueBuf>> {
+        let index = self.index.read().unwrap();
+        if let Some(chain) = index.get(key) {
+            // Find the latest committed version
+            let mut current = Some(chain);
+            while let Some(version) = current {
+                if version.commit_lsn.is_some() {
+                    // Deserialize metadata
+                    let metadata: BlobMetadata = postcard::from_bytes(&version.value)
+                        .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
+                    
+                    // Read blob data from pages
+                    let data = self.read_blob_data(metadata.first_page_id)?;
+                    return Ok(Some(ValueBuf(data)));
+                }
+                current = version.prev_version.as_deref();
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get a value by key with snapshot visibility.
+    pub fn get_snapshot(&self, key: &[u8], snapshot: &Snapshot) -> TableResult<Option<ValueBuf>> {
+        let index = self.index.read().unwrap();
+        if let Some(chain) = index.get(key) {
+            if let Some(value) = chain.find_visible_version(snapshot) {
+                // Deserialize metadata
+                let metadata: BlobMetadata = postcard::from_bytes(value)
+                    .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
+                
+                // Read blob data from pages
+                let data = self.read_blob_data(metadata.first_page_id)?;
+                return Ok(Some(ValueBuf(data)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Write blob data to linked pages and return metadata.
+    fn write_blob_data(&self, value: &[u8]) -> TableResult<BlobMetadata> {
         let data_size = self.page_size - 16; // 8 bytes for next_page_id, 8 bytes for page header overhead
         let mut first_page_id: Option<PageId> = None;
         let mut prev_page_id: Option<PageId> = None;
+        let mut page_count = 0;
 
         let mut offset = 0;
         while offset < value.len() {
@@ -146,6 +188,7 @@ impl<FS: FileSystem> PagedBlob<FS> {
             }
 
             prev_page_id = Some(page_id);
+            page_count += 1;
             offset = end_offset;
         }
 
@@ -158,60 +201,160 @@ impl<FS: FileSystem> PagedBlob<FS> {
             *page.data_mut() = page_data;
             self.pager.write_page(&page)?;
             first_page_id = Some(page_id);
+            page_count = 1;
         }
 
-        // Update index
-        self.index
-            .write()
-            .unwrap()
-            .insert(key.to_vec(), first_page_id.unwrap());
+        Ok(BlobMetadata {
+            first_page_id: first_page_id.unwrap(),
+            size: value.len() as u64,
+            page_count,
+        })
+    }
+
+    /// Put a key-value pair (non-transactional).
+    pub fn put(&mut self, key: &[u8], value: &[u8]) -> TableResult<u64> {
+        self.put_tx(key, value, TransactionId::from(0))
+    }
+
+    /// Put a key-value pair with transaction tracking.
+    pub fn put_tx(&mut self, key: &[u8], value: &[u8], tx_id: TransactionId) -> TableResult<u64> {
+        // Write blob data to pages
+        let metadata = self.write_blob_data(value)?;
+
+        // Serialize metadata
+        let metadata_bytes = postcard::to_allocvec(&metadata)
+            .map_err(|e| TableError::Other(format!("Failed to serialize metadata: {}", e)))?;
+
+        // Create or prepend to version chain
+        let mut index = self.index.write().unwrap();
+        let new_chain = if let Some(existing_chain) = index.remove(key) {
+            existing_chain.prepend(metadata_bytes, tx_id)
+        } else {
+            VersionChain::new(metadata_bytes, tx_id)
+        };
+
+        index.insert(key.to_vec(), new_chain);
 
         Ok(value.len() as u64)
     }
 
-    /// Delete a key.
-    ///
-    /// Removes the blob from storage by freeing all pages in the chain
-    /// and removing the key from the index.
-    pub fn delete(&mut self, key: &[u8]) -> TableResult<bool> {
-        let first_page_id = {
-            let mut index = self.index.write().unwrap();
-            index.remove(key)
-        };
+    /// Free blob pages.
+    fn free_blob_pages(&self, first_page_id: PageId) -> TableResult<()> {
+        let mut current_page_id = first_page_id;
+        loop {
+            let page = self.pager.read_page(current_page_id)?;
+            let data = page.data();
 
-        if let Some(mut current_page_id) = first_page_id {
-            loop {
-                let page = self.pager.read_page(current_page_id)?;
-                let data = page.data();
-
-                if data.len() < 8 {
-                    return Err(crate::table::TableError::corruption(
-                        "PagedBlob::delete",
-                        "page_too_small",
-                        "Page data is too small to contain next page ID",
-                    ));
-                }
-
-                let next_page_id =
-                    PageId::from(u64::from_le_bytes(data[..8].try_into().map_err(|_| {
-                        crate::table::TableError::corruption(
-                            "PagedBlob::delete",
-                            "invalid_page_id",
-                            "Failed to parse next page ID",
-                        )
-                    })?));
-
-                self.pager.free_page(current_page_id)?;
-
-                if next_page_id.as_u64() == 0 {
-                    break;
-                }
-                current_page_id = next_page_id;
+            if data.len() < 8 {
+                return Err(TableError::corruption(
+                    "PagedBlob::free_blob_pages",
+                    "page_too_small",
+                    "Page data is too small to contain next page ID",
+                ));
             }
+
+            let next_page_id =
+                PageId::from(u64::from_le_bytes(data[..8].try_into().map_err(|_| {
+                    TableError::corruption(
+                        "PagedBlob::free_blob_pages",
+                        "invalid_page_id",
+                        "Failed to parse next page ID",
+                    )
+                })?));
+
+            self.pager.free_page(current_page_id)?;
+
+            if next_page_id.as_u64() == 0 {
+                break;
+            }
+            current_page_id = next_page_id;
+        }
+        Ok(())
+    }
+
+    /// Delete a key (non-transactional).
+    pub fn delete(&mut self, key: &[u8]) -> TableResult<bool> {
+        self.delete_tx(key, TransactionId::from(0))
+    }
+
+    /// Delete a key with transaction tracking.
+    pub fn delete_tx(&mut self, key: &[u8], tx_id: TransactionId) -> TableResult<bool> {
+        let mut index = self.index.write().unwrap();
+        if let Some(existing_chain) = index.get(key) {
+            // Create a tombstone (empty metadata with invalid page ID)
+            let tombstone = BlobMetadata {
+                first_page_id: PageId::from(0),
+                size: 0,
+                page_count: 0,
+            };
+            let tombstone_bytes = postcard::to_allocvec(&tombstone)
+                .map_err(|e| TableError::Other(format!("Failed to serialize tombstone: {}", e)))?;
+
+            // Prepend tombstone to version chain
+            let new_chain = existing_chain.clone().prepend(tombstone_bytes, tx_id);
+            index.insert(key.to_vec(), new_chain);
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    /// Commit all uncommitted versions for a transaction.
+    pub fn commit_versions(&self, _tx_id: TransactionId, commit_lsn: LogSequenceNumber) -> TableResult<()> {
+        let mut index = self.index.write().unwrap();
+        for chain in index.values_mut() {
+            Self::commit_all_uncommitted(chain, commit_lsn);
+        }
+        Ok(())
+    }
+
+    /// Recursively commit all uncommitted versions in a chain.
+    fn commit_all_uncommitted(chain: &mut VersionChain, commit_lsn: LogSequenceNumber) {
+        if chain.commit_lsn.is_none() {
+            chain.commit(commit_lsn);
+        }
+        if let Some(prev) = chain.prev_version.as_mut() {
+            Self::commit_all_uncommitted(prev, commit_lsn);
+        }
+    }
+
+    /// Vacuum obsolete versions and free orphaned blob pages.
+    pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
+        let mut index = self.index.write().unwrap();
+        let mut total_removed = 0;
+        let mut pages_to_free = Vec::new();
+
+        // Collect obsolete versions and their page references
+        for chain in index.values_mut() {
+            // Collect page IDs from versions that will be removed
+            let mut current = chain.prev_version.as_ref();
+            while let Some(version) = current {
+                if let Some(commit_lsn) = version.commit_lsn {
+                    if commit_lsn < min_visible_lsn {
+                        // This version will be removed, collect its pages
+                        if let Ok(metadata) = postcard::from_bytes::<BlobMetadata>(&version.value) {
+                            if metadata.first_page_id.as_u64() != 0 {
+                                pages_to_free.push(metadata.first_page_id);
+                            }
+                        }
+                    }
+                }
+                current = version.prev_version.as_ref();
+            }
+
+            // Vacuum the chain
+            total_removed += chain.vacuum(min_visible_lsn);
+        }
+
+        // Free orphaned blob pages
+        for page_id in pages_to_free {
+            if let Err(e) = self.free_blob_pages(page_id) {
+                // Log error but continue - don't fail entire vacuum
+                eprintln!("Warning: Failed to free blob pages starting at {:?}: {}", page_id, e);
+            }
+        }
+
+        Ok(total_removed)
     }
 }
 
@@ -236,7 +379,7 @@ impl<FS: FileSystem> Table for PagedBlob<FS> {
             reverse_scan: false,
             range_delete: false,
             merge_operator: false,
-            mvcc_native: false,
+            mvcc_native: true,
             append_optimized: false,
             memory_resident: false,
             disk_resident: true,
