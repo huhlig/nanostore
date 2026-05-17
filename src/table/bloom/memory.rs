@@ -281,7 +281,12 @@ impl ApproximateMembership for BloomFilter {
         }
     }
 
-    fn insert_key(&mut self, key: &[u8]) -> TableResult<()> {
+    fn insert_key(
+        &mut self,
+        key: &[u8],
+        _tx_id: crate::txn::TransactionId,
+        _commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         self.insert(key);
         Ok(())
     }

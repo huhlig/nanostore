@@ -878,7 +878,13 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
         self.config.read().unwrap().metric
     }
 
-    fn insert_vector(&self, id: &[u8], vector: &[f32]) -> TableResult<()> {
+    fn insert_vector(
+        &self,
+        id: &[u8],
+        vector: &[f32],
+        _tx_id: crate::txn::TransactionId,
+        _commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         // Validate vector dimensions
         if vector.len() != self.config.read().unwrap().dimensions {
             return Err(TableError::invalid_value(
@@ -989,7 +995,12 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
         Ok(())
     }
 
-    fn delete_vector(&self, id: &[u8]) -> TableResult<()> {
+    fn delete_vector(
+        &self,
+        id: &[u8],
+        _tx_id: crate::txn::TransactionId,
+        _commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         let id_buf = KeyBuf(id.to_vec());
 
         // Find node

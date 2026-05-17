@@ -404,13 +404,19 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
         }
     }
 
-    fn index_document(&self, doc_id: &[u8], fields: &[TextField<'_>]) -> TableResult<()> {
+    fn index_document(
+        &self,
+        doc_id: &[u8],
+        fields: &[TextField<'_>],
+        tx_id: crate::txn::TransactionId,
+        commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         // Remove existing document first if it exists (for updates)
         {
             let doc_store = self.document_store.read().unwrap();
             if doc_store.contains_key(doc_id) {
                 drop(doc_store);
-                self.delete_document(doc_id)?;
+                self.delete_document(doc_id, tx_id, commit_lsn)?;
             }
         }
 
@@ -475,13 +481,24 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
         Ok(())
     }
 
-    fn update_document(&self, doc_id: &[u8], fields: &[TextField<'_>]) -> TableResult<()> {
+    fn update_document(
+        &self,
+        doc_id: &[u8],
+        fields: &[TextField<'_>],
+        tx_id: crate::txn::TransactionId,
+        commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         // Delete and re-index
-        self.delete_document(doc_id)?;
-        self.index_document(doc_id, fields)
+        self.delete_document(doc_id, tx_id, commit_lsn)?;
+        self.index_document(doc_id, fields, tx_id, commit_lsn)
     }
 
-    fn delete_document(&self, doc_id: &[u8]) -> TableResult<()> {
+    fn delete_document(
+        &self,
+        doc_id: &[u8],
+        _tx_id: crate::txn::TransactionId,
+        _commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         // Remove from document store
         let removed = self.document_store.write().unwrap().remove(doc_id);
 
@@ -616,6 +633,8 @@ mod tests {
                         boost: 1.0,
                     },
                 ],
+                crate::txn::TransactionId::from(1),
+                crate::wal::LogSequenceNumber::from(1),
             )
             .unwrap();
 
@@ -634,6 +653,8 @@ mod tests {
                         boost: 1.0,
                     },
                 ],
+                crate::txn::TransactionId::from(1),
+                crate::wal::LogSequenceNumber::from(2),
             )
             .unwrap();
 
@@ -668,10 +689,18 @@ mod tests {
                     text: "Hello world",
                     boost: 1.0,
                 }],
+                crate::txn::TransactionId::from(1),
+                crate::wal::LogSequenceNumber::from(1),
             )
             .unwrap();
 
-        index.delete_document(b"doc1").unwrap();
+        index
+            .delete_document(
+                b"doc1",
+                crate::txn::TransactionId::from(1),
+                crate::wal::LogSequenceNumber::from(2),
+            )
+            .unwrap();
 
         let results = index
             .search(
@@ -699,6 +728,8 @@ mod tests {
                     text: "Hello world",
                     boost: 1.0,
                 }],
+                crate::txn::TransactionId::from(1),
+                crate::wal::LogSequenceNumber::from(1),
             )
             .unwrap();
 
@@ -710,6 +741,8 @@ mod tests {
                     text: "Hello rust",
                     boost: 1.0,
                 }],
+                crate::txn::TransactionId::from(1),
+                crate::wal::LogSequenceNumber::from(2),
             )
             .unwrap();
 

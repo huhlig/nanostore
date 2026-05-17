@@ -1524,11 +1524,22 @@ impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
         }
     }
 
-    fn insert_geometry(&self, id: &[u8], geometry: GeometryRef<'_>, tx_id: TransactionId) -> TableResult<()> {
+    fn insert_geometry(
+        &self,
+        id: &[u8],
+        geometry: GeometryRef<'_>,
+        tx_id: TransactionId,
+        _commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         self.insert_internal(id, geometry, tx_id)
     }
 
-    fn delete_geometry(&self, id: &[u8]) -> TableResult<()> {
+    fn delete_geometry(
+        &self,
+        id: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: crate::wal::LogSequenceNumber,
+    ) -> TableResult<()> {
         self.delete_internal(id)
     }
 

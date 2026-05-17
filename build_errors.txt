@@ -1,0 +1,4712 @@
+﻿cargo : warning: hidden lifetime parameters in types are deprecated
+At line:1 char:1
++ cargo build 2>&1 | Out-File -FilePath build_errors.txt -Encoding utf8 ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: hidden... are deprecated:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    --> src\table\art\memory.rs:1413:52
+     |
+1413 |     fn apply_batch(&mut self, batch: crate::table::WriteBatch) -> TableResult<BatchReport> {
+     |                                      --------------^^^^^^^^^^
+     |                                      |
+     |                                      expected lifetime parameter
+     |
+note: the lint level is defined here
+    --> src\lib.rs:22:5
+     |
+  22 |     rust_2018_idioms
+     |     ^^^^^^^^^^^^^^^^
+     = note: `#[warn(elided_lifetimes_in_paths)]` implied by `#[warn(rust_2018_idioms)]`
+help: indicate the anonymous lifetime
+     |
+1413 |     fn apply_batch(&mut self, batch: crate::table::WriteBatch<'_>) -> TableResult<BatchReport> {
+     |                                                              ++++
+
+warning: use of deprecated trait `table::traits::TableEngine`: Use `SearchableTable` instead
+   --> src\table.rs:121:5
+    |
+121 |     TableEngine,
+    |     ^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated trait `table::traits::TableEngine`: Use `SearchableTable` instead
+   --> src\table\traits.rs:543:26
+    |
+543 | impl<T: SearchableTable> TableEngine for T {}
+    |                          ^^^^^^^^^^^
+
+warning: unused variable: `table_info`
+   --> src\kvdb.rs:638:13
+    |
+638 |         let table_info = self
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_table_info`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `page_size`
+   --> src\table\lsm\sstable.rs:977:13
+    |
+977 |         let page_size = pager.page_size().data_size();
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_page_size`
+
+warning: value assigned to `footer` is never read
+   --> src\table\lsm\sstable.rs:984:49
+    |
+984 |         let mut footer: Option<SStableFooter> = None;
+    |                                                 ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src\table\lsm\sstable.rs:1136:13
+     |
+1136 |         let mut target_offset = offset;
+     |             ----^^^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `current_offset` is never read
+    --> src\table\lsm\sstable.rs:1676:13
+     |
+1676 |             current_offset += current_page_offset as u64;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: value assigned to `current_page_offset` is never read
+    --> src\table\lsm\sstable.rs:1682:13
+     |
+1682 |             current_page_offset = 0;
+     |             ^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: unused variable: `weight`
+    --> src\table\traits.rs:1085:9
+     |
+1085 |         weight: Option<f64>,
+     |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_weight`
+
+warning: unused variable: `table_id`
+    --> src\txn\transaction.rs:2481:13
+     |
+2481 |         let table_id = self.current_table_id.ok_or_else(|| {
+     |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_table_id`
+
+warning: struct `LockOrderGuard` is never constructed
+   --> src\pager\lock_order.rs:174:12
+    |
+174 | pub struct LockOrderGuard<T> {
+    |            ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated items `new`, `inner`, and `inner_mut` are never used
+   --> src\pager\lock_order.rs:185:12
+    |
+180 | impl<T> LockOrderGuard<T> {
+    | ------------------------- associated items in this implementation
+...
+185 |     pub fn new(lock_type: LockType, inner: T) -> Self {
+    |            ^^^
+...
+193 |     pub fn inner(&self) -> &T {
+    |            ^^^^^
+...
+199 |     pub fn inner_mut(&mut self) -> &mut T {
+    |            ^^^^^^^^^
+
+warning: methods `read_free_list_page`, `write_free_list_page`, `write_header`, and `write_superblock` are never used
+   --> src\pager\pagefile.rs:606:8
+    |
+ 59 | impl<FS: FileSystem> Pager<FS> {
+    | ------------------------------ methods in this implementation
+...
+606 |     fn read_free_list_page(&self, page_id: PageId) -> PagerResult<FreeListPage> {
+    |        ^^^^^^^^^^^^^^^^^^^
+...
+612 |     fn write_free_list_page(
+    |        ^^^^^^^^^^^^^^^^^^^^
+...
+630 |     fn write_header(&self, header: &FileHeader) -> PagerResult<()> {
+    |        ^^^^^^^^^^^^
+...
+641 |     fn write_superblock(&self, superblock: &Superblock) -> PagerResult<()> {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: associated functions `should_roll_segment`, `roll_segment`, and `apply_retention` are never used
+   --> src\table\appendlog\mod.rs:193:8
+    |
+119 | impl<FS: FileSystem> AppendLog<FS> {
+    | ---------------------------------- associated functions in this implementation
+...
+193 |     fn should_roll_segment(state: &AppendLogState, config: &AppendLogConfig) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^
+...
+198 |     fn roll_segment(state: &mut AppendLogState, pager: Arc<Pager<FS>>) -> TableResult<()> {
+    |        ^^^^^^^^^^^^
+...
+215 |     fn apply_retention(state: &mut AppendLogState, policy: &RetentionPolicy) -> TableResult<()> {
+    |        ^^^^^^^^^^^^^^^
+
+warning: field `log` is never read
+   --> src\table\appendlog\mod.rs:465:5
+    |
+463 | pub struct AppendLogCursor<'a, FS: FileSystem> {
+    |            --------------- field in this struct
+464 |     /// Reference to the AppendLog
+465 |     log: &'a AppendLog<FS>,
+    |     ^^^
+
+warning: field `pager` is never read
+  --> src\table\appendlog\segment.rs:64:5
+   |
+56 | pub struct Segment {
+   |            ------- field in this struct
+...
+64 |     pager: Arc<dyn std::any::Any + Send + Sync>,
+   |     ^^^^^
+
+warning: field `memory_budget` is never read
+   --> src\table\art\memory.rs:518:5
+    |
+513 | pub struct MemoryART {
+    |            --------- field in this struct
+...
+518 |     memory_budget: usize,
+    |     ^^^^^^^^^^^^^
+
+warning: associated function `delete_recursive` is never used
+   --> src\table\art\memory.rs:894:8
+    |
+521 | impl MemoryART {
+    | -------------- associated function in this implementation
+...
+894 |     fn delete_recursive(_node: &mut Option<Box<ARTNode>>, _key: &[u8], _depth: usize) -> bool {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_ORDER` is never used
+  --> src\table\btree\memory.rs:42:7
+   |
+42 | const DEFAULT_ORDER: usize = 128;
+   |       ^^^^^^^^^^^^^
+
+warning: field `memory_budget` is never read
+  --> src\table\btree\memory.rs:56:5
+   |
+48 | pub struct MemoryBTree {
+   |            ----------- field in this struct
+...
+56 |     memory_budget: usize,
+   |     ^^^^^^^^^^^^^
+
+warning: associated function `new_internal` is never used
+  --> src\table\btree\paged.rs:98:8
+   |
+96 | impl BTreeNode {
+   | -------------- associated function in this implementation
+97 |     /// Create a new internal node.
+98 |     fn new_internal() -> Self {
+   |        ^^^^^^^^^^^^
+
+warning: methods `merge_nodes` and `redistribute_keys` are never used
+   --> src\table\btree\paged.rs:632:8
+    |
+378 | impl<FS: FileSystem> PagedBTree<FS> {
+    | ----------------------------------- methods in this implementation
+...
+632 |     fn merge_nodes(
+    |        ^^^^^^^^^^^
+...
+723 |     fn redistribute_keys(
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: field `pager` is never read
+  --> src\table\fulltext\mod.rs:86:5
+   |
+78 | pub struct PagedFullTextIndex<FS: FileSystem> {
+   |            ------------------ field in this struct
+...
+86 |     pager: Arc<Pager<FS>>,
+   |     ^^^^^
+
+warning: methods `persist_index`, `write_data_to_pages`, and `update_metadata` are never used
+   --> src\table\fulltext\mod.rs:203:8
+    |
+110 | impl<FS: FileSystem> PagedFullTextIndex<FS> {
+    | ------------------------------------------- methods in this implementation
+...
+203 |     fn persist_index(&self) -> TableResult<()> {
+    |        ^^^^^^^^^^^^^
+...
+256 |     fn write_data_to_pages(&self, data: &[u8], page_type: PageType) -> TableResult<()> {
+    |        ^^^^^^^^^^^^^^^^^^^
+...
+297 |     fn update_metadata(&self) -> TableResult<()> {
+    |        ^^^^^^^^^^^^^^^
+
+warning: associated items `to_bytes` and `from_bytes` are never used
+  --> src\table\fulltext\posting.rs:70:12
+   |
+43 | impl PostingList {
+   | ---------------- associated items in this implementation
+...
+70 |     pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
+   |            ^^^^^^^^
+...
+75 |     pub fn from_bytes(bytes: &[u8]) -> Result<Self, postcard::Error> {
+   |            ^^^^^^^^^^
+
+warning: associated items `to_bytes` and `from_bytes` are never used
+  --> src\table\fulltext\posting.rs:91:12
+   |
+89 | impl DocumentEntry {
+   | ------------------ associated items in this implementation
+90 |     /// Serialize to bytes.
+91 |     pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
+   |            ^^^^^^^^
+...
+96 |     pub fn from_bytes(bytes: &[u8]) -> Result<Self, postcard::Error> {
+   |            ^^^^^^^^^^
+
+warning: field `tx_counter` is never read
+  --> src\table\graph\memory.rs:65:5
+   |
+48 | pub struct MemoryGraphTable {
+   |            ---------------- field in this struct
+...
+65 |     tx_counter: RwLock<u64>,
+   |     ^^^^^^^^^^
+
+warning: method `next_tx` is never used
+  --> src\table\graph\memory.rs:94:8
+   |
+79 | impl MemoryGraphTable {
+   | --------------------- method in this implementation
+...
+94 |     fn next_tx(&self) -> (TransactionId, LogSequenceNumber) {
+   |        ^^^^^^^
+
+warning: field `memory_budget` is never read
+  --> src\table\hash\memory.rs:58:5
+   |
+50 | pub struct MemoryHashTable {
+   |            --------------- field in this struct
+...
+58 |     memory_budget: usize,
+   |     ^^^^^^^^^^^^^
+
+warning: field `root_page_id` is never read
+  --> src\table\hnsw\paged.rs:58:5
+   |
+47 | pub struct PagedHnswVector<FS: FileSystem> {
+   |            --------------- field in this struct
+...
+58 |     root_page_id: PageId,
+   |     ^^^^^^^^^^^^
+
+warning: method `prepend_version` is never used
+   --> src\table\hnsw\paged.rs:190:8
+    |
+149 | impl HnswNode {
+    | ------------- method in this implementation
+...
+190 |     fn prepend_version(&mut self, tx_id: TransactionId) {
+    |        ^^^^^^^^^^^^^^^
+
+warning: field `compaction_manager` is never read
+   --> src\table\lsm\mod.rs:122:5
+    |
+ 99 | pub struct LsmTree<FS: FileSystem> {
+    |            ------- field in this struct
+...
+122 |     compaction_manager: Arc<CompactionManager<FS>>,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: field `config` is never read
+   --> src\table\lsm\sstable.rs:967:5
+    |
+953 | pub struct SStableReader<FS: FileSystem> {
+    |            ------------- field in this struct
+...
+967 |     config: SStableConfig,
+    |     ^^^^^^
+
+warning: enum `NodeType` is never used
+  --> src\table\rtree\node.rs:28:10
+   |
+28 | pub enum NodeType {
+   |          ^^^^^^^^
+
+warning: method `to_bytes` is never used
+  --> src\table\rtree\node.rs:51:12
+   |
+44 | impl InternalEntry {
+   | ------------------ method in this implementation
+...
+51 |     pub fn to_bytes(&self) -> Vec<u8> {
+   |            ^^^^^^^^
+
+warning: associated function `from_parts` is never used
+  --> src\table\rtree\node.rs:97:12
+   |
+84 | impl LeafEntry {
+   | -------------- associated function in this implementation
+...
+97 |     pub fn from_parts(mbr: Mbr, object_id: KeyBuf, version_chain: VersionChain) -> Self {
+   |            ^^^^^^^^^^
+
+warning: methods `node_type`, `is_empty`, `remove_entry`, `leaf_entries`, and `level` are never used
+   --> src\table\rtree\node.rs:267:12
+    |
+247 | impl RTreeNode {
+    | -------------- methods in this implementation
+...
+267 |     pub fn node_type(&self) -> NodeType {
+    |            ^^^^^^^^^
+...
+283 |     pub fn is_empty(&self) -> bool {
+    |            ^^^^^^^^
+...
+348 |     pub fn remove_entry(&mut self, index: usize) -> Result<(), String> {
+    |            ^^^^^^^^^^^^
+...
+384 |     pub fn leaf_entries(&self) -> Option<&Vec<LeafEntry>> {
+    |            ^^^^^^^^^^^^
+...
+400 |     pub fn level(&self) -> u32 {
+    |            ^^^^^
+
+warning: field `node_cache` is never read
+  --> src\table\rtree\paged.rs:66:5
+   |
+43 | pub struct PagedRTree<FS: FileSystem> {
+   |            ---------- field in this struct
+...
+66 |     node_cache: RwLock<HashMap<PageId, RTreeNode>>,
+   |     ^^^^^^^^^^
+
+warning: method `create_new_root` is never used
+   --> src\table\rtree\paged.rs:736:8
+    |
+ 69 | impl<FS: FileSystem> PagedRTree<FS> {
+    | ----------------------------------- method in this implementation
+...
+736 |     fn create_new_root(
+    |        ^^^^^^^^^^^^^^^
+
+warning: trait `ValueSink` is never used
+   --> src\table\traits.rs:188:11
+    |
+188 | pub trait ValueSink {
+    |           ^^^^^^^^^
+
+warning: struct `DeadlockDetector` is never constructed
+   --> src\txn\conflict.rs:133:12
+    |
+133 | pub struct DeadlockDetector {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `add_wait`, `remove_wait`, `detect_cycle`, and `dfs_detect_cycle` are never used
+   --> src\txn\conflict.rs:140:12
+    |
+138 | impl DeadlockDetector {
+    | --------------------- associated items in this implementation
+139 |     /// Create a new deadlock detector with an empty wait-for graph.
+140 |     pub fn new() -> Self {
+    |            ^^^
+...
+149 |     pub fn add_wait(&mut self, waiter: TransactionId, holder: TransactionId) {
+    |            ^^^^^^^^
+...
+157 |     pub fn remove_wait(&mut self, waiter: TransactionId) {
+    |            ^^^^^^^^^^^
+...
+165 |     pub fn detect_cycle(&self) -> Option<Vec<TransactionId>> {
+    |            ^^^^^^^^^^^^
+...
+184 |     fn dfs_detect_cycle(
+    |        ^^^^^^^^^^^^^^^^
+
+warning: variant `DeletePoint` is never constructed
+   --> src\txn\transaction.rs:148:5
+    |
+142 | pub(crate) enum TimeSeriesOp {
+    |                 ------------ variant in this enum
+...
+148 |     DeletePoint {
+    |     ^^^^^^^^^^^
+    |
+    = note: `TimeSeriesOp` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored 
+during dead code analysis
+
+warning: trait `TransactionOps` is never used
+   --> src\txn\transaction.rs:273:11
+    |
+273 | pub trait TransactionOps {
+    |           ^^^^^^^^^^^^^^
+
+warning: fields `txn_id`, `lsn`, and `queued_at` are never read
+   --> src\wal\commit.rs:175:9
+    |
+173 | pub struct CommitRequest {
+    |            ------------- fields in this struct
+174 |     /// Transaction ID
+175 |     pub txn_id: TransactionId,
+    |         ^^^^^^
+176 |     /// LSN of the commit record
+177 |     pub lsn: LogSequenceNumber,
+    |         ^^^
+178 |     /// Time when request was queued
+179 |     pub queued_at: Instant,
+    |         ^^^^^^^^^
+
+warning: method `len` is never used
+   --> src\wal\commit.rs:239:8
+    |
+192 | impl CommitQueue {
+    | ---------------- method in this implementation
+...
+239 |     fn len(&self) -> usize {
+    |        ^^^
+
+warning: field `flush_callback` is never read
+   --> src\wal\commit.rs:255:5
+    |
+245 | pub struct GroupCommitCoordinator {
+    |            ---------------------- field in this struct
+...
+255 |     flush_callback: Arc<dyn Fn() -> WalResult<()> + Send + Sync>,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for the crate
+  --> src\lib.rs:17:1
+   |
+17 | / #![warn(
+18 | |     clippy::cargo,
+19 | |     missing_docs,
+20 | |     clippy::pedantic,
+...  |
+45 | | pub use tracing;
+46 | | pub use tracing_timing;
+   | |_______________________^
+   |
+note: the lint level is defined here
+  --> src\lib.rs:19:5
+   |
+19 |     missing_docs,
+   |     ^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> src\lib.rs:34:1
+   |
+34 | pub mod snap;
+   | ^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> src\lib.rs:35:1
+   |
+35 | pub mod table;
+   | ^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> src\lib.rs:36:1
+   |
+36 | pub mod txn;
+   | ^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> src\lib.rs:37:1
+   |
+37 | pub mod types;
+   | ^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> src\lib.rs:41:1
+   |
+41 | pub mod prelude {}
+   | ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\error.rs:244:5
+    |
+244 |     Warning,
+    |     ^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\error.rs:245:5
+    |
+245 |     Error,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> src\error.rs:246:5
+    |
+246 |     Critical,
+    |     ^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\kvdb.rs:997:5
+    |
+997 |     pub kind: DatabaseErrorKind,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\kvdb.rs:998:5
+    |
+998 |     pub message: String,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1033:5
+     |
+1033 |     pub fn not_found(object: TableId) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1040:5
+     |
+1040 |     pub fn not_a_table(object: TableId) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1047:5
+     |
+1047 |     pub fn not_an_index(object: TableId) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1054:5
+     |
+1054 |     pub fn key_already_exists(table: TableId, key: &[u8]) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1061:5
+     |
+1061 |     pub fn key_not_found(table: TableId, key: &[u8]) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1068:5
+     |
+1068 |     pub fn table_already_exists(name: &str) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1075:5
+     |
+1075 |     pub fn index_already_exists(name: &str) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1082:5
+     |
+1082 |     pub fn index_maintenance_failed(index: TableId, details: String) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1089:5
+     |
+1089 |     pub fn transaction_failed(details: String) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1096:5
+     |
+1096 |     pub fn wal_failed(details: String) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1103:5
+     |
+1103 |     pub fn pager_failed(details: String) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1110:5
+     |
+1110 |     pub fn invalid_operation(details: String) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> src\kvdb.rs:1117:5
+     |
+1117 |     pub fn other(message: String) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager.rs:57:5
+   |
+57 |     pub page_id: PageId,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager.rs:58:5
+   |
+58 |     pub offset: u32,
+   |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager.rs:59:5
+   |
+59 |     pub length: u32,
+   |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:55:9
+   |
+55 |         expected_magic: u32,
+   |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:56:9
+   |
+56 |         found_magic: u32,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:57:9
+   |
+57 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:63:9
+   |
+63 |         field: String,
+   |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:64:9
+   |
+64 |         expected: String,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:65:9
+   |
+65 |         found: String,
+   |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:71:9
+   |
+71 |         page_id: PageId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:72:9
+   |
+72 |         compression_type: CompressionType,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:73:9
+   |
+73 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:79:9
+   |
+79 |         page_id: PageId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:80:9
+   |
+80 |         compression_type: CompressionType,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:81:9
+   |
+81 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:87:9
+   |
+87 |         page_id: PageId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:88:9
+   |
+88 |         encryption_type: EncryptionType,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:89:9
+   |
+89 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:95:9
+   |
+95 |         page_id: PageId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:96:9
+   |
+96 |         encryption_type: EncryptionType,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\pager\error.rs:97:9
+   |
+97 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\pager\page.rs:33:5
+   |
+33 |     pub fn as_u64(&self) -> u64 {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\pager\page.rs:36:5
+   |
+36 |     pub fn to_bytes(&self) -> [u8; 8] {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> src\table.rs:20:1
+   |
+20 | pub mod btree;
+   | ^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:161:5
+    |
+161 |     AppendLog(Arc<AppendLog<FS>>),
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:162:5
+    |
+162 |     PagedBTree(Arc<PagedBTree<FS>>),
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:163:5
+    |
+163 |     LsmTree(Arc<LsmTree<FS>>),
+    |     ^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:164:5
+    |
+164 |     PagedBloomFilter(Arc<PagedBloomFilter<FS>>),
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:165:5
+    |
+165 |     PagedHnswVector(Arc<PagedHnswVector<FS>>),
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:166:5
+    |
+166 |     PagedRTree(Arc<PagedRTree<FS>>),
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:167:5
+    |
+167 |     TimeSeriesTable(Arc<TimeSeriesTable<FS>>),
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:168:5
+    |
+168 |     PagedFullTextIndex(Arc<PagedFullTextIndex<FS>>),
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:169:5
+    |
+169 |     MemoryBTree(Arc<MemoryBTree>),
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:170:5
+    |
+170 |     MemoryHashTable(Arc<MemoryHashTable>),
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:171:5
+    |
+171 |     MemoryGraphTable(Arc<MemoryGraphTable>),
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:172:5
+    |
+172 |     MemoryBlob(Arc<MemoryBlob>),
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table.rs:173:5
+    |
+173 |     MemoryART(Arc<MemoryART>),
+    |     ^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table.rs:732:9
+    |
+732 |         engine: TableEngineKind,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table.rs:733:9
+    |
+733 |         details: String,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table.rs:737:9
+    |
+737 |         engine: TableEngineKind,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table.rs:738:9
+    |
+738 |         details: String,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\art\memory.rs:513:1
+    |
+513 | pub struct MemoryART {
+    | ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> src\table\art\memory.rs:522:5
+    |
+522 |     pub fn new(id: TableId, name: String) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> src\table\art\memory.rs:526:5
+    |
+526 |     pub fn with_budget(id: TableId, name: String, memory_budget: usize) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\art\memory.rs:1305:1
+     |
+1305 | pub struct MemoryARTReader<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\art\memory.rs:1359:1
+     |
+1359 | pub struct MemoryARTWriter<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\art\memory.rs:1477:1
+     |
+1477 | pub struct MemoryARTCursor {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\composite.rs:186:5
+    |
+186 |     pub table_id: TableId,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\composite.rs:187:5
+    |
+187 |     pub engine_kind: TableEngineKind,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\composite.rs:188:5
+    |
+188 |     pub role: SecondaryRole,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\composite.rs:189:5
+    |
+189 |     pub contributed: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:29:19
+   |
+29 |     KeyNotFound { key: String },
+   |                   ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:33:18
+   |
+33 |     InvalidKey { key: String, reason: String },
+   |                  ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:33:31
+   |
+33 |     InvalidKey { key: String, reason: String },
+   |                               ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:37:20
+   |
+37 |     InvalidValue { key: String, reason: String },
+   |                    ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:37:33
+   |
+37 |     InvalidValue { key: String, reason: String },
+   |                                 ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:42:9
+   |
+42 |         current_size: usize,
+   |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:43:9
+   |
+43 |         max_size: usize,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:44:9
+   |
+44 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:50:9
+   |
+50 |         location: String,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:51:9
+   |
+51 |         corruption_type: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:52:9
+   |
+52 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:58:9
+   |
+58 |         location: String,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:59:9
+   |
+59 |         expected: u64,
+   |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:60:9
+   |
+60 |         actual: u64,
+   |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:69:29
+   |
+69 |     MigrationNotSupported { from: u32, to: u32 },
+   |                             ^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:69:40
+   |
+69 |     MigrationNotSupported { from: u32, to: u32 },
+   |                                        ^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:78:9
+   |
+78 |         level: u32,
+   |         ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:79:9
+   |
+79 |         input_files: Vec<String>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:80:9
+   |
+80 |         error: String,
+   |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:86:9
+   |
+86 |         reclaimed_bytes: usize,
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:87:9
+   |
+87 |         error: String,
+   |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:92:24
+   |
+92 |     CheckpointFailed { sequence: u64, error: String },
+   |                        ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:92:39
+   |
+92 |     CheckpointFailed { sequence: u64, error: String },
+   |                                       ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\error.rs:99:9
+   |
+99 |         memtable_size: usize,
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:100:9
+    |
+100 |         target_level: u32,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:101:9
+    |
+101 |         error: String,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:107:9
+    |
+107 |         sstable_id: String,
+    |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:108:9
+    |
+108 |         level: u32,
+    |         ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:109:9
+    |
+109 |         reason: String,
+    |         ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:129:9
+    |
+129 |         operation_count: usize,
+    |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:130:9
+    |
+130 |         failed_at: usize,
+    |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:131:9
+    |
+131 |         error: String,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:137:9
+    |
+137 |         position: String,
+    |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:138:9
+    |
+138 |         operation: String,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:139:9
+    |
+139 |         error: String,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:145:9
+    |
+145 |         start: Option<String>,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:146:9
+    |
+146 |         end: Option<String>,
+    |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:147:9
+    |
+147 |         reason: String,
+    |         ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:155:9
+    |
+155 |         transaction_id: u64,
+    |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:156:9
+    |
+156 |         conflict_type: String,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:157:9
+    |
+157 |         details: String,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:162:24
+    |
+162 |     SnapshotNotFound { snapshot_id: u64, context: String },
+    |                        ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:162:42
+    |
+162 |     SnapshotNotFound { snapshot_id: u64, context: String },
+    |                                          ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:166:27
+    |
+166 |     MemoryLimitExceeded { current: usize, limit: usize },
+    |                           ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:166:43
+    |
+166 |     MemoryLimitExceeded { current: usize, limit: usize },
+    |                                           ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:190:20
+    |
+190 |     InvalidLevel { level: u32, max_level: u32 },
+    |                    ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:190:32
+    |
+190 |     InvalidLevel { level: u32, max_level: u32 },
+    |                                ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:194:23
+    |
+194 |     SStableIdExists { id: String },
+    |                       ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:198:25
+    |
+198 |     SStableIdNotFound { id: String },
+    |                         ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:202:21
+    |
+202 |     ManifestError { operation: String, details: String },
+    |                     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:202:40
+    |
+202 |     ManifestError { operation: String, details: String },
+    |                                        ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:206:29
+    |
+206 |     InvalidOperationState { operation: String, reason: String },
+    |                             ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:206:48
+    |
+206 |     InvalidOperationState { operation: String, reason: String },
+    |                                                ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:210:26
+    |
+210 |     SerializationError { data_type: String, details: String },
+    |                          ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:210:45
+    |
+210 |     SerializationError { data_type: String, details: String },
+    |                                             ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:226:24
+    |
+226 |     ValueRefNotFound { value_ref: ValueRef },
+    |                        ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:230:23
+    |
+230 |     InvalidValueRef { details: String },
+    |                       ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:237:9
+    |
+237 |         value_ref: ValueRef,
+    |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:238:9
+    |
+238 |         expected: u32,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:239:9
+    |
+239 |         found: u32,
+    |         ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:245:9
+    |
+245 |         value_ref: ValueRef,
+    |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:246:9
+    |
+246 |         size: u64,
+    |         ^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\error.rs:247:9
+    |
+247 |         max: u64,
+    |         ^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:154:9
+    |
+154 |         source: KeyBuf,
+    |         ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:155:9
+    |
+155 |         label: KeyBuf,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:156:9
+    |
+156 |         edge_id: KeyBuf,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:160:9
+    |
+160 |         target: KeyBuf,
+    |         ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:161:9
+    |
+161 |         label: KeyBuf,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:162:9
+    |
+162 |         edge_id: KeyBuf,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:165:16
+    |
+165 |     EdgeData { edge_id: KeyBuf },
+    |                ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:237:5
+    |
+237 |     pub source: Vec<u8>,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:238:5
+    |
+238 |     pub label: Vec<u8>,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:239:5
+    |
+239 |     pub target: Vec<u8>,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\graph\edge.rs:240:5
+    |
+240 |     pub weight: Option<f64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\hash\memory.rs:313:1
+    |
+313 | pub struct MemoryHashTableReader<'a> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\hash\memory.rs:318:1
+    |
+318 | pub struct MemoryHashTableWriter<'a> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\hash\memory.rs:326:5
+    |
+326 | /     pub fn reader(
+327 | |         &self,
+328 | |         snapshot_lsn: LogSequenceNumber,
+329 | |     ) -> TableResult<MemoryHashTableReader<'_>> {
+    | |_______________________________________________^
+
+warning: missing documentation for a method
+   --> src\table\hash\memory.rs:336:5
+    |
+336 | /     pub fn writer(
+337 | |         &self,
+338 | |         tx_id: TransactionId,
+339 | |         snapshot_lsn: LogSequenceNumber,
+340 | |     ) -> TableResult<MemoryHashTableWriter<'_>> {
+    | |_______________________________________________^
+
+warning: missing documentation for a method
+   --> src\table\hash\memory.rs:357:5
+    |
+357 |     pub fn snapshot_lsn(&self) -> LogSequenceNumber {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\hash\memory.rs:361:5
+    |
+361 |     pub fn approximate_len(&self) -> TableResult<Option<u64>> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\hash\memory.rs:512:5
+    |
+512 |     pub fn tx_id(&self) -> TransactionId {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\hash\memory.rs:516:5
+    |
+516 |     pub fn snapshot_lsn(&self) -> LogSequenceNumber {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:132:9
+    |
+132 |         id: SStableId,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:133:9
+    |
+133 |         level: u32,
+    |         ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:138:9
+    |
+138 |         min_key: Vec<u8>,
+    |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:143:9
+    |
+143 |         max_key: Vec<u8>,
+    |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:144:9
+    |
+144 |         num_entries: u64,
+    |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:145:9
+    |
+145 |         total_size: u64,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:146:9
+    |
+146 |         created_lsn: LogSequenceNumber,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:147:9
+    |
+147 |         first_page_id: PageId,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:148:9
+    |
+148 |         num_pages: u32,
+    |         ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:152:21
+    |
+152 |     RemoveSStable { id: SStableId },
+    |                     ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:155:24
+    |
+155 |     SetNextSStableId { next_id: u64 },
+    |                        ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\lsm\manifest.rs:158:20
+    |
+158 |     SetLogNumber { log_number: u64 },
+    |                    ^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> src\table\lsm\sstable.rs:62:5
+   |
+62 |     pub fn new(id: u64) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\table\lsm\sstable.rs:66:5
+   |
+66 |     pub fn as_u64(&self) -> u64 {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:448:5
+    |
+448 |     Sum,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:449:5
+    |
+449 |     Avg,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:450:5
+    |
+450 |     Min,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:451:5
+    |
+451 |     Max,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:452:5
+    |
+452 |     Count,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:458:5
+    |
+458 |     Sum(f64),
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:459:5
+    |
+459 |     Avg(f64),
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:460:5
+    |
+460 |     Min(f64),
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:461:5
+    |
+461 |     Max(f64),
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\table\timeseries\mod.rs:462:5
+    |
+462 |     Count(u64),
+    |     ^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\timeseries\mod.rs:486:5
+    |
+486 |     pub start_ts: i64,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\timeseries\mod.rs:487:5
+    |
+487 |     pub end_ts: i64,
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\timeseries\mod.rs:488:5
+    |
+488 |     pub aggregation: AggregationResult,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:655:5
+    |
+655 |     pub fn sum(&self) -> Option<f64> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:659:5
+    |
+659 |     pub fn avg(&self) -> Option<f64> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:664:5
+    |
+664 |     pub fn min(&self) -> Option<f64> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:668:5
+    |
+668 |     pub fn max(&self) -> Option<f64> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:672:5
+    |
+672 |     pub fn count(&self) -> u64 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:676:5
+    |
+676 |     pub fn aggregate(&self, aggregation: TimeSeriesAggregation) -> Option<AggregationResult> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\timeseries\mod.rs:685:5
+    |
+685 | /     pub fn downsample(
+686 | |         &self,
+687 | |         interval: u64,
+688 | |         aggregation: TimeSeriesAggregation,
+689 | |     ) -> TableResult<Vec<DownsampledPoint>> {
+    | |___________________________________________^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:47:5
+   |
+47 |     pub engine: TableEngineKind,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:48:5
+   |
+48 |     pub key_encoding: KeyEncoding,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:49:5
+   |
+49 |     pub compression: Option<CompressionKind>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:50:5
+   |
+50 |     pub encryption: Option<EncryptionKind>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:51:5
+   |
+51 |     pub page_size: Option<usize>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:52:5
+   |
+52 |     pub format_version: u32,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:66:5
+   |
+66 |     pub id: TableId,
+   |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:67:5
+   |
+67 |     pub name: String,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:68:5
+   |
+68 |     pub options: TableOptions,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:69:5
+   |
+69 |     pub root: Option<PhysicalLocation>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\table\traits.rs:70:5
+   |
+70 |     pub created_lsn: LogSequenceNumber,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated type
+   --> src\table\traits.rs:288:5
+    |
+288 |     type Cursor<'a>: TableCursor
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:371:5
+    |
+371 |     fn delete(&mut self, key: &[u8]) -> TableResult<bool>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:373:5
+    |
+373 |     fn range_delete(&mut self, bounds: ScanBounds) -> TableResult<u64>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:397:5
+    |
+397 |     fn batch_get(&self, keys: &[&[u8]]) -> TableResult<Vec<Option<ValueBuf>>>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:399:5
+    |
+399 |     fn apply_batch<'a>(&mut self, batch: WriteBatch<'a>) -> TableResult<BatchReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:404:5
+    |
+404 |     fn flush(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:492:5
+    |
+492 |     fn table_id(&self) -> TableId;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:494:5
+    |
+494 |     fn name(&self) -> &str;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:496:5
+    |
+496 |     fn kind(&self) -> TableEngineKind;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:498:5
+    |
+498 |     fn capabilities(&self) -> TableCapabilities;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:500:5
+    |
+500 |     fn stats(&self) -> TableResult<TableStatistics>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated type
+   --> src\table\traits.rs:510:5
+    |
+510 |     type Reader<'a>: TableReader
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated type
+   --> src\table\traits.rs:514:5
+    |
+514 |     type Writer<'a>: TableWriter
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:518:5
+    |
+518 |     fn reader(&self, snapshot_lsn: LogSequenceNumber) -> TableResult<Self::Reader<'_>>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:547:5
+    |
+547 |     fn snapshot_lsn(&self) -> LogSequenceNumber;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:549:5
+    |
+549 |     fn approximate_len(&self) -> TableResult<Option<u64>>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:554:5
+    |
+554 |     fn tx_id(&self) -> TransactionId;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:567:5
+    |
+567 |     pub ordered: bool,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:568:5
+    |
+568 |     pub point_lookup: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:569:5
+    |
+569 |     pub prefix_scan: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:570:5
+    |
+570 |     pub reverse_scan: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:571:5
+    |
+571 |     pub range_delete: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:572:5
+    |
+572 |     pub merge_operator: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:573:5
+    |
+573 |     pub mvcc_native: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:574:5
+    |
+574 |     pub append_optimized: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:575:5
+    |
+575 |     pub memory_resident: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:576:5
+    |
+576 |     pub disk_resident: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:577:5
+    |
+577 |     pub supports_compression: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:578:5
+    |
+578 |     pub supports_encryption: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:591:5
+    |
+591 |     fn compact(&mut self, options: CompactionOptions) -> TableResult<CompactionReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:593:5
+    |
+593 |     fn checkpoint(&mut self) -> TableResult<CheckpointInfo>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:595:5
+    |
+595 |     fn vacuum(&mut self, options: VacuumOptions) -> TableResult<VacuumReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:600:5
+    |
+600 |     fn statistics(&self) -> TableResult<TableStatistics>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:602:5
+    |
+602 |     fn refresh_statistics(&mut self, budget: WorkBudget) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:607:5
+    |
+607 |     fn verify(&self, scope: VerifyScope) -> TableResult<VerificationReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:609:5
+    |
+609 |     fn repair(&mut self, plan: RepairPlan) -> TableResult<RepairReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:627:5
+    |
+627 |     fn valid(&self) -> bool;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:628:5
+    |
+628 |     fn key(&self) -> Option<&[u8]>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:629:5
+    |
+629 |     fn value(&self) -> Option<&[u8]>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:630:5
+    |
+630 |     fn next(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:631:5
+    |
+631 |     fn prev(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:632:5
+    |
+632 |     fn seek(&mut self, key: &[u8]) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:633:5
+    |
+633 |     fn seek_for_prev(&mut self, key: &[u8]) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:634:5
+    |
+634 |     fn first(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:635:5
+    |
+635 |     fn last(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:636:5
+    |
+636 |     fn snapshot_lsn(&self) -> LogSequenceNumber;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:642:5
+    |
+642 |     pub mutations: Vec<Mutation<'a>>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> src\table\traits.rs:646:1
+    |
+646 | pub enum Mutation<'a> {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:647:5
+    |
+647 |     Put {
+    |     ^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:648:9
+    |
+648 |         key: Cow<'a, [u8]>,
+    |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:649:9
+    |
+649 |         value: Cow<'a, [u8]>,
+    |         ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:651:5
+    |
+651 |     Delete {
+    |     ^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:652:9
+    |
+652 |         key: Cow<'a, [u8]>,
+    |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:654:5
+    |
+654 |     RangeDelete {
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:655:9
+    |
+655 |         bounds: ScanBounds,
+    |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:657:5
+    |
+657 |     Merge {
+    |     ^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:658:9
+    |
+658 |         key: Cow<'a, [u8]>,
+    |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:659:9
+    |
+659 |         operand: Cow<'a, [u8]>,
+    |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:664:1
+    |
+664 | pub struct BatchReport {
+    | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:665:5
+    |
+665 |     pub attempted: u64,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:666:5
+    |
+666 |     pub applied: u64,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:667:5
+    |
+667 |     pub deleted: u64,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:668:5
+    |
+668 |     pub bytes_written: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:672:1
+    |
+672 | pub struct TableStatistics {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:673:5
+    |
+673 |     pub row_count: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:674:5
+    |
+674 |     pub total_size_bytes: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:675:5
+    |
+675 |     pub key_stats: Option<KeyStatistics>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:676:5
+    |
+676 |     pub value_stats: Option<ValueStatistics>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:677:5
+    |
+677 |     pub histogram: Option<Histogram>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:678:5
+    |
+678 |     pub last_updated_lsn: Option<LogSequenceNumber>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:682:1
+    |
+682 | pub struct KeyStatistics {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:683:5
+    |
+683 |     pub min_size: usize,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:684:5
+    |
+684 |     pub max_size: usize,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:685:5
+    |
+685 |     pub avg_size: f64,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:686:5
+    |
+686 |     pub distinct_count: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:690:1
+    |
+690 | pub struct ValueStatistics {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:691:5
+    |
+691 |     pub min_size: usize,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:692:5
+    |
+692 |     pub max_size: usize,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:693:5
+    |
+693 |     pub avg_size: f64,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:694:5
+    |
+694 |     pub null_count: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:698:1
+    |
+698 | pub struct Histogram {
+    | ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:699:5
+    |
+699 |     pub buckets: Vec<HistogramBucket>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:703:1
+    |
+703 | pub struct HistogramBucket {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:704:5
+    |
+704 |     pub lower: KeyBuf,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:705:5
+    |
+705 |     pub upper: KeyBuf,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:706:5
+    |
+706 |     pub count: u64,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:710:1
+    |
+710 | pub struct CompactionOptions {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:711:5
+    |
+711 |     pub full: bool,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:712:5
+    |
+712 |     pub max_pages: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:713:5
+    |
+713 |     pub target_level: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:717:1
+    |
+717 | pub struct CompactionReport {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:718:5
+    |
+718 |     pub pages_read: u64,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:719:5
+    |
+719 |     pub pages_written: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:720:5
+    |
+720 |     pub bytes_reclaimed: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:721:5
+    |
+721 |     pub output_lsn: Option<LogSequenceNumber>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:725:1
+    |
+725 | pub struct CheckpointInfo {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:726:5
+    |
+726 |     pub checkpoint_lsn: LogSequenceNumber,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:727:5
+    |
+727 |     pub durable_lsn: LogSequenceNumber,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:728:5
+    |
+728 |     pub pages_flushed: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:732:1
+    |
+732 | pub struct VacuumOptions {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:733:5
+    |
+733 |     pub aggressive: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:734:5
+    |
+734 |     pub max_pages: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:738:1
+    |
+738 | pub struct VacuumReport {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:739:5
+    |
+739 |     pub pages_freed: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:740:5
+    |
+740 |     pub bytes_reclaimed: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:744:1
+    |
+744 | pub struct WorkBudget {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:745:5
+    |
+745 |     pub max_pages: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:746:5
+    |
+746 |     pub max_millis: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:747:5
+    |
+747 |     pub max_items: Option<u64>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> src\table\traits.rs:751:1
+    |
+751 | pub enum VerifyScope {
+    | ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:752:5
+    |
+752 |     Catalog,
+    |     ^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:753:5
+    |
+753 |     Table(TableId),
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:754:5
+    |
+754 |     Page(crate::pager::PageId),
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:755:5
+    |
+755 |     FullDatabase,
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:759:1
+    |
+759 | pub struct VerificationReport {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:760:5
+    |
+760 |     pub checked_items: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:761:5
+    |
+761 |     pub errors: Vec<ConsistencyError>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:762:5
+    |
+762 |     pub warnings: Vec<ConsistencyWarning>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:766:1
+    |
+766 | pub struct ConsistencyError {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:767:5
+    |
+767 |     pub error_type: ConsistencyErrorType,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:768:5
+    |
+768 |     pub location: String,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:769:5
+    |
+769 |     pub description: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:770:5
+    |
+770 |     pub severity: Severity,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:774:1
+    |
+774 | pub struct ConsistencyWarning {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:775:5
+    |
+775 |     pub location: String,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:776:5
+    |
+776 |     pub description: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> src\table\traits.rs:780:1
+    |
+780 | pub enum ConsistencyErrorType {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:781:5
+    |
+781 |     InvalidPointer,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:782:5
+    |
+782 |     CorruptedPage,
+    |     ^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:783:5
+    |
+783 |     CorruptedIndex,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:784:5
+    |
+784 |     OrphanedPage,
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:785:5
+    |
+785 |     MissingPage,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:786:5
+    |
+786 |     ChecksumMismatch,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:787:5
+    |
+787 |     WalMismatch,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:788:5
+    |
+788 |     CatalogMismatch,
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:789:5
+    |
+789 |     IndexTableMismatch,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> src\table\traits.rs:793:1
+    |
+793 | pub enum Severity {
+    | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:794:5
+    |
+794 |     Info,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:795:5
+    |
+795 |     Warning,
+    |     ^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:796:5
+    |
+796 |     Error,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:797:5
+    |
+797 |     Critical,
+    |     ^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:801:1
+    |
+801 | pub struct RepairPlan {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:802:5
+    |
+802 |     pub actions: Vec<RepairAction>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> src\table\traits.rs:806:1
+    |
+806 | pub enum RepairAction {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:807:5
+    |
+807 |     RebuildTable(TableId),
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:808:5
+    |
+808 |     ReclaimOrphanedPages,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:809:5
+    |
+809 |     RestoreFromWal { through: LogSequenceNumber },
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:809:22
+    |
+809 |     RestoreFromWal { through: LogSequenceNumber },
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\table\traits.rs:810:5
+    |
+810 |     DropCorruptedTable(TableId),
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> src\table\traits.rs:814:1
+    |
+814 | pub struct RepairReport {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:815:5
+    |
+815 |     pub actions_attempted: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:816:5
+    |
+816 |     pub actions_succeeded: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\table\traits.rs:817:5
+    |
+817 |     pub unrepaired_errors: Vec<ConsistencyError>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:829:5
+    |
+829 |     fn valid(&self) -> bool;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:831:5
+    |
+831 |     fn index_key(&self) -> Option<&[u8]>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:833:5
+    |
+833 |     fn primary_key(&self) -> Option<&[u8]>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:835:5
+    |
+835 |     fn next(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:837:5
+    |
+837 |     fn prev(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:839:5
+    |
+839 |     fn seek(&mut self, index_key: &[u8]) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:844:5
+    |
+844 |     fn valid(&self) -> bool;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:846:5
+    |
+846 |     fn current(&self) -> Option<TimePointRef>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:848:5
+    |
+848 |     fn next(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:853:5
+    |
+853 |     fn valid(&self) -> bool;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:855:5
+    |
+855 |     fn current(&self) -> Option<EdgeRef>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:857:5
+    |
+857 |     fn next(&mut self) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated type
+   --> src\table\traits.rs:863:5
+    |
+863 |     type Cursor<'a>: SpecialtyTableCursor
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:867:5
+    |
+867 |     fn table_id(&self) -> TableId;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:869:5
+    |
+869 |     fn name(&self) -> &str;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:871:5
+    |
+871 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:873:5
+    |
+873 | /     fn insert_entry(
+874 | |         &mut self,
+875 | |         index_key: &[u8],
+876 | |         primary_key: &[u8],
+877 | |         tx_id: TransactionId,
+878 | |         commit_lsn: LogSequenceNumber,
+879 | |     ) -> TableResult<()>;
+    | |_________________________^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:881:5
+    |
+881 | /     fn delete_entry(
+882 | |         &mut self,
+883 | |         index_key: &[u8],
+884 | |         primary_key: &[u8],
+885 | |         tx_id: TransactionId,
+886 | |         commit_lsn: LogSequenceNumber,
+887 | |     ) -> TableResult<()>;
+    | |_________________________^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:889:5
+    |
+889 |     fn scan(&self, bounds: ScanBounds) -> TableResult<Self::Cursor<'_>>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:891:5
+    |
+891 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:893:5
+    |
+893 |     fn verify(&self) -> TableResult<VerificationReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:899:5
+    |
+899 |     fn table_id(&self) -> TableId;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:901:5
+    |
+901 |     fn name(&self) -> &str;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:903:5
+    |
+903 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:905:5
+    |
+905 |     fn add_marker(&mut self, marker_key: &[u8], target: PhysicalLocation) -> TableResult<()>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:918:5
+    |
+918 |     fn find_candidate_ranges(&self, query: SparseQuery<'_>) -> TableResult<Vec<PhysicalRange>>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:927:5
+    |
+927 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:929:5
+    |
+929 |     fn verify(&self) -> TableResult<VerificationReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:935:5
+    |
+935 |     fn table_id(&self) -> TableId;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:937:5
+    |
+937 |     fn name(&self) -> &str;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:939:5
+    |
+939 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:941:5
+    |
+941 | /     fn insert_key(
+942 | |         &mut self,
+943 | |         key: &[u8],
+944 | |         tx_id: TransactionId,
+945 | |         commit_lsn: LogSequenceNumber,
+946 | |     ) -> TableResult<()>;
+    | |_________________________^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:954:5
+    |
+954 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:956:5
+    |
+956 |     fn verify(&self) -> TableResult<VerificationReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:962:5
+    |
+962 |     fn table_id(&self) -> TableId;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:964:5
+    |
+964 |     fn name(&self) -> &str;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:966:5
+    |
+966 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:968:5
+    |
+968 | /     fn index_document(
+969 | |         &self,
+970 | |         doc_id: &[u8],
+971 | |         fields: &[TextField<'_>],
+972 | |         tx_id: TransactionId,
+973 | |         commit_lsn: LogSequenceNumber,
+974 | |     ) -> TableResult<()>;
+    | |_________________________^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:988:5
+    |
+988 | /     fn delete_document(
+989 | |         &self,
+990 | |         doc_id: &[u8],
+991 | |         tx_id: TransactionId,
+992 | |         commit_lsn: LogSequenceNumber,
+993 | |     ) -> TableResult<()>;
+    | |_________________________^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:995:5
+    |
+995 |     fn search(&self, query: TextQuery<'_>, limit: usize) -> TableResult<Vec<ScoredDocument>>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:997:5
+    |
+997 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\table\traits.rs:999:5
+    |
+999 |     fn verify(&self) -> TableResult<VerificationReport>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1005:5
+     |
+1005 |     fn table_id(&self) -> TableId;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1007:5
+     |
+1007 |     fn name(&self) -> &str;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1009:5
+     |
+1009 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1011:5
+     |
+1011 |     fn dimensions(&self) -> usize;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1013:5
+     |
+1013 |     fn metric(&self) -> VectorMetric;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1015:5
+     |
+1015 | /     fn insert_vector(
+1016 | |         &self,
+1017 | |         id: &[u8],
+1018 | |         vector: &[f32],
+1019 | |         tx_id: TransactionId,
+1020 | |         commit_lsn: LogSequenceNumber,
+1021 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1023:5
+     |
+1023 | /     fn delete_vector(
+1024 | |         &self,
+1025 | |         id: &[u8],
+1026 | |         tx_id: TransactionId,
+1027 | |         commit_lsn: LogSequenceNumber,
+1028 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1030:5
+     |
+1030 | /     fn search_vector<'a>(
+1031 | |         &self,
+1032 | |         query: &[f32],
+1033 | |         options: VectorSearchOptions<'a>,
+1034 | |     ) -> TableResult<Vec<VectorHit>>;
+     | |_____________________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1036:5
+     |
+1036 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1038:5
+     |
+1038 |     fn verify(&self) -> TableResult<VerificationReport>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1043:5
+     |
+1043 |     fn set_ef_construction(&self, ef: usize);
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1045:5
+     |
+1045 |     fn set_max_connections(&self, m: usize);
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1050:5
+     |
+1050 |     fn train(&mut self, samples: &[&[f32]]) -> TableResult<()>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1052:5
+     |
+1052 |     fn centroid_count(&self) -> usize;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated type
+    --> src\table\traits.rs:1058:5
+     |
+1058 |     type EdgeCursor<'a>: EdgeCursor
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1062:5
+     |
+1062 |     fn table_id(&self) -> TableId;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1064:5
+     |
+1064 |     fn name(&self) -> &str;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1066:5
+     |
+1066 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1068:5
+     |
+1068 | /     fn add_edge(
+1069 | |         &self,
+1070 | |         source: &[u8],
+1071 | |         label: &[u8],
+...    |
+1075 | |         commit_lsn: LogSequenceNumber,
+1076 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1093:5
+     |
+1093 | /     fn remove_edge(
+1094 | |         &self,
+1095 | |         source: &[u8],
+1096 | |         label: &[u8],
+...    |
+1100 | |         commit_lsn: LogSequenceNumber,
+1101 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1103:5
+     |
+1103 |     fn outgoing(&self, source: &[u8], label: Option<&[u8]>) -> TableResult<Self::EdgeCursor<'_>>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1105:5
+     |
+1105 |     fn incoming(&self, target: &[u8], label: Option<&[u8]>) -> TableResult<Self::EdgeCursor<'_>>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1107:5
+     |
+1107 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1109:5
+     |
+1109 |     fn verify(&self) -> TableResult<VerificationReport>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated type
+    --> src\table\traits.rs:1115:5
+     |
+1115 |     type TimeSeriesCursor<'a>: TimeSeriesCursor
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1119:5
+     |
+1119 |     fn table_id(&self) -> TableId;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1121:5
+     |
+1121 |     fn name(&self) -> &str;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1123:5
+     |
+1123 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1125:5
+     |
+1125 | /     fn append_point(
+1126 | |         &self,
+1127 | |         series_key: &[u8],
+1128 | |         timestamp: i64,
+...    |
+1131 | |         commit_lsn: LogSequenceNumber,
+1132 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1134:5
+     |
+1134 | /     fn scan_series(
+1135 | |         &self,
+1136 | |         series_key: &[u8],
+1137 | |         start_ts: i64,
+1138 | |         end_ts: i64,
+1139 | |     ) -> TableResult<Self::TimeSeriesCursor<'_>>;
+     | |_________________________________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1141:5
+     |
+1141 | /     fn latest_before(&self, series_key: &[u8], timestamp: i64)
+1142 | |     -> TableResult<Option<TimePointRef>>;
+     | |_________________________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1144:5
+     |
+1144 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1146:5
+     |
+1146 |     fn verify(&self) -> TableResult<VerificationReport>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1152:5
+     |
+1152 |     fn table_id(&self) -> TableId;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1154:5
+     |
+1154 |     fn name(&self) -> &str;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1156:5
+     |
+1156 |     fn capabilities(&self) -> SpecialtyTableCapabilities;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1158:5
+     |
+1158 | /     fn insert_geometry(
+1159 | |         &self,
+1160 | |         id: &[u8],
+1161 | |         geometry: GeometryRef<'_>,
+1162 | |         tx_id: TransactionId,
+1163 | |         commit_lsn: LogSequenceNumber,
+1164 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1166:5
+     |
+1166 | /     fn delete_geometry(
+1167 | |         &self,
+1168 | |         id: &[u8],
+1169 | |         tx_id: TransactionId,
+1170 | |         commit_lsn: LogSequenceNumber,
+1171 | |     ) -> TableResult<()>;
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1173:5
+     |
+1173 |     fn intersects(&self, query: GeometryRef<'_>, limit: usize) -> TableResult<Vec<GeoHit>>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1175:5
+     |
+1175 |     fn nearest(&self, point: GeoPoint, limit: usize) -> TableResult<Vec<GeoHit>>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1177:5
+     |
+1177 |     fn stats(&self) -> TableResult<SpecialtyTableStats>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1179:5
+     |
+1179 |     fn verify(&self) -> TableResult<VerificationReport>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1184:5
+     |
+1184 |     fn table_id(&self) -> TableId;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1186:5
+     |
+1186 |     fn mark_stale(&mut self) -> TableResult<()>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1188:5
+     |
+1188 |     fn is_stale(&self) -> bool;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1190:5
+     |
+1190 |     fn rebuild(&mut self, source: &dyn SpecialtyTableSource) -> TableResult<()>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1192:5
+     |
+1192 | /     fn rebuild_incremental(
+1193 | |         &mut self,
+1194 | |         source: &dyn SpecialtyTableSource,
+1195 | |         budget: RebuildBudget,
+1196 | |     ) -> TableResult<RebuildProgress>;
+     | |______________________________________^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1205:5
+     |
+1205 |     fn table_id(&self) -> TableId;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1207:5
+     |
+1207 |     fn estimate(&self, predicate: Predicate<'_>) -> TableResult<CostEstimate>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1209:5
+     |
+1209 | /     fn query_candidates(
+1210 | |         &self,
+1211 | |         predicate: Predicate<'_>,
+1212 | |         budget: QueryBudget,
+1213 | |     ) -> TableResult<CandidateSet>;
+     | |___________________________________^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1219:5
+     |
+1219 |     Eq {
+     |     ^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1220:9
+     |
+1220 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1221:9
+     |
+1221 |         value: std::borrow::Cow<'a, [u8]>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1223:5
+     |
+1223 |     Range {
+     |     ^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1224:9
+     |
+1224 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1225:9
+     |
+1225 |         start: crate::types::Bound<std::borrow::Cow<'a, [u8]>>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1226:9
+     |
+1226 |         end: crate::types::Bound<std::borrow::Cow<'a, [u8]>>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1228:5
+     |
+1228 |     Prefix {
+     |     ^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1229:9
+     |
+1229 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1230:9
+     |
+1230 |         prefix: std::borrow::Cow<'a, [u8]>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1232:5
+     |
+1232 |     Text {
+     |     ^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1233:9
+     |
+1233 |         field: Option<std::borrow::Cow<'a, str>>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1234:9
+     |
+1234 |         query: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1236:5
+     |
+1236 |     VectorKnn {
+     |     ^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1237:9
+     |
+1237 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1238:9
+     |
+1238 |         vector: std::borrow::Cow<'a, [f32]>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1239:9
+     |
+1239 |         k: usize,
+     |         ^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1241:5
+     |
+1241 |     GeoIntersects {
+     |     ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1242:9
+     |
+1242 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1243:9
+     |
+1243 |         geometry: GeometryRef<'a>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1247:9
+     |
+1247 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1251:9
+     |
+1251 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1255:9
+     |
+1255 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1256:9
+     |
+1256 |         values: Vec<std::borrow::Cow<'a, [u8]>>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1260:9
+     |
+1260 |         field: std::borrow::Cow<'a, str>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1261:9
+     |
+1261 |         low: std::borrow::Cow<'a, [u8]>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1262:9
+     |
+1262 |         high: std::borrow::Cow<'a, [u8]>,
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1264:5
+     |
+1264 |     And(Vec<Predicate<'a>>),
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1265:5
+     |
+1265 |     Or(Vec<Predicate<'a>>),
+     |     ^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1266:5
+     |
+1266 |     Not(Box<Predicate<'a>>),
+     |     ^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1272:5
+     |
+1272 |     pub estimated_rows: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1273:5
+     |
+1273 |     pub selectivity: Option<f64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1274:5
+     |
+1274 |     pub io_cost: Option<f64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1275:5
+     |
+1275 |     pub cpu_cost: Option<f64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1276:5
+     |
+1276 |     pub memory_cost_bytes: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1277:5
+     |
+1277 |     pub exact: bool,
+     |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1278:5
+     |
+1278 |     pub ordered: bool,
+     |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1284:5
+     |
+1284 |     Exact(Vec<KeyBuf>),
+     |     ^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1285:5
+     |
+1285 |     Approximate(Vec<KeyBuf>),
+     |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1286:5
+     |
+1286 |     PhysicalRanges(Vec<PhysicalRange>),
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1287:5
+     |
+1287 |     Empty,
+     |     ^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1288:5
+     |
+1288 |     Unknown,
+     |     ^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1294:5
+     |
+1294 |     pub max_results: Option<usize>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1295:5
+     |
+1295 |     pub max_pages: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1296:5
+     |
+1296 |     pub max_millis: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> src\table\traits.rs:1324:5
+     |
+1324 | /     fn scan_rows(
+1325 | |         &self,
+1326 | |         bounds: ScanBounds,
+1327 | |     ) -> TableResult<
+1328 | |         Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>), SpecialtyTableSourceError>> + '_>,
+1329 | |     >;
+     | |______^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1361:1
+     |
+1361 | pub struct SparseQuery<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1362:5
+     |
+1362 |     pub key_range: Option<(&'a [u8], &'a [u8])>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1363:5
+     |
+1363 |     pub min_max_filter: Option<(&'a [u8], &'a [u8])>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1367:1
+     |
+1367 | pub struct TextField<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1368:5
+     |
+1368 |     pub name: &'a str,
+     |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1369:5
+     |
+1369 |     pub text: &'a str,
+     |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1370:5
+     |
+1370 |     pub boost: f32,
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1374:1
+     |
+1374 | pub struct TextQuery<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1375:5
+     |
+1375 |     pub query: &'a str,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1376:5
+     |
+1376 |     pub default_field: Option<&'a str>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1377:5
+     |
+1377 |     pub require_positions: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1381:1
+     |
+1381 | pub struct ScoredDocument {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1382:5
+     |
+1382 |     pub doc_id: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1383:5
+     |
+1383 |     pub score: f32,
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+    --> src\table\traits.rs:1387:1
+     |
+1387 | pub enum VectorMetric {
+     | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1388:5
+     |
+1388 |     Cosine,
+     |     ^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1389:5
+     |
+1389 |     Dot,
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1390:5
+     |
+1390 |     Euclidean,
+     |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1391:5
+     |
+1391 |     Manhattan,
+     |     ^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1395:1
+     |
+1395 | pub struct VectorSearchOptions<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1396:5
+     |
+1396 |     pub limit: usize,
+     |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1397:5
+     |
+1397 |     pub ef_search: Option<usize>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1398:5
+     |
+1398 |     pub probes: Option<usize>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1399:5
+     |
+1399 |     pub filter: Option<Predicate<'a>>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1403:1
+     |
+1403 | pub struct VectorHit {
+     | ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1404:5
+     |
+1404 |     pub id: KeyBuf,
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1411:1
+     |
+1411 | pub struct EdgeRef {
+     | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1412:5
+     |
+1412 |     pub edge_id: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1413:5
+     |
+1413 |     pub source: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1414:5
+     |
+1414 |     pub label: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1415:5
+     |
+1415 |     pub target: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1419:1
+     |
+1419 | pub struct TimePointRef {
+     | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1420:5
+     |
+1420 |     pub series_key: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1421:5
+     |
+1421 |     pub timestamp: i64,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1422:5
+     |
+1422 |     pub value_key: KeyBuf,
+     |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1441:5
+     |
+1441 |     pub x: f64,
+     |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1442:5
+     |
+1442 |     pub y: f64,
+     |     ^^^^^^^^^^
+
+warning: missing documentation for an enum
+    --> src\table\traits.rs:1446:1
+     |
+1446 | pub enum GeometryRef<'a> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1447:5
+     |
+1447 |     Point(GeoPoint),
+     |     ^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1448:5
+     |
+1448 |     BoundingBox { min: GeoPoint, max: GeoPoint },
+     |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1448:19
+     |
+1448 |     BoundingBox { min: GeoPoint, max: GeoPoint },
+     |                   ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1448:34
+     |
+1448 |     BoundingBox { min: GeoPoint, max: GeoPoint },
+     |                                  ^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> src\table\traits.rs:1449:5
+     |
+1449 |     Wkb(&'a [u8]),
+     |     ^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1453:1
+     |
+1453 | pub struct GeoHit {
+     | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1454:5
+     |
+1454 |     pub id: KeyBuf,
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1464:5
+     |
+1464 |     pub exact: bool,
+     |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1465:5
+     |
+1465 |     pub approximate: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1466:5
+     |
+1466 |     pub ordered: bool,
+     |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1467:5
+     |
+1467 |     pub sparse: bool,
+     |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1468:5
+     |
+1468 |     pub supports_delete: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1469:5
+     |
+1469 |     pub supports_range_query: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1470:5
+     |
+1470 |     pub supports_prefix_query: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1471:5
+     |
+1471 |     pub supports_scoring: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1472:5
+     |
+1472 |     pub supports_incremental_rebuild: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1473:5
+     |
+1473 |     pub may_be_stale: bool,
+     |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1477:1
+     |
+1477 | pub struct SpecialtyTableStats {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1478:5
+     |
+1478 |     pub entry_count: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1479:5
+     |
+1479 |     pub size_bytes: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1480:5
+     |
+1480 |     pub distinct_keys: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1481:5
+     |
+1481 |     pub stale_entries: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1482:5
+     |
+1482 |     pub last_updated_lsn: Option<LogSequenceNumber>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1486:1
+     |
+1486 | pub struct RebuildBudget {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1487:5
+     |
+1487 |     pub max_rows: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1488:5
+     |
+1488 |     pub max_pages: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1489:5
+     |
+1489 |     pub max_millis: Option<u64>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1493:1
+     |
+1493 | pub struct RebuildProgress {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1494:5
+     |
+1494 |     pub complete: bool,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1495:5
+     |
+1495 |     pub rows_scanned: u64,
+     |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1496:5
+     |
+1496 |     pub rows_indexed: u64,
+     |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1497:5
+     |
+1497 |     pub resume_key: Option<KeyBuf>,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> src\table\traits.rs:1501:1
+     |
+1501 | pub struct PhysicalRange {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1502:5
+     |
+1502 |     pub start: PhysicalLocation,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> src\table\traits.rs:1503:5
+     |
+1503 |     pub end: PhysicalLocation,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\txn\conflict.rs:33:5
+   |
+33 |     WriteWrite,
+   |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\txn\conflict.rs:34:5
+   |
+34 |     ReadWrite,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\txn\conflict.rs:35:5
+   |
+35 |     Serialization,
+   |     ^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> src\txn\conflict.rs:51:5
+   |
+51 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:31:9
+   |
+31 |         transaction_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:32:9
+   |
+32 |         current_state: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:33:9
+   |
+33 |         attempted_operation: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:41:9
+   |
+41 |         object_id: TableId,
+   |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:42:9
+   |
+42 |         key: Vec<u8>,
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:43:9
+   |
+43 |         holder_txn_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:44:9
+   |
+44 |         requester_txn_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:52:9
+   |
+52 |         object_id: TableId,
+   |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:53:9
+   |
+53 |         key: Vec<u8>,
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:54:9
+   |
+54 |         reader_txn_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:55:9
+   |
+55 |         writer_txn_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:61:9
+   |
+61 |         transaction_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:62:9
+   |
+62 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:68:9
+   |
+68 |         transaction_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:69:9
+   |
+69 |         context: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:75:9
+   |
+75 |         transaction_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:76:9
+   |
+76 |         involved_transactions: Vec<TransactionId>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\txn\error.rs:77:9
+   |
+77 |         cycle_description: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\txn\error.rs:173:20
+    |
+173 |     InvalidState { state: String, operation: String },
+    |                    ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\txn\error.rs:173:35
+    |
+173 |     InvalidState { state: String, operation: String },
+    |                                   ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\txn\error.rs:177:23
+    |
+177 |     InvalidPosition { details: String },
+    |                       ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\txn\transaction.rs:213:5
+    |
+213 |     pub fn as_u64(&self) -> u64 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\txn\transaction.rs:216:5
+    |
+216 |     pub fn to_bytes(&self) -> [u8; 8] {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\txn\transaction.rs:248:5
+    |
+248 |     pub tx_id: TransactionId,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\txn\transaction.rs:249:5
+    |
+249 |     pub commit_lsn: LogSequenceNumber,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\txn\transaction.rs:250:5
+    |
+250 |     pub durable_lsn: Option<LogSequenceNumber>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> src\txn\version.rs:36:1
+   |
+36 | pub struct VersionChain {
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\types.rs:22:5
+   |
+22 |     pub fn as_u64(&self) -> u64 {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\types.rs:26:5
+   |
+26 |     pub fn to_bytes(&self) -> [u8; 8] {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:46:5
+   |
+46 |     Included(T),
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:47:5
+   |
+47 |     Excluded(T),
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:48:5
+   |
+48 |     Unbounded,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\types.rs:60:9
+   |
+60 |         start: Bound<KeyBuf>,
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\types.rs:61:9
+   |
+61 |         end: Bound<KeyBuf>,
+   |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:81:5
+   |
+81 |     ReadUncommitted,
+   |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:82:5
+   |
+82 |     ReadCommitted,
+   |     ^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:83:5
+   |
+83 |     RepeatableRead,
+   |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:84:5
+   |
+84 |     Serializable,
+   |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> src\types.rs:85:5
+   |
+85 |     SnapshotIsolation,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:128:5
+    |
+128 |     Insert,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:129:5
+    |
+129 |     Update,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:130:5
+    |
+130 |     Upsert,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:131:5
+    |
+131 |     Delete,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:132:5
+    |
+132 |     RangeDelete,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:327:25
+    |
+327 |     InsufficientBytes { expected: usize, actual: usize },
+    |                         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:327:42
+    |
+327 |     InsufficientBytes { expected: usize, actual: usize },
+    |                                          ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:330:9
+    |
+330 |         variant: &'static str,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:331:9
+    |
+331 |         expected: usize,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:332:9
+    |
+332 |         actual: usize,
+    |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:371:5
+    |
+371 |     pub key: KeyBuf,
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\types.rs:372:5
+    |
+372 |     pub value: ValueBuf,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:378:5
+    |
+378 |     RawBytes,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:379:5
+    |
+379 |     LexicographicTuple,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:380:5
+    |
+380 |     BigEndianInteger,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:381:5
+    |
+381 |     Utf8,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:382:5
+    |
+382 |     TimestampMicros,
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:383:5
+    |
+383 |     Custom(u32),
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:389:5
+    |
+389 |     None,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:390:5
+    |
+390 |     Lz4,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:391:5
+    |
+391 |     Zstd,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:392:5
+    |
+392 |     Snappy,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:393:5
+    |
+393 |     Custom(u32),
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:399:5
+    |
+399 |     None,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:400:5
+    |
+400 |     AesGcm,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:401:5
+    |
+401 |     ChaCha20Poly1305,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> src\types.rs:402:5
+    |
+402 |     Custom(u32),
+    |     ^^^^^^
+
+warning: missing documentation for a method
+   --> src\types.rs:414:5
+    |
+414 |     pub fn as_u64(&self) -> u64 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> src\types.rs:418:5
+    |
+418 |     pub fn to_bytes(&self) -> [u8; 8] {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:24:19
+   |
+24 |     InvalidPath { path: String, reason: String },
+   |                   ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:24:33
+   |
+24 |     InvalidPath { path: String, reason: String },
+   |                                 ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:26:18
+   |
+26 |     PathExists { path: String },
+   |                  ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:28:19
+   |
+28 |     PathMissing { path: String },
+   |                   ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:30:21
+   |
+30 |     ParentMissing { path: String },
+   |                     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:32:25
+   |
+32 |     FileAlreadyLocked { path: String },
+   |                         ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:34:24
+   |
+34 |     PermissionDenied { path: String, operation: String },
+   |                        ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:34:38
+   |
+34 |     PermissionDenied { path: String, operation: String },
+   |                                      ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:36:21
+   |
+36 |     AlreadyLocked { path: String },
+   |                     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:38:24
+   |
+38 |     InvalidOperation { path: String, operation: String },
+   |                        ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:38:38
+   |
+38 |     InvalidOperation { path: String, operation: String },
+   |                                      ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\vfs\error.rs:40:28
+   |
+40 |     UnsupportedOperation { operation: String },
+   |                            ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:37:9
+   |
+37 |         lsn: LogSequenceNumber,
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:38:9
+   |
+38 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:46:9
+   |
+46 |         lsn: LogSequenceNumber,
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:47:9
+   |
+47 |         offset: u64,
+   |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:48:9
+   |
+48 |         expected: u32,
+   |         ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:49:9
+   |
+49 |         found: u32,
+   |         ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:55:9
+   |
+55 |         offset: u64,
+   |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:56:9
+   |
+56 |         corruption_type: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:57:9
+   |
+57 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:62:27
+   |
+62 |     TransactionNotFound { txn_id: TransactionId },
+   |                           ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:66:32
+   |
+66 |     TransactionAlreadyExists { txn_id: TransactionId },
+   |                                ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:71:9
+   |
+71 |         txn_id: TransactionId,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:72:9
+   |
+72 |         current_state: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:73:9
+   |
+73 |         operation: String,
+   |         ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:78:15
+   |
+78 |     WalFull { current_size: u64, max_size: u64 },
+   |               ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:78:34
+   |
+78 |     WalFull { current_size: u64, max_size: u64 },
+   |                                  ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:83:9
+   |
+83 |         lsn: LogSequenceNumber,
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:84:9
+   |
+84 |         operation: String,
+   |         ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:85:9
+   |
+85 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:91:9
+   |
+91 |         lsn: LogSequenceNumber,
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> src\wal\error.rs:92:9
+   |
+92 |         details: String,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:102:9
+    |
+102 |         lsn: LogSequenceNumber,
+    |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:103:9
+    |
+103 |         record_type: String,
+    |         ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:104:9
+    |
+104 |         details: String,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:109:28
+    |
+109 |     DeserializationError { offset: u64, details: String },
+    |                            ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:109:41
+    |
+109 |     DeserializationError { offset: u64, details: String },
+    |                                         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:114:9
+    |
+114 |         lsn: LogSequenceNumber,
+    |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:115:9
+    |
+115 |         encryption_type: String,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:116:9
+    |
+116 |         details: String,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:122:9
+    |
+122 |         offset: u64,
+    |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:123:9
+    |
+123 |         encryption_type: String,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:124:9
+    |
+124 |         details: String,
+    |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> src\wal\error.rs:129:28
+    |
+129 |     MissingEncryptionKey { encryption_type: String },
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\wal\record.rs:51:5
+   |
+51 |     pub fn as_u64(&self) -> u64 {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> src\wal\record.rs:54:5
+   |
+54 |     pub fn to_bytes(&self) -> [u8; 8] {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `nanokv` (lib) generated 733 warnings (run `cargo fix --lib -p nanokv` to apply 5 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.49s

@@ -21,8 +21,10 @@
 
 use nanokv::pager::{Pager, PagerConfig};
 use nanokv::table::{DenseOrdered, MemoryBTree, PagedBTree, SpecialtyTableCursor};
+use nanokv::txn::TransactionId;
 use nanokv::types::{Bound, KeyBuf, ScanBounds, TableId};
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 // =============================================================================
@@ -53,11 +55,11 @@ fn test_memory_btree_insert_entry() {
 
     // Insert index entries: email -> user_id
     index
-        .insert_entry(b"alice@example.com", b"user_001")
+        .insert_entry(b"alice@example.com", b"user_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
-    index.insert_entry(b"bob@example.com", b"user_002").unwrap();
+    index.insert_entry(b"bob@example.com", b"user_002", TransactionId::from(1), LogSequenceNumber::from(2)).unwrap();
     index
-        .insert_entry(b"charlie@example.com", b"user_003")
+        .insert_entry(b"charlie@example.com", b"user_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
 
     // Verify entries exist via scan
@@ -85,11 +87,11 @@ fn test_paged_btree_insert_entry() {
 
     // Insert index entries: email -> user_id
     index
-        .insert_entry(b"alice@example.com", b"user_001")
+        .insert_entry(b"alice@example.com", b"user_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
-    index.insert_entry(b"bob@example.com", b"user_002").unwrap();
+    index.insert_entry(b"bob@example.com", b"user_002", TransactionId::from(1), LogSequenceNumber::from(2)).unwrap();
     index
-        .insert_entry(b"charlie@example.com", b"user_003")
+        .insert_entry(b"charlie@example.com", b"user_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
 
     // Flush pager cache to ensure writes are persisted
@@ -120,15 +122,15 @@ fn test_memory_btree_delete_entry() {
 
     // Insert entries
     index
-        .insert_entry(b"alice@example.com", b"user_001")
+        .insert_entry(b"alice@example.com", b"user_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
-    index.insert_entry(b"bob@example.com", b"user_002").unwrap();
+    index.insert_entry(b"bob@example.com", b"user_002", TransactionId::from(1), LogSequenceNumber::from(2)).unwrap();
     index
-        .insert_entry(b"charlie@example.com", b"user_003")
+        .insert_entry(b"charlie@example.com", b"user_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
 
     // Delete one entry
-    index.delete_entry(b"bob@example.com", b"user_002").unwrap();
+    index.delete_entry(b"bob@example.com", b"user_002", TransactionId::from(1), LogSequenceNumber::from(10)).unwrap();
 
     // Verify deletion
     let mut cursor = index.scan(ScanBounds::All).unwrap();
@@ -149,15 +151,15 @@ fn test_paged_btree_delete_entry() {
 
     // Insert entries
     index
-        .insert_entry(b"alice@example.com", b"user_001")
+        .insert_entry(b"alice@example.com", b"user_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
-    index.insert_entry(b"bob@example.com", b"user_002").unwrap();
+    index.insert_entry(b"bob@example.com", b"user_002", TransactionId::from(1), LogSequenceNumber::from(2)).unwrap();
     index
-        .insert_entry(b"charlie@example.com", b"user_003")
+        .insert_entry(b"charlie@example.com", b"user_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
 
     // Delete one entry
-    index.delete_entry(b"bob@example.com", b"user_002").unwrap();
+    index.delete_entry(b"bob@example.com", b"user_002", TransactionId::from(1), LogSequenceNumber::from(10)).unwrap();
 
     // Flush pager cache
     pager.flush_cache().unwrap();
@@ -188,7 +190,7 @@ fn test_memory_btree_range_scan() {
         let timestamp = format!("2024-01-{:02}T00:00:00Z", i + 1);
         let record_id = format!("rec_{:03}", i);
         index
-            .insert_entry(timestamp.as_bytes(), record_id.as_bytes())
+            .insert_entry(timestamp.as_bytes(), record_id.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -218,7 +220,7 @@ fn test_paged_btree_range_scan() {
         let timestamp = format!("2024-01-{:02}T00:00:00Z", i + 1);
         let record_id = format!("rec_{:03}", i);
         index
-            .insert_entry(timestamp.as_bytes(), record_id.as_bytes())
+            .insert_entry(timestamp.as_bytes(), record_id.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -248,19 +250,19 @@ fn test_memory_btree_prefix_scan() {
 
     // Insert category -> product_id entries
     index
-        .insert_entry(b"electronics:laptop:001", b"prod_001")
+        .insert_entry(b"electronics:laptop:001", b"prod_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     index
-        .insert_entry(b"electronics:laptop:002", b"prod_002")
+        .insert_entry(b"electronics:laptop:002", b"prod_002", TransactionId::from(1), LogSequenceNumber::from(2))
         .unwrap();
     index
-        .insert_entry(b"electronics:phone:001", b"prod_003")
+        .insert_entry(b"electronics:phone:001", b"prod_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
     index
-        .insert_entry(b"furniture:chair:001", b"prod_004")
+        .insert_entry(b"furniture:chair:001", b"prod_004", TransactionId::from(1), LogSequenceNumber::from(4))
         .unwrap();
     index
-        .insert_entry(b"furniture:desk:001", b"prod_005")
+        .insert_entry(b"furniture:desk:001", b"prod_005", TransactionId::from(1), LogSequenceNumber::from(5))
         .unwrap();
 
     // Prefix scan: all electronics
@@ -282,19 +284,19 @@ fn test_paged_btree_prefix_scan() {
 
     // Insert category -> product_id entries
     index
-        .insert_entry(b"electronics:laptop:001", b"prod_001")
+        .insert_entry(b"electronics:laptop:001", b"prod_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     index
-        .insert_entry(b"electronics:laptop:002", b"prod_002")
+        .insert_entry(b"electronics:laptop:002", b"prod_002", TransactionId::from(1), LogSequenceNumber::from(2))
         .unwrap();
     index
-        .insert_entry(b"electronics:phone:001", b"prod_003")
+        .insert_entry(b"electronics:phone:001", b"prod_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
     index
-        .insert_entry(b"furniture:chair:001", b"prod_004")
+        .insert_entry(b"furniture:chair:001", b"prod_004", TransactionId::from(1), LogSequenceNumber::from(4))
         .unwrap();
     index
-        .insert_entry(b"furniture:desk:001", b"prod_005")
+        .insert_entry(b"furniture:desk:001", b"prod_005", TransactionId::from(1), LogSequenceNumber::from(5))
         .unwrap();
 
     // Flush pager cache
@@ -324,19 +326,19 @@ fn test_memory_btree_composite_key() {
     // Composite key: user_id + timestamp -> event_id
     // Format: "user_id|timestamp"
     index
-        .insert_entry(b"user_001|2024-01-01T10:00:00Z", b"event_001")
+        .insert_entry(b"user_001|2024-01-01T10:00:00Z", b"event_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     index
-        .insert_entry(b"user_001|2024-01-01T11:00:00Z", b"event_002")
+        .insert_entry(b"user_001|2024-01-01T11:00:00Z", b"event_002", TransactionId::from(1), LogSequenceNumber::from(2))
         .unwrap();
     index
-        .insert_entry(b"user_001|2024-01-01T12:00:00Z", b"event_003")
+        .insert_entry(b"user_001|2024-01-01T12:00:00Z", b"event_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
     index
-        .insert_entry(b"user_002|2024-01-01T10:00:00Z", b"event_004")
+        .insert_entry(b"user_002|2024-01-01T10:00:00Z", b"event_004", TransactionId::from(1), LogSequenceNumber::from(4))
         .unwrap();
     index
-        .insert_entry(b"user_002|2024-01-01T11:00:00Z", b"event_005")
+        .insert_entry(b"user_002|2024-01-01T11:00:00Z", b"event_005", TransactionId::from(1), LogSequenceNumber::from(5))
         .unwrap();
 
     // Query all events for user_001
@@ -359,19 +361,19 @@ fn test_paged_btree_composite_key() {
     // Composite key: user_id + timestamp -> event_id
     // Format: "user_id|timestamp"
     index
-        .insert_entry(b"user_001|2024-01-01T10:00:00Z", b"event_001")
+        .insert_entry(b"user_001|2024-01-01T10:00:00Z", b"event_001", TransactionId::from(1), LogSequenceNumber::from(1))
         .unwrap();
     index
-        .insert_entry(b"user_001|2024-01-01T11:00:00Z", b"event_002")
+        .insert_entry(b"user_001|2024-01-01T11:00:00Z", b"event_002", TransactionId::from(1), LogSequenceNumber::from(2))
         .unwrap();
     index
-        .insert_entry(b"user_001|2024-01-01T12:00:00Z", b"event_003")
+        .insert_entry(b"user_001|2024-01-01T12:00:00Z", b"event_003", TransactionId::from(1), LogSequenceNumber::from(3))
         .unwrap();
     index
-        .insert_entry(b"user_002|2024-01-01T10:00:00Z", b"event_004")
+        .insert_entry(b"user_002|2024-01-01T10:00:00Z", b"event_004", TransactionId::from(1), LogSequenceNumber::from(4))
         .unwrap();
     index
-        .insert_entry(b"user_002|2024-01-01T11:00:00Z", b"event_005")
+        .insert_entry(b"user_002|2024-01-01T11:00:00Z", b"event_005", TransactionId::from(1), LogSequenceNumber::from(5))
         .unwrap();
 
     // Flush pager cache
@@ -400,11 +402,11 @@ fn test_memory_btree_non_unique_index() {
 
     // Non-unique index: status -> user_id
     // Multiple users can have the same status
-    index.insert_entry(b"active", b"user_001").unwrap();
-    index.insert_entry(b"active", b"user_002").unwrap();
-    index.insert_entry(b"active", b"user_003").unwrap();
-    index.insert_entry(b"inactive", b"user_004").unwrap();
-    index.insert_entry(b"pending", b"user_005").unwrap();
+    index.insert_entry(b"active", b"user_001", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    index.insert_entry(b"active", b"user_002", TransactionId::from(1), LogSequenceNumber::from(2)).unwrap();
+    index.insert_entry(b"active", b"user_003", TransactionId::from(1), LogSequenceNumber::from(3)).unwrap();
+    index.insert_entry(b"inactive", b"user_004", TransactionId::from(1), LogSequenceNumber::from(4)).unwrap();
+    index.insert_entry(b"pending", b"user_005", TransactionId::from(1), LogSequenceNumber::from(5)).unwrap();
 
     // Note: Current implementation overwrites entries with same key
     // For true non-unique indexes, we'd need to encode primary key in index key
@@ -429,14 +431,14 @@ fn test_memory_btree_non_unique_with_encoded_key() {
 
     // Proper non-unique index: encode primary key in index key
     // Format: "status|primary_key"
-    index.insert_entry(b"active|user_001", b"user_001").unwrap();
-    index.insert_entry(b"active|user_002", b"user_002").unwrap();
-    index.insert_entry(b"active|user_003", b"user_003").unwrap();
+    index.insert_entry(b"active|user_001", b"user_001", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    index.insert_entry(b"active|user_002", b"user_002", TransactionId::from(1), LogSequenceNumber::from(2)).unwrap();
+    index.insert_entry(b"active|user_003", b"user_003", TransactionId::from(1), LogSequenceNumber::from(3)).unwrap();
     index
-        .insert_entry(b"inactive|user_004", b"user_004")
+        .insert_entry(b"inactive|user_004", b"user_004", TransactionId::from(1), LogSequenceNumber::from(4))
         .unwrap();
     index
-        .insert_entry(b"pending|user_005", b"user_005")
+        .insert_entry(b"pending|user_005", b"user_005", TransactionId::from(1), LogSequenceNumber::from(5))
         .unwrap();
 
     // Query all active users
@@ -465,7 +467,7 @@ fn test_memory_btree_cursor_seek() {
         let score = format!("{:05}", i * 100); // 00000, 00100, 00200, ...
         let player = format!("player_{:02}", i);
         index
-            .insert_entry(score.as_bytes(), player.as_bytes())
+            .insert_entry(score.as_bytes(), player.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -495,7 +497,7 @@ fn test_paged_btree_cursor_seek() {
         let score = format!("{:05}", i * 100); // 00000, 00100, 00200, ...
         let player = format!("player_{:02}", i);
         index
-            .insert_entry(score.as_bytes(), player.as_bytes())
+            .insert_entry(score.as_bytes(), player.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -529,7 +531,7 @@ fn test_memory_btree_stats() {
         let key = format!("key_{:03}", i);
         let value = format!("value_{:03}", i);
         index
-            .insert_entry(key.as_bytes(), value.as_bytes())
+            .insert_entry(key.as_bytes(), value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -548,7 +550,7 @@ fn test_paged_btree_stats() {
         let key = format!("key_{:03}", i);
         let value = format!("value_{:03}", i);
         index
-            .insert_entry(key.as_bytes(), value.as_bytes())
+            .insert_entry(key.as_bytes(), value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -566,7 +568,7 @@ fn test_memory_btree_verify() {
         let key = format!("key_{:03}", i);
         let value = format!("value_{:03}", i);
         index
-            .insert_entry(key.as_bytes(), value.as_bytes())
+            .insert_entry(key.as_bytes(), value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -585,7 +587,7 @@ fn test_paged_btree_verify() {
         let key = format!("key_{:03}", i);
         let value = format!("value_{:03}", i);
         index
-            .insert_entry(key.as_bytes(), value.as_bytes())
+            .insert_entry(key.as_bytes(), value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -641,7 +643,7 @@ fn test_memory_btree_large_dataset() {
         let key = format!("key_{:06}", i);
         let value = format!("value_{:06}", i);
         index
-            .insert_entry(key.as_bytes(), value.as_bytes())
+            .insert_entry(key.as_bytes(), value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 
@@ -675,7 +677,7 @@ fn test_paged_btree_large_dataset() {
         let key = format!("key_{:06}", i);
         let value = format!("value_{:06}", i);
         index
-            .insert_entry(key.as_bytes(), value.as_bytes())
+            .insert_entry(key.as_bytes(), value.as_bytes(), TransactionId::from(1), LogSequenceNumber::from(i as u64 + 1))
             .unwrap();
     }
 

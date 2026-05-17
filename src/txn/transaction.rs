@@ -1757,7 +1757,7 @@ impl<FS: FileSystem> Transaction<FS> {
                             timestamp,
                             value_key,
                         } => {
-                            ts.append_point(series_key, *timestamp, value_key)
+                            ts.append_point(series_key, *timestamp, value_key, self.txn_id, commit_lsn)
                                 .map_err(|e| {
                                     TransactionError::Other(format!(
                                         "TimeSeries append_point failed: {}",
@@ -1791,7 +1791,7 @@ impl<FS: FileSystem> Transaction<FS> {
                 match &engine {
                     crate::table::TableEngineInstance::PagedHnswVector(hnsw) => match op {
                         VectorOp::InsertVector { id, vector } => {
-                            hnsw.insert_vector(id, vector).map_err(|e| {
+                            hnsw.insert_vector(id, vector, self.txn_id, commit_lsn).map_err(|e| {
                                 TransactionError::Other(format!(
                                     "Vector insert_vector failed: {}",
                                     e
@@ -1799,7 +1799,7 @@ impl<FS: FileSystem> Transaction<FS> {
                             })?;
                         }
                         VectorOp::DeleteVector { id } => {
-                            hnsw.delete_vector(id).map_err(|e| {
+                            hnsw.delete_vector(id, self.txn_id, commit_lsn).map_err(|e| {
                                 TransactionError::Other(format!(
                                     "Vector delete_vector failed: {}",
                                     e
@@ -1847,7 +1847,7 @@ impl<FS: FileSystem> Transaction<FS> {
                                 SerializedGeometry::Wkb(wkb) => GeometryRef::Wkb(wkb.as_slice()),
                             };
                             rtree
-                                .insert_geometry(id.as_slice(), geometry_ref, self.txn_id)
+                                .insert_geometry(id.as_slice(), geometry_ref, self.txn_id, commit_lsn)
                                 .map_err(|e| {
                                     TransactionError::Other(format!(
                                         "GeoSpatial insert_geometry failed: {}",
@@ -1856,7 +1856,7 @@ impl<FS: FileSystem> Transaction<FS> {
                                 })?;
                         }
                         GeoSpatialOp::DeleteGeometry { id } => {
-                            rtree.delete_geometry(id.as_slice()).map_err(|e| {
+                            rtree.delete_geometry(id.as_slice(), self.txn_id, commit_lsn).map_err(|e| {
                                 TransactionError::Other(format!(
                                     "GeoSpatial delete_geometry failed: {}",
                                     e
@@ -1889,7 +1889,7 @@ impl<FS: FileSystem> Transaction<FS> {
                                     boost: *boost,
                                 })
                                 .collect();
-                            fulltext.index_document(doc_id, &text_fields).map_err(|e| {
+                            fulltext.index_document(doc_id, &text_fields, self.txn_id, commit_lsn).map_err(|e| {
                                 TransactionError::Other(format!(
                                     "Full-text index_document failed: {}",
                                     e
@@ -1906,7 +1906,7 @@ impl<FS: FileSystem> Transaction<FS> {
                                 })
                                 .collect();
                             fulltext
-                                .update_document(doc_id, &text_fields)
+                                .update_document(doc_id, &text_fields, self.txn_id, commit_lsn)
                                 .map_err(|e| {
                                     TransactionError::Other(format!(
                                         "Full-text update_document failed: {}",
@@ -1915,7 +1915,7 @@ impl<FS: FileSystem> Transaction<FS> {
                                 })?;
                         }
                         FullTextOp::DeleteDocument { doc_id } => {
-                            fulltext.delete_document(doc_id).map_err(|e| {
+                            fulltext.delete_document(doc_id, self.txn_id, commit_lsn).map_err(|e| {
                                 TransactionError::Other(format!(
                                     "Full-text delete_document failed: {}",
                                     e
@@ -2155,7 +2155,12 @@ impl<FS: FileSystem> ApproximateMembership for Transaction<FS> {
         }
     }
 
-    fn insert_key(&mut self, key: &[u8]) -> crate::table::TableResult<()> {
+    fn insert_key(
+        &mut self,
+        key: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
+    ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
                 "transaction {} is not active for insert_key",
@@ -2557,6 +2562,8 @@ impl<FS: FileSystem> TimeSeries for Transaction<FS> {
         series_key: &[u8],
         timestamp: i64,
         value_key: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
     ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
@@ -2756,7 +2763,13 @@ impl<FS: FileSystem> VectorSearch for Transaction<FS> {
         }
     }
 
-    fn insert_vector(&self, id: &[u8], vector: &[f32]) -> crate::table::TableResult<()> {
+    fn insert_vector(
+        &self,
+        id: &[u8],
+        vector: &[f32],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
+    ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
                 "transaction {} is not active for insert_vector",
@@ -2791,7 +2804,12 @@ impl<FS: FileSystem> VectorSearch for Transaction<FS> {
         Ok(())
     }
 
-    fn delete_vector(&self, id: &[u8]) -> crate::table::TableResult<()> {
+    fn delete_vector(
+        &self,
+        id: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
+    ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
                 "transaction {} is not active for delete_vector",
@@ -2908,6 +2926,7 @@ impl<FS: FileSystem> GeoSpatial for Transaction<FS> {
         id: &[u8],
         geometry: GeometryRef<'_>,
         _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
     ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
@@ -2988,7 +3007,12 @@ impl<FS: FileSystem> GeoSpatial for Transaction<FS> {
         Ok(())
     }
 
-    fn delete_geometry(&self, id: &[u8]) -> crate::table::TableResult<()> {
+    fn delete_geometry(
+        &self,
+        id: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
+    ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
                 "transaction {} is not active for delete_geometry",
@@ -3136,6 +3160,8 @@ impl<FS: FileSystem> FullTextSearch for Transaction<FS> {
         &self,
         doc_id: &[u8],
         fields: &[TextField<'_>],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
     ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
@@ -3179,6 +3205,8 @@ impl<FS: FileSystem> FullTextSearch for Transaction<FS> {
         &self,
         doc_id: &[u8],
         fields: &[TextField<'_>],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
     ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
@@ -3218,7 +3246,12 @@ impl<FS: FileSystem> FullTextSearch for Transaction<FS> {
         Ok(())
     }
 
-    fn delete_document(&self, doc_id: &[u8]) -> crate::table::TableResult<()> {
+    fn delete_document(
+        &self,
+        doc_id: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
+    ) -> crate::table::TableResult<()> {
         if !self.is_active() {
             return Err(crate::table::TableError::Other(format!(
                 "transaction {} is not active for delete_document",
