@@ -510,46 +510,50 @@ impl GraphAdjacency for MemoryGraphTable {
         target: &[u8],
         edge_id: &[u8],
         tx_id: TransactionId,
-        _commit_lsn: LogSequenceNumber,
+        commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
+        let lsn = commit_lsn;
 
-        // Remove edge data (storage layer handles tombstones)
+        // Create tombstones (empty values) for MVCC-compliant deletion
+        let tombstone = &[];
+
+        // Remove edge data by creating tombstone
         let edge_key = GraphKey::EdgeData {
             edge_id: KeyBuf(edge_id.to_vec()),
         };
-        self.storage.delete(&edge_key.encode())?;
+        self.storage.put(&edge_key.encode(), tombstone, tx_id, lsn)?;
 
-        // Remove outgoing edge index
+        // Remove outgoing edge index by creating tombstone
         let out_key = GraphKey::Outgoing {
             source: KeyBuf(source.to_vec()),
             label: KeyBuf(label.to_vec()),
             edge_id: KeyBuf(edge_id.to_vec()),
         };
-        self.storage.delete(&out_key.encode())?;
+        self.storage.put(&out_key.encode(), tombstone, tx_id, lsn)?;
 
-        // Remove incoming edge index
+        // Remove incoming edge index by creating tombstone
         let in_key = GraphKey::Incoming {
             target: KeyBuf(target.to_vec()),
             label: KeyBuf(label.to_vec()),
             edge_id: KeyBuf(edge_id.to_vec()),
         };
-        self.storage.delete(&in_key.encode())?;
+        self.storage.put(&in_key.encode(), tombstone, tx_id, lsn)?;
 
-        // For undirected graphs, remove reverse edge
+        // For undirected graphs, remove reverse edge by creating tombstones
         if !self.config.directed {
             let rev_out_key = GraphKey::Outgoing {
                 source: KeyBuf(target.to_vec()),
                 label: KeyBuf(label.to_vec()),
                 edge_id: KeyBuf(edge_id.to_vec()),
             };
-            self.storage.delete(&rev_out_key.encode())?;
+            self.storage.put(&rev_out_key.encode(), tombstone, tx_id, lsn)?;
 
             let rev_in_key = GraphKey::Incoming {
                 target: KeyBuf(source.to_vec()),
                 label: KeyBuf(label.to_vec()),
                 edge_id: KeyBuf(edge_id.to_vec()),
             };
-            self.storage.delete(&rev_in_key.encode())?;
+            self.storage.put(&rev_in_key.encode(), tombstone, tx_id, lsn)?;
         }
 
         // Update in-memory index with tombstones (empty value)
