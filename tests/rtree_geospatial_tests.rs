@@ -50,7 +50,12 @@ fn test_rtree_create_and_insert_points() {
 
     for (id, point) in &points {
         rtree
-            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(1))
+            .insert_geometry(
+                id,
+                GeometryRef::Point(*point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -77,7 +82,12 @@ fn test_rtree_intersects_query() {
                 y: y as f64,
             };
             rtree
-                .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+                .insert_geometry(
+                    id.as_bytes(),
+                    GeometryRef::Point(point),
+                    TransactionId::from(0),
+                    LogSequenceNumber::from(1),
+                )
                 .unwrap();
         }
     }
@@ -119,7 +129,12 @@ fn test_rtree_nearest_query() {
 
     for (id, point) in &points {
         rtree
-            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(1))
+            .insert_geometry(
+                id,
+                GeometryRef::Point(*point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -172,7 +187,12 @@ fn test_rtree_split_strategies() {
                 y: (i / 20) as f64,
             };
             rtree
-                .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+                .insert_geometry(
+                    id.as_bytes(),
+                    GeometryRef::Point(point),
+                    TransactionId::from(0),
+                    LogSequenceNumber::from(1),
+                )
                 .unwrap();
         }
 
@@ -223,7 +243,9 @@ fn test_rtree_bounding_box_insert() {
                     min: *min,
                     max: *max,
                 },
-                TransactionId::from(0), LogSequenceNumber::from(1))
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -256,7 +278,12 @@ fn test_rtree_3d_support() {
             y: i as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -286,7 +313,12 @@ fn test_rtree_large_dataset() {
             y: ((i * 23) % 100) as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -317,7 +349,12 @@ fn test_rtree_empty_queries() {
             y: i as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -382,7 +419,12 @@ fn test_rtree_persistence() {
                 y: i as f64,
             };
             rtree
-                .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+                .insert_geometry(
+                    id.as_bytes(),
+                    GeometryRef::Point(point),
+                    TransactionId::from(0),
+                    LogSequenceNumber::from(1),
+                )
                 .unwrap();
         }
     }
@@ -433,7 +475,13 @@ fn test_rtree_delete_geometry_removes_entry() {
             LogSequenceNumber::from(1),
         )
         .unwrap();
-    rtree.delete_geometry(b"point1", TransactionId::from(0), LogSequenceNumber::from(1)).unwrap();
+    rtree
+        .delete_geometry(
+            b"point1",
+            TransactionId::from(0),
+            LogSequenceNumber::from(1),
+        )
+        .unwrap();
 
     let stats = rtree.stats().unwrap();
     assert_eq!(stats.entry_count, Some(1));
@@ -474,7 +522,13 @@ fn test_rtree_delete_geometry_missing_id_is_noop() {
             LogSequenceNumber::from(1),
         )
         .unwrap();
-    rtree.delete_geometry(b"missing", TransactionId::from(0), LogSequenceNumber::from(1)).unwrap();
+    rtree
+        .delete_geometry(
+            b"missing",
+            TransactionId::from(0),
+            LogSequenceNumber::from(1),
+        )
+        .unwrap();
 
     let stats = rtree.stats().unwrap();
     assert_eq!(stats.entry_count, Some(1));
@@ -501,7 +555,12 @@ fn test_rtree_delete_triggers_underflow_reinsertion() {
             y: (i % 3) as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0), LogSequenceNumber::from(1))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(1),
+            )
             .unwrap();
     }
 
@@ -510,7 +569,9 @@ fn test_rtree_delete_triggers_underflow_reinsertion() {
         b"point_1".as_slice(),
         b"point_2".as_slice(),
     ] {
-        rtree.delete_geometry(id, TransactionId::from(0), LogSequenceNumber::from(1)).unwrap();
+        rtree
+            .delete_geometry(id, TransactionId::from(0), LogSequenceNumber::from(1))
+            .unwrap();
     }
 
     let stats = rtree.stats().unwrap();

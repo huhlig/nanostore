@@ -572,9 +572,15 @@ mod tests {
         )
         .unwrap();
 
-        filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
-        filter.insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
-        filter.insert(b"key3", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+        filter
+            .insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1))
+            .unwrap();
+        filter
+            .insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1))
+            .unwrap();
+        filter
+            .insert(b"key3", TransactionId::from(1), LogSequenceNumber::from(1))
+            .unwrap();
 
         assert!(filter.contains(b"key1").unwrap());
         assert!(filter.contains(b"key2").unwrap());
@@ -593,8 +599,12 @@ mod tests {
                 PagedBloomFilter::new(table_id, name.clone(), pager.clone(), 100, 10, None)
                     .unwrap();
 
-            filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
-            filter.insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+            filter
+                .insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1))
+                .unwrap();
+            filter
+                .insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1))
+                .unwrap();
 
             filter.root_page_id()
         };
@@ -623,7 +633,13 @@ mod tests {
 
         // Insert items
         for i in 0..num_items {
-            filter.insert(&i.to_le_bytes(), TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+            filter
+                .insert(
+                    &i.to_le_bytes(),
+                    TransactionId::from(1),
+                    LogSequenceNumber::from(1),
+                )
+                .unwrap();
         }
 
         // Check false positive rate
@@ -658,7 +674,9 @@ mod tests {
         )
         .unwrap();
 
-        filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+        filter
+            .insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1))
+            .unwrap();
         assert!(filter.contains(b"key1").unwrap());
 
         filter.clear().unwrap();

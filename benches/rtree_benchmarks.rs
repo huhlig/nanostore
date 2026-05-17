@@ -79,7 +79,12 @@ fn bench_insertion_throughput(c: &mut Criterion) {
 
                 for (id, point) in &points {
                     rtree
-                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
+                        .insert_geometry(
+                            id,
+                            GeometryRef::Point(*point),
+                            TransactionId::from(0),
+                            LogSequenceNumber::from(0),
+                        )
                         .unwrap();
                 }
                 black_box(rtree);
@@ -254,7 +259,12 @@ fn bench_tree_height(c: &mut Criterion) {
 
                 for (id, point) in &points {
                     rtree
-                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
+                        .insert_geometry(
+                            id,
+                            GeometryRef::Point(*point),
+                            TransactionId::from(0),
+                            LogSequenceNumber::from(0),
+                        )
                         .unwrap();
                 }
 
@@ -285,7 +295,12 @@ fn bench_memory_usage(c: &mut Criterion) {
 
                 for (id, point) in &points {
                     rtree
-                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
+                        .insert_geometry(
+                            id,
+                            GeometryRef::Point(*point),
+                            TransactionId::from(0),
+                            LogSequenceNumber::from(0),
+                        )
                         .unwrap();
                 }
 
@@ -323,7 +338,12 @@ fn bench_node_capacity(c: &mut Criterion) {
 
                     for (id, point) in points {
                         rtree
-                            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
+                            .insert_geometry(
+                                id,
+                                GeometryRef::Point(*point),
+                                TransactionId::from(0),
+                                LogSequenceNumber::from(0),
+                            )
                             .unwrap();
                     }
 
@@ -416,7 +436,12 @@ fn bench_bulk_loading(c: &mut Criterion) {
 
                     for (id, point) in points {
                         rtree
-                            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
+                            .insert_geometry(
+                                id,
+                                GeometryRef::Point(*point),
+                                TransactionId::from(0),
+                                LogSequenceNumber::from(0),
+                            )
                             .unwrap();
                     }
 
@@ -478,7 +503,12 @@ fn bench_bulk_query_performance(c: &mut Criterion) {
     );
     for (id, point) in &points {
         rtree_seq
-            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
+            .insert_geometry(
+                id,
+                GeometryRef::Point(*point),
+                TransactionId::from(0),
+                LogSequenceNumber::from(0),
+            )
             .unwrap();
     }
 

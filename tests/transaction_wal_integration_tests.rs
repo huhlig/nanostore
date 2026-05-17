@@ -595,7 +595,11 @@ fn test_transaction_bloom_insert_commit() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
 
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"member-1", TransactionId::from(1), LogSequenceNumber::from(1))?;
+            bloom.insert_key(
+                b"member-1",
+                TransactionId::from(1),
+                LogSequenceNumber::from(1),
+            )?;
             assert!(bloom.might_contain(b"member-1")?);
             Ok(())
         })
@@ -623,7 +627,11 @@ fn test_transaction_bloom_insert_rollback() {
         let mut txn = db.begin_write(Durability::WalOnly).unwrap();
 
         txn.with_bloom(bloom_id, |bloom| {
-            bloom.insert_key(b"member-rollback", TransactionId::from(1), LogSequenceNumber::from(1))?;
+            bloom.insert_key(
+                b"member-rollback",
+                TransactionId::from(1),
+                LogSequenceNumber::from(1),
+            )?;
             assert!(bloom.might_contain(b"member-rollback")?);
             Ok(())
         })

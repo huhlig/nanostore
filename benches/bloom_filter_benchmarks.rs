@@ -59,7 +59,9 @@ fn bench_insert(c: &mut Criterion) {
                     let tx_id = TransactionId::from(1);
                     let commit_lsn = LogSequenceNumber::from(1);
                     for i in 0..size {
-                        filter.insert(black_box(&i.to_le_bytes()), tx_id, commit_lsn).unwrap();
+                        filter
+                            .insert(black_box(&i.to_le_bytes()), tx_id, commit_lsn)
+                            .unwrap();
                     }
                 },
                 criterion::BatchSize::SmallInput,
@@ -290,7 +292,9 @@ fn bench_persistence(c: &mut Criterion) {
                 let tx_id = TransactionId::from(1);
                 let commit_lsn = LogSequenceNumber::from(1);
                 for i in 0..size {
-                    filter.insert(black_box(&i.to_le_bytes()), tx_id, commit_lsn).unwrap();
+                    filter
+                        .insert(black_box(&i.to_le_bytes()), tx_id, commit_lsn)
+                        .unwrap();
                 }
 
                 black_box(filter.root_page_id())

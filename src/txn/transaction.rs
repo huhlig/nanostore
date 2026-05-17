@@ -2095,11 +2095,21 @@ impl<FS: FileSystem> Transaction<FS> {
                             ))
                         })?;
                     }
+                    TableEngineInstance::PagedRTree(rtree) => {
+                        // Commit version chains in R-Tree leaf entries
+                        rtree
+                            .commit_versions(self.txn_id, commit_lsn)
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "RTree commit_versions failed: {}",
+                                    e
+                                ))
+                            })?;
+                    }
                     // Specialty tables that don't yet have commit_versions() methods
                     // will be handled when they integrate VersionChain support
                     TableEngineInstance::PagedBloomFilter(_)
                     | TableEngineInstance::PagedHnswVector(_)
-                    | TableEngineInstance::PagedRTree(_)
                     | TableEngineInstance::TimeSeriesTable(_)
                     | TableEngineInstance::PagedFullTextIndex(_)
                     | TableEngineInstance::MemoryGraphTable(_)
