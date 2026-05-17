@@ -440,7 +440,7 @@ fn test_timeseries_cursor_aggregations() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 500).unwrap();
@@ -483,7 +483,7 @@ fn test_timeseries_cursor_downsampling_avg() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 120).unwrap();
@@ -527,7 +527,7 @@ fn test_timeseries_cursor_skips_non_numeric_values_for_numeric_aggregations() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 500).unwrap();
@@ -563,7 +563,7 @@ fn test_timeseries_cursor_downsampling_count_and_invalid_interval() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 120).unwrap();
@@ -630,7 +630,7 @@ fn test_aggregation_with_single_value() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 200).unwrap();
@@ -669,7 +669,7 @@ fn test_aggregation_with_negative_values() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 500).unwrap();
@@ -703,7 +703,7 @@ fn test_aggregation_with_zero_values() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 500).unwrap();
@@ -741,7 +741,7 @@ fn test_aggregation_with_very_large_values() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 400).unwrap();
@@ -778,7 +778,7 @@ fn test_aggregation_with_very_small_values() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 400).unwrap();
@@ -817,7 +817,7 @@ fn test_downsampling_with_uneven_windows() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 100).unwrap();
@@ -863,7 +863,7 @@ fn test_downsampling_with_min_max() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 100).unwrap();
@@ -919,7 +919,7 @@ fn test_aggregation_with_json_nested_values() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 400).unwrap();
@@ -951,7 +951,7 @@ fn test_aggregation_with_all_non_numeric() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 500).unwrap();
@@ -988,7 +988,7 @@ fn test_downsampling_with_large_interval() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 100).unwrap();
@@ -1025,7 +1025,7 @@ fn test_multiple_aggregations_consistency() {
 
     // Commit the versions so they become visible
     table
-        .commit_versions(TransactionId::from(0), create_commit_lsn())
+        .commit_versions(create_tx_id(), create_commit_lsn())
         .unwrap();
 
     let cursor = table.scan_series(series_key, 0, 400).unwrap();
