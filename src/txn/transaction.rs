@@ -203,6 +203,106 @@ pub(crate) enum SerializedGeometry {
     Wkb(Vec<u8>),
 }
 
+/// Undo information for a single table operation
+#[derive(Debug, Clone)]
+enum UndoOperation {
+    /// Restore a previous value (for put operations)
+    RestoreValue {
+        object_id: TableId,
+        key: Vec<u8>,
+        old_value: Option<Vec<u8>>,
+    },
+    /// Restore a deleted key (for delete operations)
+    RestoreKey {
+        object_id: TableId,
+        key: Vec<u8>,
+        old_value: Vec<u8>,
+    },
+    /// Remove a bloom filter entry (for bloom inserts)
+    RemoveBloomEntry {
+        object_id: TableId,
+        key: Vec<u8>,
+    },
+    /// Remove a graph edge (for graph add operations)
+    RemoveGraphEdge {
+        object_id: TableId,
+        source: Vec<u8>,
+        label: Vec<u8>,
+        target: Vec<u8>,
+        edge_id: Vec<u8>,
+    },
+    /// Restore a graph edge (for graph remove operations)
+    RestoreGraphEdge {
+        object_id: TableId,
+        source: Vec<u8>,
+        label: Vec<u8>,
+        target: Vec<u8>,
+        edge_id: Vec<u8>,
+    },
+    /// Remove a time series point (for time series appends)
+    RemoveTimeSeriesPoint {
+        object_id: TableId,
+        series_key: Vec<u8>,
+        timestamp: i64,
+        value_key: Vec<u8>,
+    },
+    /// Remove a vector (for vector inserts)
+    RemoveVector {
+        object_id: TableId,
+        id: Vec<u8>,
+    },
+    /// Restore a vector (for vector deletes)
+    RestoreVector {
+        object_id: TableId,
+        id: Vec<u8>,
+        vector: Vec<f32>,
+    },
+    /// Remove a geometry (for geospatial inserts)
+    RemoveGeometry {
+        object_id: TableId,
+        id: Vec<u8>,
+    },
+    /// Restore a geometry (for geospatial deletes)
+    RestoreGeometry {
+        object_id: TableId,
+        id: Vec<u8>,
+        geometry: SerializedGeometry,
+    },
+    /// Remove a document (for full-text index operations)
+    RemoveDocument {
+        object_id: TableId,
+        doc_id: Vec<u8>,
+    },
+    /// Restore a document (for full-text delete operations)
+    RestoreDocument {
+        object_id: TableId,
+        doc_id: Vec<u8>,
+        fields: Vec<(String, String, f32)>,
+    },
+}
+
+/// Collection of undo operations for rollback
+#[derive(Debug, Default)]
+struct UndoLog {
+    operations: Vec<UndoOperation>,
+}
+
+impl UndoLog {
+    fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+        }
+    }
+
+    fn add(&mut self, op: UndoOperation) {
+        self.operations.push(op);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.operations.is_empty()
+    }
+}
+
 /// Transaction ID type
 #[derive(
     Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,

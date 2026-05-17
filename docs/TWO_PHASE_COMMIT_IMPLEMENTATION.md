@@ -1,0 +1,69 @@
+# Two-Phase Commit Implementation for Transaction Rollback
+
+## Problem Statement
+
+Issue `nanokv-igt`: If transaction commit fails partway through applying writes to storage engines, there is no undo mechanism to roll back the partial changes. The WAL has already recorded the COMMIT record, but some engines may not have received their writes.
+
+## Solution: Two-Phase Commit with Undo Log
+
+### Phase 1: PREPARE
+1. Write WAL PREPARE record
+2. Collect undo information for all operations
+3. Validate that all operations can succeed (if possible)
+
+### Phase 2: COMMIT/APPLY
+1. Write WAL COMMIT record
+2. Apply changes to all engines sequentially
+3. If any apply fails:
+   - Execute undo operations in reverse order
+   - Write WAL ROLLBACK record
+   - Return error to caller
+4. Commit version chains
+5. Release locks
+
+## Implementation Details
+
+### Undo Operations
+
+Each type of operation needs corresponding undo logic:
+
+- **Put operations**: Store old value (if any) to restore on failure
+- **Delete operations**: Store old value to restore on failure  
+- **Bloom inserts**: Cannot be undone (bloom filters are append-only)
+- **Graph operations**: Store reverse operations
+- **Time series**: Cannot be undone (append-only)
+- **Vector operations**: Store reverse operations
+- **Geospatial operations**: Store reverse operations
+- **Full-text operations**: Store reverse operations
+
+### Error Handling
+
+- If PREPARE phase fails: No changes applied, safe to abort
+- If COMMIT phase fails: Execute undo operations, write ROLLBACK record
+- Undo operations themselves must be robust and not fail
+
+### Recovery
+
+During WAL recovery:
+- PREPARE without COMMIT/ROLLBACK: Transaction was interrupted, should be rolled back
+- COMMIT without version chain commits: Re-apply commit logic
+- ROLLBACK: Transaction was properly rolled back, no action needed
+
+## Files Modified
+
+1. `src/wal/record.rs` - Added PREPARE record type
+2. `src/wal/writer.rs` - Added write_prepare method
+3. `src/txn/transaction.rs` - Added undo mechanism and two-phase commit logic
+
+## Testing Strategy
+
+1. Test commit failure scenarios for each table type
+2. Test undo operations work correctly
+3. Test WAL recovery with interrupted transactions
+4. Test performance impact of undo log collection
+
+## Limitations
+
+- Bloom filters and time series are append-only, cannot be undone
+- Undo operations add overhead to commit process
+- More complex recovery logic required

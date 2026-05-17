@@ -241,6 +241,10 @@ impl<FS: FileSystem> WalWriter<FS> {
                 RecordData::Write { .. } => {
                     // Write records don't change transaction state
                 }
+                RecordData::Prepare { .. } => {
+                    // Prepare records don't change transaction state
+                    // Transaction remains active until commit or rollback
+                }
             }
         }
 
@@ -374,6 +378,41 @@ impl<FS: FileSystem> WalWriter<FS> {
             self.flush()?;
             histogram!("wal.sync_duration").record(sync_start.elapsed().as_secs_f64());
         }
+
+        counter!("wal.write").increment(1);
+        histogram!("wal.write_duration").record(start.elapsed().as_secs_f64());
+
+        Ok(lsn)
+    }
+
+    /// Write a PREPARE record (two-phase commit)
+    #[instrument(skip(self), fields(txn_id = %txn_id))]
+    pub fn write_prepare(&self, txn_id: TransactionId) -> WalResult<LogSequenceNumber> {
+        let start = Instant::now();
+        debug!("Writing PREPARE record");
+        let mut state = self.state.write();
+
+        // Check if transaction exists
+        if !state.active_txns.contains(&txn_id) {
+            warn!("Transaction not found");
+            counter!("wal.error", "type" => "transaction_not_found").increment(1);
+            return Err(WalError::TransactionNotFound { txn_id });
+        }
+
+        // Create record
+        let lsn = state.current_lsn;
+        let record = WalRecord::new(
+            lsn,
+            RecordData::Prepare { txn_id },
+            self.config.compression,
+            self.encryption,
+        );
+
+        // Write record
+        self.write_record_internal(&mut state, record)?;
+
+        // Transaction remains active after prepare
+        // It will be removed on commit or rollback
 
         counter!("wal.write").increment(1);
         histogram!("wal.write_duration").record(start.elapsed().as_secs_f64());

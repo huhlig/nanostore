@@ -82,6 +82,8 @@ pub enum RecordType {
     Rollback = 4,
     /// Checkpoint
     Checkpoint = 5,
+    /// Prepare transaction (two-phase commit)
+    Prepare = 6,
 }
 
 impl RecordType {
@@ -93,6 +95,7 @@ impl RecordType {
             3 => Ok(RecordType::Commit),
             4 => Ok(RecordType::Rollback),
             5 => Ok(RecordType::Checkpoint),
+            6 => Ok(RecordType::Prepare),
             _ => Err(WalError::InvalidRecord {
                 lsn: LogSequenceNumber::from(0),
                 details: format!("Invalid record type: {}", value),
@@ -209,6 +212,11 @@ pub enum RecordData {
         /// Number of active transactions at checkpoint
         active_txns: Vec<TransactionId>,
     },
+    /// Prepare transaction (two-phase commit)
+    Prepare {
+        /// Transaction ID
+        txn_id: TransactionId,
+    },
 }
 
 impl RecordData {
@@ -220,6 +228,7 @@ impl RecordData {
             RecordData::Commit { .. } => RecordType::Commit,
             RecordData::Rollback { .. } => RecordType::Rollback,
             RecordData::Checkpoint { .. } => RecordType::Checkpoint,
+            RecordData::Prepare { .. } => RecordType::Prepare,
         }
     }
 
@@ -231,6 +240,7 @@ impl RecordData {
             RecordData::Commit { txn_id } => Some(*txn_id),
             RecordData::Rollback { txn_id } => Some(*txn_id),
             RecordData::Checkpoint { .. } => None,
+            RecordData::Prepare { txn_id } => Some(*txn_id),
         }
     }
 }
@@ -635,6 +645,11 @@ impl WalRecord {
                         .map_err(WalError::IoError)?;
                 }
             }
+            RecordData::Prepare { txn_id } => {
+                buffer
+                    .write_all(&txn_id.to_bytes())
+                    .map_err(WalError::IoError)?;
+            }
         }
 
         Ok(buffer)
@@ -811,6 +826,18 @@ impl WalRecord {
                 }
 
                 Ok(RecordData::Checkpoint { lsn, active_txns })
+            }
+            RecordType::Prepare => {
+                if bytes.len() < 8 {
+                    return Err(WalError::DeserializationError {
+                        offset: 0,
+                        details: format!("Invalid Prepare record: {} bytes", bytes.len()),
+                    });
+                }
+                let txn_id = TransactionId::from(u64::from_le_bytes(
+                    bytes[cursor..cursor + 8].try_into().unwrap(),
+                ));
+                Ok(RecordData::Prepare { txn_id })
             }
         }
     }

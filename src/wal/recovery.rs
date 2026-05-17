@@ -166,6 +166,13 @@ impl WalRecovery {
             RecordData::Checkpoint { lsn, active_txns } => {
                 self.process_checkpoint(lsn, active_txns)?;
             }
+            RecordData::Prepare { txn_id } => {
+                // Prepare records indicate a transaction entered the prepare phase
+                // If we see a PREPARE without a subsequent COMMIT or ROLLBACK,
+                // the transaction was interrupted and should be rolled back during recovery
+                // For now, we just track it like a normal active transaction
+                self.process_begin(txn_id)?;
+            }
         }
 
         Ok(())
