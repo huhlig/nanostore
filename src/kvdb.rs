@@ -214,6 +214,25 @@ impl<FS: FileSystem> Database<FS> {
         ))
     }
 
+    /// Begin a read-only transaction with a specific isolation level.
+    pub fn begin_read_with_isolation(
+        &self,
+        isolation: IsolationLevel,
+    ) -> Result<Transaction<FS>, DatabaseError> {
+        let txn_id = self.allocate_txn_id();
+        let snapshot_lsn = self.current_snapshot_lsn();
+
+        Ok(Transaction::new_read_only(
+            txn_id,
+            snapshot_lsn,
+            isolation,
+            Arc::clone(&self.conflict_detector),
+            Arc::clone(&self.wal),
+            Arc::clone(&self.engine_registry),
+            Arc::clone(&self.current_lsn),
+        ))
+    }
+
     /// Begin a write transaction with the requested durability policy.
     pub fn begin_write(&self, durability: Durability) -> Result<Transaction<FS>, DatabaseError> {
         let txn_id = self.allocate_txn_id();
@@ -224,6 +243,28 @@ impl<FS: FileSystem> Database<FS> {
             txn_id,
             snapshot_lsn,
             IsolationLevel::ReadCommitted,
+            durability,
+            Arc::clone(&self.conflict_detector),
+            Arc::clone(&self.wal),
+            Arc::clone(&self.engine_registry),
+            Arc::clone(&self.current_lsn),
+        ))
+    }
+
+    /// Begin a write transaction with specific durability and isolation level.
+    pub fn begin_write_with_isolation(
+        &self,
+        durability: Durability,
+        isolation: IsolationLevel,
+    ) -> Result<Transaction<FS>, DatabaseError> {
+        let txn_id = self.allocate_txn_id();
+        let snapshot_lsn = *self.current_lsn.read().unwrap();
+
+        // Transaction::new will write BEGIN to WAL
+        Ok(Transaction::new(
+            txn_id,
+            snapshot_lsn,
+            isolation,
             durability,
             Arc::clone(&self.conflict_detector),
             Arc::clone(&self.wal),
@@ -245,6 +286,30 @@ impl<FS: FileSystem> Database<FS> {
             txn_id,
             lsn,
             IsolationLevel::ReadCommitted,
+            Arc::clone(&self.conflict_detector),
+            Arc::clone(&self.wal),
+            Arc::clone(&self.engine_registry),
+            Arc::clone(&self.current_lsn),
+        ))
+    }
+
+    /// Begin a read-only transaction at a specific snapshot LSN with custom isolation level.
+    ///
+    /// This is useful for reading from named snapshots or implementing
+    /// time-travel queries with specific isolation guarantees. Returns an error
+    /// if the LSN is not available (e.g., too old and already garbage collected).
+    pub fn begin_read_at_with_isolation(
+        &self,
+        lsn: LogSequenceNumber,
+        isolation: IsolationLevel,
+    ) -> Result<Transaction<FS>, DatabaseError> {
+        self.validate_snapshot_lsn(lsn)?;
+        let txn_id = self.allocate_txn_id();
+
+        Ok(Transaction::new_read_only(
+            txn_id,
+            lsn,
+            isolation,
             Arc::clone(&self.conflict_detector),
             Arc::clone(&self.wal),
             Arc::clone(&self.engine_registry),
