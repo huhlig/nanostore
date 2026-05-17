@@ -1689,7 +1689,7 @@ impl<FS: FileSystem> Transaction<FS> {
             if let Some(engine) = self.engine_registry.get(*object_id) {
                 match &engine {
                     crate::table::TableEngineInstance::PagedBloomFilter(bloom) => {
-                        bloom.insert(key).map_err(|e| {
+                        bloom.insert(key, self.txn_id, commit_lsn).map_err(|e| {
                             TransactionError::Other(format!("Bloom insert failed: {}", e))
                         })?;
                     }

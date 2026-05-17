@@ -50,9 +50,9 @@ fn test_basic_insert_and_contains() {
     .unwrap();
 
     // Insert keys
-    filter.insert(b"key1").unwrap();
-    filter.insert(b"key2").unwrap();
-    filter.insert(b"key3").unwrap();
+    filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    filter.insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    filter.insert(b"key3", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
     // Verify inserted keys are found
     assert!(filter.contains(b"key1").unwrap());
@@ -87,9 +87,9 @@ fn test_persistence_and_reopen() {
         let filter =
             PagedBloomFilter::new(table_id, name.clone(), pager.clone(), 100, 10, None).unwrap();
 
-        filter.insert(b"persistent_key1").unwrap();
-        filter.insert(b"persistent_key2").unwrap();
-        filter.insert(b"persistent_key3").unwrap();
+        filter.insert(b"persistent_key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+        filter.insert(b"persistent_key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+        filter.insert(b"persistent_key3", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
         filter.root_page_id()
     };
@@ -159,8 +159,8 @@ fn test_clear_operation() {
     .unwrap();
 
     // Insert and verify
-    filter.insert(b"key1").unwrap();
-    filter.insert(b"key2").unwrap();
+    filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    filter.insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
     assert!(filter.contains(b"key1").unwrap());
     assert!(filter.contains(b"key2").unwrap());
 

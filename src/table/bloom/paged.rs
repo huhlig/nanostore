@@ -26,8 +26,10 @@ use crate::table::{
     ApproximateMembership, SpecialtyTableCapabilities, SpecialtyTableStats, Table, TableEngineKind,
     TableError, TableResult, VerificationReport,
 };
+use crate::txn::TransactionId;
 use crate::types::TableId;
 use crate::vfs::FileSystem;
+use crate::wal::LogSequenceNumber;
 use std::sync::{Arc, RwLock};
 
 /// Paged Bloom filter table for persistent approximate membership testing.
@@ -210,7 +212,23 @@ impl<FS: FileSystem> PagedBloomFilter<FS> {
     }
 
     /// Insert a key into the bloom filter.
-    pub fn insert(&self, key: &[u8]) -> TableResult<()> {
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to insert
+    /// * `_tx_id` - Transaction ID (for MVCC compatibility, currently unused)
+    /// * `_commit_lsn` - Commit LSN (for MVCC compatibility, currently unused)
+    ///
+    /// Note: Bloom filters are append-only probabilistic structures that don't
+    /// support true MVCC semantics. The tx_id and commit_lsn parameters are
+    /// accepted for API consistency with other specialty tables but are not
+    /// used in the current implementation.
+    pub fn insert(
+        &self,
+        key: &[u8],
+        _tx_id: TransactionId,
+        _commit_lsn: LogSequenceNumber,
+    ) -> TableResult<()> {
         let (h1, h2) = self.hash_key(key);
 
         for i in 0..self.num_hash_functions {
@@ -457,10 +475,10 @@ impl<FS: FileSystem> ApproximateMembership for PagedBloomFilter<FS> {
     fn insert_key(
         &mut self,
         key: &[u8],
-        _tx_id: crate::txn::TransactionId,
-        _commit_lsn: crate::wal::LogSequenceNumber,
+        tx_id: crate::txn::TransactionId,
+        commit_lsn: crate::wal::LogSequenceNumber,
     ) -> TableResult<()> {
-        self.insert(key)
+        self.insert(key, tx_id, commit_lsn)
     }
 
     fn might_contain(&self, key: &[u8]) -> TableResult<bool> {
@@ -526,7 +544,9 @@ impl<FS: FileSystem> ApproximateMembership for PagedBloomFilter<FS> {
 mod tests {
     use super::*;
     use crate::pager::{PageSize, PagerConfig};
+    use crate::txn::TransactionId;
     use crate::vfs::MemoryFileSystem;
+    use crate::wal::LogSequenceNumber;
 
     fn create_test_pager() -> Arc<Pager<MemoryFileSystem>> {
         let fs = Arc::new(MemoryFileSystem::new());
@@ -552,9 +572,9 @@ mod tests {
         )
         .unwrap();
 
-        filter.insert(b"key1").unwrap();
-        filter.insert(b"key2").unwrap();
-        filter.insert(b"key3").unwrap();
+        filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+        filter.insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+        filter.insert(b"key3", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
         assert!(filter.contains(b"key1").unwrap());
         assert!(filter.contains(b"key2").unwrap());
@@ -573,8 +593,8 @@ mod tests {
                 PagedBloomFilter::new(table_id, name.clone(), pager.clone(), 100, 10, None)
                     .unwrap();
 
-            filter.insert(b"key1").unwrap();
-            filter.insert(b"key2").unwrap();
+            filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+            filter.insert(b"key2", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
 
             filter.root_page_id()
         };
@@ -603,7 +623,7 @@ mod tests {
 
         // Insert items
         for i in 0..num_items {
-            filter.insert(&i.to_le_bytes()).unwrap();
+            filter.insert(&i.to_le_bytes(), TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
         }
 
         // Check false positive rate
@@ -638,7 +658,7 @@ mod tests {
         )
         .unwrap();
 
-        filter.insert(b"key1").unwrap();
+        filter.insert(b"key1", TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
         assert!(filter.contains(b"key1").unwrap());
 
         filter.clear().unwrap();
