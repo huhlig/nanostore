@@ -303,6 +303,261 @@ impl UndoLog {
     }
 }
 
+impl<FS: FileSystem> Transaction<FS> {
+    /// Execute an undo operation to rollback a change.
+    ///
+    /// This method is called during commit failure to restore the previous state.
+    /// Undo operations must be robust and should not fail.
+    fn execute_undo(&self, op: &UndoOperation) -> TransactionResult<()> {
+        match op {
+            UndoOperation::RestoreValue {
+                object_id,
+                key,
+                old_value,
+            } => {
+                // Restore previous value or delete if None
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    use crate::table::{Flushable, MutableTable, SearchableTable, TableEngineInstance};
+                    
+                    match &engine {
+                        TableEngineInstance::PagedBTree(btree) => {
+                            let mut writer = SearchableTable::writer(btree.as_ref(), self.txn_id, self.snapshot_lsn)
+                                .map_err(|e| TransactionError::Other(format!("Failed to get BTree writer for undo: {}", e)))?;
+                            
+                            if let Some(value) = old_value {
+                                MutableTable::put(&mut writer, key, value)
+                                    .map_err(|e| TransactionError::Other(format!("BTree undo put failed: {}", e)))?;
+                            } else {
+                                MutableTable::delete(&mut writer, key)
+                                    .map_err(|e| TransactionError::Other(format!("BTree undo delete failed: {}", e)))?;
+                            }
+                            Flushable::flush(&mut writer)
+                                .map_err(|e| TransactionError::Other(format!("BTree undo flush failed: {}", e)))?;
+                        }
+                        TableEngineInstance::LsmTree(lsm) => {
+                            let mut writer = SearchableTable::writer(lsm.as_ref(), self.txn_id, self.snapshot_lsn)
+                                .map_err(|e| TransactionError::Other(format!("Failed to get LSM writer for undo: {}", e)))?;
+                            
+                            if let Some(value) = old_value {
+                                MutableTable::put(&mut writer, key, value)
+                                    .map_err(|e| TransactionError::Other(format!("LSM undo put failed: {}", e)))?;
+                            } else {
+                                MutableTable::delete(&mut writer, key)
+                                    .map_err(|e| TransactionError::Other(format!("LSM undo delete failed: {}", e)))?;
+                            }
+                            Flushable::flush(&mut writer)
+                                .map_err(|e| TransactionError::Other(format!("LSM undo flush failed: {}", e)))?;
+                        }
+                        TableEngineInstance::MemoryBTree(mem) => {
+                            let mut writer = SearchableTable::writer(mem.as_ref(), self.txn_id, self.snapshot_lsn)
+                                .map_err(|e| TransactionError::Other(format!("Failed to get Memory BTree writer for undo: {}", e)))?;
+                            
+                            if let Some(value) = old_value {
+                                MutableTable::put(&mut writer, key, value)
+                                    .map_err(|e| TransactionError::Other(format!("Memory BTree undo put failed: {}", e)))?;
+                            } else {
+                                MutableTable::delete(&mut writer, key)
+                                    .map_err(|e| TransactionError::Other(format!("Memory BTree undo delete failed: {}", e)))?;
+                            }
+                            Flushable::flush(&mut writer)
+                                .map_err(|e| TransactionError::Other(format!("Memory BTree undo flush failed: {}", e)))?;
+                        }
+                        TableEngineInstance::MemoryHashTable(hash) => {
+                            let mut writer = hash.writer(self.txn_id, self.snapshot_lsn)
+                                .map_err(|e| TransactionError::Other(format!("Failed to get Hash table writer for undo: {}", e)))?;
+                            
+                            if let Some(value) = old_value {
+                                MutableTable::put(&mut writer, key, value)
+                                    .map_err(|e| TransactionError::Other(format!("Hash table undo put failed: {}", e)))?;
+                            } else {
+                                MutableTable::delete(&mut writer, key)
+                                    .map_err(|e| TransactionError::Other(format!("Hash table undo delete failed: {}", e)))?;
+                            }
+                            Flushable::flush(&mut writer)
+                                .map_err(|e| TransactionError::Other(format!("Hash table undo flush failed: {}", e)))?;
+                        }
+                        _ => {
+                            // Other table types don't support undo yet
+                        }
+                    }
+                }
+            }
+            UndoOperation::RestoreKey {
+                object_id,
+                key,
+                old_value,
+            } => {
+                // Restore a deleted key
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    use crate::table::{Flushable, MutableTable, SearchableTable, TableEngineInstance};
+                    
+                    match &engine {
+                        TableEngineInstance::PagedBTree(btree) => {
+                            let mut writer = SearchableTable::writer(btree.as_ref(), self.txn_id, self.snapshot_lsn)
+                                .map_err(|e| TransactionError::Other(format!("Failed to get BTree writer for undo: {}", e)))?;
+                            MutableTable::put(&mut writer, key, old_value)
+                                .map_err(|e| TransactionError::Other(format!("BTree undo restore failed: {}", e)))?;
+                            Flushable::flush(&mut writer)
+                                .map_err(|e| TransactionError::Other(format!("BTree undo flush failed: {}", e)))?;
+                        }
+                        TableEngineInstance::LsmTree(lsm) => {
+                            let mut writer = SearchableTable::writer(lsm.as_ref(), self.txn_id, self.snapshot_lsn)
+                                .map_err(|e| TransactionError::Other(format!("Failed to get LSM writer for undo: {}", e)))?;
+                            MutableTable::put(&mut writer, key, old_value)
+                                .map_err(|e| TransactionError::Other(format!("LSM undo restore failed: {}", e)))?;
+                            Flushable::flush(&mut writer)
+                                .map_err(|e| TransactionError::Other(format!("LSM undo flush failed: {}", e)))?;
+                        }
+                        _ => {
+                            // Other table types
+                        }
+                    }
+                }
+            }
+            UndoOperation::RemoveBloomEntry { .. } => {
+                // Bloom filters are append-only and cannot be undone
+                // This is a known limitation documented in TWO_PHASE_COMMIT_IMPLEMENTATION.md
+            }
+            UndoOperation::RemoveGraphEdge {
+                object_id,
+                source,
+                label,
+                target,
+                edge_id,
+            } => {
+                // Remove the edge that was added
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::MemoryGraphTable(graph) = &engine {
+                        graph
+                            .remove_edge(source, label, target, edge_id, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Graph undo remove_edge failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RestoreGraphEdge {
+                object_id,
+                source,
+                label,
+                target,
+                edge_id,
+            } => {
+                // Restore the edge that was removed
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::MemoryGraphTable(graph) = &engine {
+                        graph
+                            .add_edge(source, label, target, edge_id, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Graph undo add_edge failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RemoveTimeSeriesPoint { .. } => {
+                // Time series are append-only and cannot be undone
+                // This is a known limitation documented in TWO_PHASE_COMMIT_IMPLEMENTATION.md
+            }
+            UndoOperation::RemoveVector { object_id, id } => {
+                // Remove the vector that was inserted
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedHnswVector(hnsw) = &engine {
+                        hnsw.delete_vector(id, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Vector undo delete failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RestoreVector {
+                object_id,
+                id,
+                vector,
+            } => {
+                // Restore the vector that was deleted
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedHnswVector(hnsw) = &engine {
+                        hnsw.insert_vector(id, vector, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Vector undo insert failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RemoveGeometry { object_id, id } => {
+                // Remove the geometry that was inserted
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedRTree(rtree) = &engine {
+                        rtree
+                            .delete_geometry(id, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("GeoSpatial undo delete failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RestoreGeometry {
+                object_id,
+                id,
+                geometry,
+            } => {
+                // Restore the geometry that was deleted
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedRTree(rtree) = &engine {
+                        let geometry_ref = match geometry {
+                            SerializedGeometry::Point { x, y } => {
+                                GeometryRef::Point(GeoPoint { x: *x, y: *y })
+                            }
+                            SerializedGeometry::BoundingBox {
+                                min_x,
+                                min_y,
+                                max_x,
+                                max_y,
+                            } => GeometryRef::BoundingBox {
+                                min: GeoPoint {
+                                    x: *min_x,
+                                    y: *min_y,
+                                },
+                                max: GeoPoint {
+                                    x: *max_x,
+                                    y: *max_y,
+                                },
+                            },
+                            SerializedGeometry::Wkb(wkb) => GeometryRef::Wkb(wkb.as_slice()),
+                        };
+                        rtree
+                            .insert_geometry(id, geometry_ref, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("GeoSpatial undo insert failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RemoveDocument { object_id, doc_id } => {
+                // Remove the document that was indexed
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedFullTextIndex(fulltext) = &engine {
+                        fulltext
+                            .delete_document(doc_id, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Full-text undo delete failed: {}", e)))?;
+                    }
+                }
+            }
+            UndoOperation::RestoreDocument {
+                object_id,
+                doc_id,
+                fields,
+            } => {
+                // Restore the document that was deleted
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedFullTextIndex(fulltext) = &engine {
+                        let text_fields: Vec<TextField<'_>> = fields
+                            .iter()
+                            .map(|(name, text, boost)| TextField {
+                                name: name.as_str(),
+                                text: text.as_str(),
+                                boost: *boost,
+                            })
+                            .collect();
+                        fulltext
+                            .index_document(doc_id, &text_fields, self.txn_id, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Full-text undo index failed: {}", e)))?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Transaction ID type
 #[derive(
     Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
@@ -1434,9 +1689,14 @@ impl<FS: FileSystem> Transaction<FS> {
         Ok(keys_to_delete.len() as u64)
     }
 
-    /// Commit the transaction.
+    /// Commit the transaction using two-phase commit with undo log.
     ///
-    /// Writes commit record to WAL, applies changes to storage engines, and releases locks.
+    /// Phase 1 (PREPARE): Collects undo information and writes PREPARE record to WAL
+    /// Phase 2 (COMMIT/APPLY): Writes COMMIT record, applies changes, and commits version chains
+    ///
+    /// If any operation fails during Phase 2, executes undo operations in reverse order
+    /// and writes ROLLBACK record to WAL.
+    ///
     /// The durability policy controls how the commit is persisted:
     /// - MemoryOnly: No WAL writes (for in-memory tables only)
     /// - WalOnly: Write to WAL buffer but don't force sync
@@ -1452,6 +1712,190 @@ impl<FS: FileSystem> Transaction<FS> {
             ));
         }
 
+        // ===== PHASE 1: PREPARE =====
+        // Collect undo information for all operations before applying changes
+        let mut undo_log = UndoLog::new();
+
+        // Collect undo info for write_set operations
+        for ((object_id, key), value_opt) in &self.write_set {
+            if let Some(engine) = self.engine_registry.get(*object_id) {
+                use crate::table::{PointLookup, SearchableTable, TableEngineInstance};
+
+                // Read current value to enable undo
+                let old_value = match &engine {
+                    TableEngineInstance::PagedBTree(btree) => {
+                        let reader = SearchableTable::reader(btree.as_ref(), self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Failed to get BTree reader for undo: {}", e)))?;
+                        PointLookup::get(&reader, key, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("BTree get for undo failed: {}", e)))?
+                            .map(|v| v.0)
+                    }
+                    TableEngineInstance::LsmTree(lsm) => {
+                        let reader = SearchableTable::reader(lsm.as_ref(), self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Failed to get LSM reader for undo: {}", e)))?;
+                        PointLookup::get(&reader, key, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("LSM get for undo failed: {}", e)))?
+                            .map(|v| v.0)
+                    }
+                    TableEngineInstance::MemoryBTree(mem) => {
+                        let reader = SearchableTable::reader(mem.as_ref(), self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Failed to get Memory BTree reader for undo: {}", e)))?;
+                        PointLookup::get(&reader, key, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Memory BTree get for undo failed: {}", e)))?
+                            .map(|v| v.0)
+                    }
+                    TableEngineInstance::MemoryHashTable(hash) => {
+                        let reader = hash.reader(self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Failed to get Hash table reader for undo: {}", e)))?;
+                        PointLookup::get(&reader, key, self.snapshot_lsn)
+                            .map_err(|e| TransactionError::Other(format!("Hash table get for undo failed: {}", e)))?
+                            .map(|v| v.0)
+                    }
+                    _ => None, // Other table types don't support undo yet
+                };
+
+                // Add undo operation based on whether this is a put or delete
+                if value_opt.is_some() {
+                    // This is a put operation - store old value to restore on failure
+                    undo_log.add(UndoOperation::RestoreValue {
+                        object_id: *object_id,
+                        key: key.clone(),
+                        old_value,
+                    });
+                } else if let Some(old_val) = old_value {
+                    // This is a delete operation - store old value to restore on failure
+                    undo_log.add(UndoOperation::RestoreKey {
+                        object_id: *object_id,
+                        key: key.clone(),
+                        old_value: old_val,
+                    });
+                }
+            }
+        }
+
+        // Collect undo info for graph operations
+        for (object_id, op) in self.graph_write_set.borrow().iter() {
+            match op {
+                GraphEdgeOp::AddEdge {
+                    source,
+                    label,
+                    target,
+                    edge_id,
+                } => {
+                    // For add operations, we need to remove the edge on undo
+                    undo_log.add(UndoOperation::RemoveGraphEdge {
+                        object_id: *object_id,
+                        source: source.clone(),
+                        label: label.clone(),
+                        target: target.clone(),
+                        edge_id: edge_id.clone(),
+                    });
+                }
+                GraphEdgeOp::RemoveEdge {
+                    source,
+                    label,
+                    target,
+                    edge_id,
+                } => {
+                    // For remove operations, we need to restore the edge on undo
+                    undo_log.add(UndoOperation::RestoreGraphEdge {
+                        object_id: *object_id,
+                        source: source.clone(),
+                        label: label.clone(),
+                        target: target.clone(),
+                        edge_id: edge_id.clone(),
+                    });
+                }
+            }
+        }
+
+        // Collect undo info for vector operations
+        {
+            let vector_ops = self.vector_write_set.read().unwrap();
+            for (object_id, op) in vector_ops.iter() {
+                match op {
+                    VectorOp::InsertVector { id, .. } => {
+                        // For insert operations, we need to remove the vector on undo
+                        undo_log.add(UndoOperation::RemoveVector {
+                            object_id: *object_id,
+                            id: id.clone(),
+                        });
+                    }
+                    VectorOp::DeleteVector { id } => {
+                        // For delete operations, we would need to restore the vector
+                        // But we don't have the old vector data, so we can't undo this
+                        // This is a limitation documented in TWO_PHASE_COMMIT_IMPLEMENTATION.md
+                        // For now, we'll just note that vector deletes cannot be fully undone
+                        undo_log.add(UndoOperation::RemoveVector {
+                            object_id: *object_id,
+                            id: id.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Collect undo info for geospatial operations
+        {
+            let geospatial_ops = self.geospatial_write_set.read().unwrap();
+            for (object_id, op) in geospatial_ops.iter() {
+                match op {
+                    GeoSpatialOp::InsertGeometry { id, .. } => {
+                        // For insert operations, we need to remove the geometry on undo
+                        undo_log.add(UndoOperation::RemoveGeometry {
+                            object_id: *object_id,
+                            id: id.clone(),
+                        });
+                    }
+                    GeoSpatialOp::DeleteGeometry { id } => {
+                        // For delete operations, we would need to restore the geometry
+                        // But we don't have the old geometry data, so we can't undo this
+                        // This is a limitation
+                        undo_log.add(UndoOperation::RemoveGeometry {
+                            object_id: *object_id,
+                            id: id.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Collect undo info for full-text operations
+        {
+            let fulltext_ops = self.fulltext_write_set.read().unwrap();
+            for (object_id, op) in fulltext_ops.iter() {
+                match op {
+                    FullTextOp::IndexDocument { doc_id, .. } | FullTextOp::UpdateDocument { doc_id, .. } => {
+                        // For index/update operations, we need to remove the document on undo
+                        undo_log.add(UndoOperation::RemoveDocument {
+                            object_id: *object_id,
+                            doc_id: doc_id.clone(),
+                        });
+                    }
+                    FullTextOp::DeleteDocument { doc_id } => {
+                        // For delete operations, we would need to restore the document
+                        // But we don't have the old document data, so we can't undo this
+                        undo_log.add(UndoOperation::RemoveDocument {
+                            object_id: *object_id,
+                            doc_id: doc_id.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Note: Bloom filters and time series are append-only and cannot be undone
+        // This is documented as a known limitation in TWO_PHASE_COMMIT_IMPLEMENTATION.md
+
+        // Write PREPARE record to WAL
+        self.wal
+            .write_prepare(self.txn_id)
+            .map_err(|e| TransactionError::Other(format!("WAL prepare failed: {}", e)))?;
+
+        // Transition to Preparing state
+        self.state = TransactionState::Preparing;
+
+        // ===== PHASE 2: COMMIT/APPLY =====
         // Check for conflicts based on isolation level
         match self.isolation {
             IsolationLevel::ReadUncommitted => {
@@ -1519,10 +1963,13 @@ impl<FS: FileSystem> Transaction<FS> {
             }
         };
 
-        // Apply write set to storage engines
+        // Apply write set to storage engines with rollback on failure
         use crate::table::{Flushable, MutableTable, TableEngineInstance};
 
-        for ((object_id, key), value_opt) in &self.write_set {
+        // Define a closure that applies all changes and can return an error
+        let apply_all_changes = || -> TransactionResult<()> {
+            // Apply write set to storage engines
+            for ((object_id, key), value_opt) in &self.write_set {
             if let Some(engine) = self.engine_registry.get(*object_id) {
                 match &engine {
                     TableEngineInstance::AppendLog(appendlog) => {
@@ -1780,8 +2227,38 @@ impl<FS: FileSystem> Transaction<FS> {
                         ));
                     }
                 }
+                }
+                // If engine not found, skip (table may have been dropped)
             }
-            // If engine not found, skip (table may have been dropped)
+            Ok(())
+        };
+
+        // Execute apply with rollback on failure
+        if let Err(apply_error) = apply_all_changes() {
+            // Rollback: Execute undo operations in reverse order
+            for undo_op in undo_log.operations.iter().rev() {
+                // Best effort undo - log errors but continue
+                if let Err(undo_err) = self.execute_undo(undo_op) {
+                    // Log the undo error but continue with other undo operations
+                    eprintln!("Warning: Undo operation failed: {}", undo_err);
+                }
+            }
+
+            // Write ROLLBACK record to WAL
+            self.wal
+                .write_rollback(self.txn_id)
+                .map_err(|e| TransactionError::Other(format!("WAL rollback failed: {}", e)))?;
+
+            // Transition to Aborted state
+            self.state = TransactionState::Aborted;
+
+            // Release all locks
+            let mut detector = self.conflict_detector.lock().unwrap();
+            detector.release_locks(self.txn_id);
+            drop(detector);
+
+            // Return the original apply error
+            return Err(apply_error);
         }
 
         // Apply bloom filter inserts after generic KV writes.

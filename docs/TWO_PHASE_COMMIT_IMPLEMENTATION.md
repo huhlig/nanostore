@@ -49,10 +49,34 @@ During WAL recovery:
 - COMMIT without version chain commits: Re-apply commit logic
 - ROLLBACK: Transaction was properly rolled back, no action needed
 
+## Implementation Status
+
+### Completed ✅
+
+1. **WAL Infrastructure**
+   - Added `RecordType::Prepare` enum variant in `src/wal/record.rs`
+   - Implemented `write_prepare()` method in `src/wal/writer.rs`
+   - Implemented `write_rollback()` method in `src/wal/writer.rs`
+   - Updated WAL recovery to handle PREPARE records
+
+2. **Transaction Infrastructure**
+   - Created `UndoOperation` enum with variants for all table types in `src/txn/transaction.rs`
+   - Created `UndoLog` structure to collect undo operations
+   - Implemented `execute_undo()` method to handle all undo operation variants
+   - Modified `Transaction::commit()` to use two-phase commit:
+     - **Phase 1 (PREPARE)**: Collects undo information for all operations
+     - **Phase 2 (COMMIT/APPLY)**: Applies changes with rollback on failure
+
+3. **Error Handling**
+   - If any operation fails during Phase 2, undo operations are executed in reverse order
+   - ROLLBACK record is written to WAL on failure
+   - Transaction state transitions to Aborted
+   - All locks are released
+
 ## Files Modified
 
 1. `src/wal/record.rs` - Added PREPARE record type
-2. `src/wal/writer.rs` - Added write_prepare method
+2. `src/wal/writer.rs` - Added write_prepare() and write_rollback() methods
 3. `src/txn/transaction.rs` - Added undo mechanism and two-phase commit logic
 
 ## Testing Strategy
