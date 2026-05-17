@@ -18,6 +18,9 @@
 //!
 //! A posting list stores the document IDs and positions where a term appears.
 
+use crate::snap::Snapshot;
+use crate::txn::{TransactionId, VersionChain};
+use crate::wal::LogSequenceNumber;
 use serde::{Deserialize, Serialize};
 
 /// A single position occurrence in a document.
@@ -31,6 +34,79 @@ pub struct PostingEntry {
     pub positions: Vec<usize>,
     /// Field boost factor
     pub boost: f32,
+    /// Version chain for MVCC support
+    pub version_chain: VersionChain,
+}
+
+impl PostingEntry {
+    /// Create a new posting entry with a version chain.
+    pub fn new(
+        doc_id: Vec<u8>,
+        field: String,
+        positions: Vec<usize>,
+        boost: f32,
+        tx_id: TransactionId,
+    ) -> Self {
+        // Serialize positions and boost as the version value
+        let value = postcard::to_allocvec(&(positions.clone(), boost)).unwrap_or_default();
+        let version_chain = VersionChain::new(value, tx_id);
+        Self {
+            doc_id,
+            field,
+            positions,
+            boost,
+            version_chain,
+        }
+    }
+
+    /// Check if this entry is visible to the given snapshot.
+    pub fn is_visible(&self, snapshot: &Snapshot) -> bool {
+        match self.version_chain.find_visible_version(snapshot) {
+            Some(value) => !Self::is_tombstone(value),
+            None => false,
+        }
+    }
+
+    /// Check if a version value is a tombstone marker.
+    fn is_tombstone(value: &[u8]) -> bool {
+        value == &[0xFF]
+    }
+
+    /// Create a tombstone marker value.
+    fn tombstone_marker() -> Vec<u8> {
+        vec![0xFF]
+    }
+
+    /// Commit this entry's version at the given LSN.
+    pub fn commit(&mut self, lsn: LogSequenceNumber) {
+        self.version_chain.commit(lsn);
+    }
+
+    /// Prepend a new version to this entry's chain.
+    pub fn prepend_version(&mut self, positions: Vec<usize>, boost: f32, tx_id: TransactionId) {
+        let value = postcard::to_allocvec(&(positions.clone(), boost)).unwrap_or_default();
+        let old_chain = std::mem::replace(
+            &mut self.version_chain,
+            VersionChain::new(value.clone(), tx_id),
+        );
+        self.version_chain = old_chain.prepend(value, tx_id);
+        self.positions = positions;
+        self.boost = boost;
+    }
+
+    /// Prepend a tombstone version to mark this entry as deleted.
+    pub fn prepend_tombstone(&mut self, tx_id: TransactionId) {
+        let old_chain = std::mem::replace(
+            &mut self.version_chain,
+            VersionChain::new(Self::tombstone_marker(), tx_id),
+        );
+        self.version_chain = old_chain.prepend(Self::tombstone_marker(), tx_id);
+    }
+
+    /// Vacuum old versions from this entry's chain.
+    pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
+        self.version_chain.vacuum(min_visible_lsn)
+    }
 }
 
 /// Posting list for a single term.
@@ -57,13 +133,33 @@ impl PostingList {
     }
 
     /// Get the document frequency (number of documents containing this term).
-    pub fn doc_freq(&self) -> usize {
-        self.entries.len()
+    /// Only counts visible entries for the given snapshot.
+    pub fn doc_freq(&self, snapshot: Option<&Snapshot>) -> usize {
+        if let Some(snap) = snapshot {
+            self.entries.iter().filter(|e| e.is_visible(snap)).count()
+        } else {
+            self.entries.len()
+        }
     }
 
     /// Check if the posting list is empty.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Commit all entries in this posting list.
+    pub fn commit_versions(&mut self, lsn: LogSequenceNumber) {
+        for entry in &mut self.entries {
+            entry.commit(lsn);
+        }
+    }
+
+    /// Vacuum old versions from all entries.
+    pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
+        self.entries
+            .iter_mut()
+            .map(|e| e.vacuum(min_visible_lsn))
+            .sum()
     }
 
     /// Serialize to bytes.

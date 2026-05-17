@@ -26,13 +26,16 @@ mod tokenizer;
 pub use self::tokenizer::{Tokenizer, TokenizerConfig, TokenizerKind};
 
 use crate::pager::{Page, PageId, PageType, Pager};
+use crate::snap::Snapshot;
 use crate::table::{
     FullTextSearch, ScoredDocument, SpecialtyTableCapabilities, SpecialtyTableStats, Table,
     TableCapabilities, TableEngineKind, TableError, TableId, TableResult, TableStatistics,
     TextField, TextQuery, VerificationReport,
 };
+use crate::txn::TransactionId;
 use crate::types::KeyBuf;
 use crate::vfs::FileSystem;
+use crate::wal::LogSequenceNumber;
 use posting::{DocumentEntry, PostingEntry, PostingList};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -323,13 +326,25 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
     }
 
     /// Calculate TF-IDF score for a term in a document.
-    fn tf_idf(&self, _term: &str, doc_id: &[u8], posting_list: &PostingList) -> f32 {
+    fn tf_idf(
+        &self,
+        _term: &str,
+        doc_id: &[u8],
+        posting_list: &PostingList,
+        snapshot: Option<&Snapshot>,
+    ) -> f32 {
         // Term frequency: count positions in this document
         let mut tf = 0.0f32;
         let mut doc_boost = 1.0f32;
 
         for entry in &posting_list.entries {
             if entry.doc_id == doc_id {
+                // Check visibility if snapshot provided
+                if let Some(snap) = snapshot {
+                    if !entry.is_visible(snap) {
+                        continue;
+                    }
+                }
                 tf += entry.positions.len() as f32;
                 doc_boost = entry.boost;
             }
@@ -339,8 +354,8 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             return 0.0;
         }
 
-        // Document frequency
-        let df = posting_list.doc_freq() as f32;
+        // Document frequency (only visible documents)
+        let df = posting_list.doc_freq(snapshot) as f32;
         let num_docs = *self.num_documents.read().unwrap() as f32;
 
         // IDF = log(N / df)
@@ -351,6 +366,71 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
         };
 
         tf * idf * doc_boost
+    }
+
+    /// Commit all pending versions in the index.
+    pub fn commit_versions(&self, lsn: LogSequenceNumber) -> TableResult<()> {
+        let mut index = self.inverted_index.write().unwrap();
+        for posting_list in index.values_mut() {
+            posting_list.commit_versions(lsn);
+        }
+        Ok(())
+    }
+
+    /// Vacuum old versions from the index.
+    pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
+        let mut index = self.inverted_index.write().unwrap();
+        let mut total_removed = 0;
+        for posting_list in index.values_mut() {
+            total_removed += posting_list.vacuum(min_visible_lsn);
+        }
+        Ok(total_removed)
+    }
+
+    /// Search with snapshot visibility.
+    pub fn search_with_snapshot(
+        &self,
+        query: TextQuery<'_>,
+        limit: usize,
+        snapshot: Option<&Snapshot>,
+    ) -> TableResult<Vec<ScoredDocument>> {
+        let terms = self.tokenizer.tokenize(query.query);
+        let mut scores: HashMap<Vec<u8>, f32> = HashMap::new();
+
+        let index = self.inverted_index.read().unwrap();
+
+        for (term, _position) in terms {
+            if let Some(posting_list) = index.get(&term) {
+                for entry in &posting_list.entries {
+                    // Check visibility if snapshot provided
+                    if let Some(snap) = snapshot {
+                        if !entry.is_visible(snap) {
+                            continue;
+                        }
+                    }
+                    let score = self.tf_idf(&term, &entry.doc_id, posting_list, snapshot);
+                    *scores.entry(entry.doc_id.clone()).or_insert(0.0) += score;
+                }
+            }
+        }
+
+        // Sort by score and return top results
+        let mut results: Vec<ScoredDocument> = scores
+            .into_iter()
+            .map(|(doc_id, score)| ScoredDocument {
+                doc_id: KeyBuf(doc_id),
+                score,
+            })
+            .collect();
+
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(limit);
+
+        Ok(results)
     }
 }
 
@@ -411,14 +491,11 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
         tx_id: crate::txn::TransactionId,
         commit_lsn: crate::wal::LogSequenceNumber,
     ) -> TableResult<()> {
-        // Remove existing document first if it exists (for updates)
-        {
+        // Check if document already exists
+        let doc_exists = {
             let doc_store = self.document_store.read().unwrap();
-            if doc_store.contains_key(doc_id) {
-                drop(doc_store);
-                self.delete_document(doc_id, tx_id, commit_lsn)?;
-            }
-        }
+            doc_store.contains_key(doc_id)
+        };
 
         let mut doc_fields = Vec::new();
         let mut new_terms: Vec<(String, String, usize, f32)> = Vec::new();
@@ -439,27 +516,33 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
             for (term, field_name, position, boost) in new_terms {
                 let posting_list = index.entry(term.clone()).or_insert_with(PostingList::new);
 
-                // Find or create entry for this document
+                // Find existing entry for this document and field
                 let entry = posting_list
                     .entries
                     .iter_mut()
                     .find(|e| e.doc_id == doc_id && e.field == field_name);
 
                 if let Some(entry) = entry {
+                    // Update existing entry with new version
+                    let mut new_positions = entry.positions.clone();
                     if self.enable_positions {
-                        entry.positions.push(position);
+                        new_positions.push(position);
                     }
+                    entry.prepend_version(new_positions, boost, tx_id);
                 } else {
-                    posting_list.add(PostingEntry {
-                        doc_id: doc_id.to_vec(),
-                        field: field_name,
-                        positions: if self.enable_positions {
-                            vec![position]
-                        } else {
-                            vec![]
-                        },
+                    // Create new entry
+                    let positions = if self.enable_positions {
+                        vec![position]
+                    } else {
+                        vec![]
+                    };
+                    posting_list.add(PostingEntry::new(
+                        doc_id.to_vec(),
+                        field_name,
+                        positions,
                         boost,
-                    });
+                        tx_id,
+                    ));
                 }
             }
         }
@@ -473,7 +556,9 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
             },
         );
 
-        *self.num_documents.write().unwrap() += 1;
+        if !doc_exists {
+            *self.num_documents.write().unwrap() += 1;
+        }
         *self.num_terms.write().unwrap() = self.inverted_index.read().unwrap().len() as u64;
 
         // self.persist_index()?; // TODO: Enable when persistence is implemented
@@ -496,67 +581,35 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
     fn delete_document(
         &self,
         doc_id: &[u8],
-        _tx_id: crate::txn::TransactionId,
+        tx_id: crate::txn::TransactionId,
         _commit_lsn: crate::wal::LogSequenceNumber,
     ) -> TableResult<()> {
-        // Remove from document store
-        let removed = self.document_store.write().unwrap().remove(doc_id);
-
-        // If document wasn't in store, nothing to delete
-        if removed.is_none() {
+        // Check if document exists
+        let exists = self.document_store.read().unwrap().contains_key(doc_id);
+        if !exists {
             return Ok(());
         }
 
-        // Remove from inverted index
+        // Mark all entries for this document as deleted with tombstones
         {
             let mut index = self.inverted_index.write().unwrap();
             for posting_list in index.values_mut() {
-                posting_list.remove_document(doc_id);
+                for entry in &mut posting_list.entries {
+                    if entry.doc_id == doc_id {
+                        entry.prepend_tombstone(tx_id);
+                    }
+                }
             }
-
-            // Clean up empty posting lists
-            index.retain(|_, v| !v.is_empty());
-            *self.num_terms.write().unwrap() = index.len() as u64;
         }
 
-        let current = *self.num_documents.read().unwrap();
-        *self.num_documents.write().unwrap() = current.saturating_sub(1);
+        // Note: We don't remove from document_store immediately to maintain history
+        // Vacuum will clean up old versions later
 
         Ok(())
     }
 
     fn search(&self, query: TextQuery<'_>, limit: usize) -> TableResult<Vec<ScoredDocument>> {
-        let terms = self.tokenizer.tokenize(query.query);
-        let mut scores: HashMap<Vec<u8>, f32> = HashMap::new();
-
-        let index = self.inverted_index.read().unwrap();
-
-        for (term, _position) in terms {
-            if let Some(posting_list) = index.get(&term) {
-                for entry in &posting_list.entries {
-                    let score = self.tf_idf(&term, &entry.doc_id, posting_list);
-                    *scores.entry(entry.doc_id.clone()).or_insert(0.0) += score;
-                }
-            }
-        }
-
-        // Sort by score and return top results
-        let mut results: Vec<ScoredDocument> = scores
-            .into_iter()
-            .map(|(doc_id, score)| ScoredDocument {
-                doc_id: KeyBuf(doc_id),
-                score,
-            })
-            .collect();
-
-        results.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        results.truncate(limit);
-
-        Ok(results)
+        self.search_with_snapshot(query, limit, None)
     }
 
     fn stats(&self) -> TableResult<SpecialtyTableStats> {
@@ -616,7 +669,10 @@ mod tests {
 
     #[test]
     fn test_index_and_search() {
-        let mut index = create_test_index();
+        let index = create_test_index();
+
+        let tx_id = crate::txn::TransactionId::from(1);
+        let lsn = crate::wal::LogSequenceNumber::from(1);
 
         index
             .index_document(
@@ -633,10 +689,13 @@ mod tests {
                         boost: 1.0,
                     },
                 ],
-                crate::txn::TransactionId::from(1),
-                crate::wal::LogSequenceNumber::from(1),
+                tx_id,
+                lsn,
             )
             .unwrap();
+
+        // Commit the version
+        index.commit_versions(lsn).unwrap();
 
         index
             .index_document(
@@ -653,10 +712,13 @@ mod tests {
                         boost: 1.0,
                     },
                 ],
-                crate::txn::TransactionId::from(1),
-                crate::wal::LogSequenceNumber::from(2),
+                tx_id,
+                lsn,
             )
             .unwrap();
+
+        // Commit the version
+        index.commit_versions(lsn).unwrap();
 
         let results = index
             .search(
@@ -679,7 +741,11 @@ mod tests {
 
     #[test]
     fn test_delete_document() {
-        let mut index = create_test_index();
+        let index = create_test_index();
+
+        let tx_id = crate::txn::TransactionId::from(1);
+        let lsn1 = crate::wal::LogSequenceNumber::from(1);
+        let lsn2 = crate::wal::LogSequenceNumber::from(2);
 
         index
             .index_document(
@@ -689,36 +755,78 @@ mod tests {
                     text: "Hello world",
                     boost: 1.0,
                 }],
-                crate::txn::TransactionId::from(1),
-                crate::wal::LogSequenceNumber::from(1),
+                tx_id,
+                lsn1,
             )
             .unwrap();
 
-        index
-            .delete_document(
-                b"doc1",
-                crate::txn::TransactionId::from(1),
-                crate::wal::LogSequenceNumber::from(2),
-            )
-            .unwrap();
+        // Commit the version
+        index.commit_versions(lsn1).unwrap();
 
+        // Create snapshot after first commit
+        let snapshot1 = crate::snap::Snapshot::new(
+            crate::snap::SnapshotId::from(1),
+            "test1".to_string(),
+            lsn1,
+            0,
+            0,
+            vec![],
+        );
+
+        // Verify document is visible in snapshot1
         let results = index
-            .search(
+            .search_with_snapshot(
                 TextQuery {
                     query: "hello",
                     default_field: None,
                     require_positions: false,
                 },
                 10,
+                Some(&snapshot1),
+            )
+            .unwrap();
+        assert!(!results.is_empty(), "Document should be visible before deletion");
+
+        index
+            .delete_document(b"doc1", tx_id, lsn2)
+            .unwrap();
+
+        // Commit the deletion
+        index.commit_versions(lsn2).unwrap();
+
+        // Create snapshot after deletion
+        let snapshot2 = crate::snap::Snapshot::new(
+            crate::snap::SnapshotId::from(2),
+            "test2".to_string(),
+            lsn2,
+            0,
+            0,
+            vec![],
+        );
+
+        // Search with snapshot after deletion
+        let results = index
+            .search_with_snapshot(
+                TextQuery {
+                    query: "hello",
+                    default_field: None,
+                    require_positions: false,
+                },
+                10,
+                Some(&snapshot2),
             )
             .unwrap();
 
-        assert!(results.is_empty());
+        assert!(results.is_empty(), "Document should not be visible after deletion");
     }
 
     #[test]
     fn test_update_document() {
-        let mut index = create_test_index();
+        let index = create_test_index();
+
+        let tx_id = crate::txn::TransactionId::from(1);
+        let lsn1 = crate::wal::LogSequenceNumber::from(1);
+        let lsn2 = crate::wal::LogSequenceNumber::from(2);
 
         index
             .index_document(
@@ -728,10 +836,37 @@ mod tests {
                     text: "Hello world",
                     boost: 1.0,
                 }],
-                crate::txn::TransactionId::from(1),
-                crate::wal::LogSequenceNumber::from(1),
+                tx_id,
+                lsn1,
             )
             .unwrap();
+
+        // Commit the version
+        index.commit_versions(lsn1).unwrap();
+
+        // Create snapshot after first commit
+        let snapshot1 = crate::snap::Snapshot::new(
+            crate::snap::SnapshotId::from(1),
+            "test1".to_string(),
+            lsn1,
+            0,
+            0,
+            vec![],
+        );
+
+        // Verify "world" is visible in snapshot1
+        let results = index
+            .search_with_snapshot(
+                TextQuery {
+                    query: "world",
+                    default_field: None,
+                    require_positions: false,
+                },
+                10,
+                Some(&snapshot1),
+            )
+            .unwrap();
+        assert!(!results.is_empty(), "Original document should be visible");
 
         index
             .update_document(
@@ -741,35 +876,52 @@ mod tests {
                     text: "Hello rust",
                     boost: 1.0,
                 }],
-                crate::txn::TransactionId::from(1),
-                crate::wal::LogSequenceNumber::from(2),
+                tx_id,
+                lsn2,
             )
             .unwrap();
 
+        // Commit the update
+        index.commit_versions(lsn2).unwrap();
+
+        // Create snapshot after update
+        let snapshot2 = crate::snap::Snapshot::new(
+            crate::snap::SnapshotId::from(2),
+            "test2".to_string(),
+            lsn2,
+            0,
+            0,
+            vec![],
+        );
+
+        // Search for "rust" with snapshot after update
         let results = index
-            .search(
+            .search_with_snapshot(
                 TextQuery {
                     query: "rust",
                     default_field: None,
                     require_positions: false,
                 },
                 10,
+                Some(&snapshot2),
             )
             .unwrap();
 
-        assert!(!results.is_empty());
+        assert!(!results.is_empty(), "Updated document should contain 'rust'");
 
+        // Search for "world" with snapshot after update
         let results = index
-            .search(
+            .search_with_snapshot(
                 TextQuery {
                     query: "world",
                     default_field: None,
                     require_positions: false,
                 },
                 10,
+                Some(&snapshot2),
             )
             .unwrap();
 
-        assert!(results.is_empty());
+        assert!(results.is_empty(), "Updated document should not contain 'world'");
     }
 }
