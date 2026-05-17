@@ -1706,42 +1706,53 @@ impl<FS: FileSystem> Transaction<FS> {
         for (object_id, op) in self.graph_write_set.borrow().iter() {
             if let Some(engine) = self.engine_registry.get(*object_id) {
                 match &engine {
-                    crate::table::TableEngineInstance::MemoryGraphTable(graph) => {
-                        match op {
-                            GraphEdgeOp::AddEdge {
-                                source,
-                                label,
-                                target,
-                                edge_id,
-                            } => {
-                                graph.add_edge(source.as_slice(), label.as_slice(), target.as_slice(), edge_id.as_slice(), self.txn_id, commit_lsn).map_err(|e| {
+                    crate::table::TableEngineInstance::MemoryGraphTable(graph) => match op {
+                        GraphEdgeOp::AddEdge {
+                            source,
+                            label,
+                            target,
+                            edge_id,
+                        } => {
+                            graph
+                                .add_edge(
+                                    source.as_slice(),
+                                    label.as_slice(),
+                                    target.as_slice(),
+                                    edge_id.as_slice(),
+                                    self.txn_id,
+                                    commit_lsn,
+                                )
+                                .map_err(|e| {
+                                    TransactionError::Other(format!("Graph add_edge failed: {}", e))
+                                })?;
+                        }
+                        GraphEdgeOp::RemoveEdge {
+                            source,
+                            label,
+                            target,
+                            edge_id,
+                        } => {
+                            graph
+                                .remove_edge(
+                                    source.as_slice(),
+                                    label.as_slice(),
+                                    target.as_slice(),
+                                    edge_id.as_slice(),
+                                    self.txn_id,
+                                    commit_lsn,
+                                )
+                                .map_err(|e| {
                                     TransactionError::Other(format!(
-                                        "Graph add_edge failed: {}",
+                                        "Graph remove_edge failed: {}",
                                         e
                                     ))
                                 })?;
-                            }
-                            GraphEdgeOp::RemoveEdge {
-                                source,
-                                label,
-                                target,
-                                edge_id,
-                            } => {
-                                graph
-                                    .remove_edge(source.as_slice(), label.as_slice(), target.as_slice(), edge_id.as_slice(), self.txn_id, commit_lsn)
-                                    .map_err(|e| {
-                                        TransactionError::Other(format!(
-                                            "Graph remove_edge failed: {}",
-                                            e
-                                        ))
-                                    })?;
-                            }
                         }
-                    }
+                    },
                     _ => {
                         return Err(TransactionError::Other(
                             "table is not a graph adjacency table".to_string(),
-                        ))
+                        ));
                     }
                 }
             }
@@ -1757,13 +1768,20 @@ impl<FS: FileSystem> Transaction<FS> {
                             timestamp,
                             value_key,
                         } => {
-                            TimeSeries::append_point(ts.as_ref(), series_key, *timestamp, value_key, self.txn_id, commit_lsn)
-                                .map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "TimeSeries append_point failed: {}",
-                                        e
-                                    ))
-                                })?;
+                            TimeSeries::append_point(
+                                ts.as_ref(),
+                                series_key,
+                                *timestamp,
+                                value_key,
+                                self.txn_id,
+                                commit_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "TimeSeries append_point failed: {}",
+                                    e
+                                ))
+                            })?;
                         }
                         TimeSeriesOp::DeletePoint {
                             series_key: _,
@@ -1791,20 +1809,22 @@ impl<FS: FileSystem> Transaction<FS> {
                 match &engine {
                     crate::table::TableEngineInstance::PagedHnswVector(hnsw) => match op {
                         VectorOp::InsertVector { id, vector } => {
-                            hnsw.insert_vector(id, vector, self.txn_id, commit_lsn).map_err(|e| {
-                                TransactionError::Other(format!(
-                                    "Vector insert_vector failed: {}",
-                                    e
-                                ))
-                            })?;
+                            hnsw.insert_vector(id, vector, self.txn_id, commit_lsn)
+                                .map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Vector insert_vector failed: {}",
+                                        e
+                                    ))
+                                })?;
                         }
                         VectorOp::DeleteVector { id } => {
-                            hnsw.delete_vector(id, self.txn_id, commit_lsn).map_err(|e| {
-                                TransactionError::Other(format!(
-                                    "Vector delete_vector failed: {}",
-                                    e
-                                ))
-                            })?;
+                            hnsw.delete_vector(id, self.txn_id, commit_lsn)
+                                .map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Vector delete_vector failed: {}",
+                                        e
+                                    ))
+                                })?;
                         }
                     },
                     _ => {
@@ -1847,7 +1867,12 @@ impl<FS: FileSystem> Transaction<FS> {
                                 SerializedGeometry::Wkb(wkb) => GeometryRef::Wkb(wkb.as_slice()),
                             };
                             rtree
-                                .insert_geometry(id.as_slice(), geometry_ref, self.txn_id, commit_lsn)
+                                .insert_geometry(
+                                    id.as_slice(),
+                                    geometry_ref,
+                                    self.txn_id,
+                                    commit_lsn,
+                                )
                                 .map_err(|e| {
                                     TransactionError::Other(format!(
                                         "GeoSpatial insert_geometry failed: {}",
@@ -1856,12 +1881,14 @@ impl<FS: FileSystem> Transaction<FS> {
                                 })?;
                         }
                         GeoSpatialOp::DeleteGeometry { id } => {
-                            rtree.delete_geometry(id.as_slice(), self.txn_id, commit_lsn).map_err(|e| {
-                                TransactionError::Other(format!(
-                                    "GeoSpatial delete_geometry failed: {}",
-                                    e
-                                ))
-                            })?;
+                            rtree
+                                .delete_geometry(id.as_slice(), self.txn_id, commit_lsn)
+                                .map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "GeoSpatial delete_geometry failed: {}",
+                                        e
+                                    ))
+                                })?;
                         }
                     },
                     _ => {
@@ -1889,12 +1916,14 @@ impl<FS: FileSystem> Transaction<FS> {
                                     boost: *boost,
                                 })
                                 .collect();
-                            fulltext.index_document(doc_id, &text_fields, self.txn_id, commit_lsn).map_err(|e| {
-                                TransactionError::Other(format!(
-                                    "Full-text index_document failed: {}",
-                                    e
-                                ))
-                            })?;
+                            fulltext
+                                .index_document(doc_id, &text_fields, self.txn_id, commit_lsn)
+                                .map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Full-text index_document failed: {}",
+                                        e
+                                    ))
+                                })?;
                         }
                         FullTextOp::UpdateDocument { doc_id, fields } => {
                             let text_fields: Vec<TextField<'_>> = fields
@@ -1915,12 +1944,14 @@ impl<FS: FileSystem> Transaction<FS> {
                                 })?;
                         }
                         FullTextOp::DeleteDocument { doc_id } => {
-                            fulltext.delete_document(doc_id, self.txn_id, commit_lsn).map_err(|e| {
-                                TransactionError::Other(format!(
-                                    "Full-text delete_document failed: {}",
-                                    e
-                                ))
-                            })?;
+                            fulltext
+                                .delete_document(doc_id, self.txn_id, commit_lsn)
+                                .map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Full-text delete_document failed: {}",
+                                        e
+                                    ))
+                                })?;
                         }
                     },
                     _ => {

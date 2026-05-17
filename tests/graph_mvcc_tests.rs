@@ -32,7 +32,14 @@ fn test_graph_mvcc_uncommitted_edges_not_visible() {
 
     // Add an edge but don't commit it
     graph
-        .add_edge(b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"follows",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
 
     // Edge should not be visible yet (uncommitted)
@@ -51,7 +58,14 @@ fn test_graph_mvcc_committed_edges_visible() {
 
     // Add an edge
     graph
-        .add_edge(b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"follows",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
 
     // Commit the edge
@@ -78,7 +92,14 @@ fn test_graph_mvcc_edge_removal_creates_tombstone() {
 
     // Add and commit an edge
     graph
-        .add_edge(b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"follows",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
         .commit_versions(TransactionId::from(1), LogSequenceNumber::from(10))
@@ -91,7 +112,14 @@ fn test_graph_mvcc_edge_removal_creates_tombstone() {
 
     // Remove the edge
     graph
-        .remove_edge(b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .remove_edge(
+            b"node1",
+            b"follows",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
 
     // Commit the removal
@@ -128,7 +156,14 @@ fn test_graph_mvcc_multiple_versions() {
 
     // Add second version (update weight by removing and re-adding)
     graph
-        .remove_edge(b"node1", b"likes", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .remove_edge(
+            b"node1",
+            b"likes",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
         .add_edge_with_weight(b"node1", b"likes", b"node2", b"edge1", Some(2.0))
@@ -153,10 +188,24 @@ fn test_graph_mvcc_incoming_edges() {
 
     // Add edges
     graph
-        .add_edge(b"node1", b"follows", b"node3", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"follows",
+            b"node3",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
-        .add_edge(b"node2", b"follows", b"node3", b"edge2", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node2",
+            b"follows",
+            b"node3",
+            b"edge2",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
         .commit_versions(TransactionId::from(1), LogSequenceNumber::from(10))
@@ -178,10 +227,24 @@ fn test_graph_mvcc_label_filtering() {
 
     // Add edges with different labels
     graph
-        .add_edge(b"node1", b"follows", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"follows",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
-        .add_edge(b"node1", b"likes", b"node3", b"edge2", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"likes",
+            b"node3",
+            b"edge2",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
         .commit_versions(TransactionId::from(1), LogSequenceNumber::from(10))
@@ -215,7 +278,14 @@ fn test_graph_mvcc_undirected_graph() {
 
     // Add an edge
     graph
-        .add_edge(b"node1", b"connected", b"node2", b"edge1", TransactionId::from(1), LogSequenceNumber::from(1))
+        .add_edge(
+            b"node1",
+            b"connected",
+            b"node2",
+            b"edge1",
+            TransactionId::from(1),
+            LogSequenceNumber::from(1),
+        )
         .unwrap();
     graph
         .commit_versions(TransactionId::from(1), LogSequenceNumber::from(10))

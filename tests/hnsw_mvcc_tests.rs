@@ -41,16 +41,15 @@ fn test_hnsw_mvcc_snapshot_isolation() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id1 = TransactionId::from(1);
     let tx_id2 = TransactionId::from(2);
 
     // Transaction 1: Insert vector1
     let vector1 = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1).unwrap();
 
     // Commit transaction 1 at LSN 10
     hnsw.commit_versions(tx_id1, LogSequenceNumber::from(10))
@@ -68,8 +67,7 @@ fn test_hnsw_mvcc_snapshot_isolation() {
 
     // Transaction 2: Insert vector2
     let vector2 = create_test_vector(4, 2.0);
-    hnsw.insert_vector_tx(b"vector2", &vector2, tx_id2)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector2", &vector2, tx_id2).unwrap();
 
     // Commit transaction 2 at LSN 20
     hnsw.commit_versions(tx_id2, LogSequenceNumber::from(20))
@@ -108,8 +106,8 @@ fn test_hnsw_mvcc_multiple_versions() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     // Create multiple versions of vectors
     for i in 1..=5 {
@@ -157,16 +155,15 @@ fn test_hnsw_mvcc_delete_creates_tombstone() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id1 = TransactionId::from(1);
     let tx_id2 = TransactionId::from(2);
 
     // Transaction 1: Insert a vector
     let vector = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector1", &vector, tx_id1)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector, tx_id1).unwrap();
     hnsw.commit_versions(tx_id1, LogSequenceNumber::from(10))
         .unwrap();
 
@@ -231,8 +228,8 @@ fn test_hnsw_mvcc_nearest_neighbor_snapshot() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id1 = TransactionId::from(1);
     let tx_id2 = TransactionId::from(2);
@@ -240,10 +237,8 @@ fn test_hnsw_mvcc_nearest_neighbor_snapshot() {
     // Transaction 1: Insert vectors at distance 2.0 and 4.0 from origin
     let vector1 = create_test_vector(4, 2.0);
     let vector2 = create_test_vector(4, 4.0);
-    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1)
-        .unwrap();
-    hnsw.insert_vector_tx(b"vector2", &vector2, tx_id1)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1).unwrap();
+    hnsw.insert_vector_tx(b"vector2", &vector2, tx_id1).unwrap();
     hnsw.commit_versions(tx_id1, LogSequenceNumber::from(10))
         .unwrap();
 
@@ -259,8 +254,7 @@ fn test_hnsw_mvcc_nearest_neighbor_snapshot() {
 
     // Transaction 2: Insert a closer vector at distance 1.0
     let vector3 = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector3", &vector3, tx_id2)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector3", &vector3, tx_id2).unwrap();
     hnsw.commit_versions(tx_id2, LogSequenceNumber::from(20))
         .unwrap();
 
@@ -306,14 +300,13 @@ fn test_hnsw_mvcc_vacuum() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     // Insert a vector
     let tx_id1 = TransactionId::from(1);
     let vector1 = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1).unwrap();
     hnsw.commit_versions(tx_id1, LogSequenceNumber::from(10))
         .unwrap();
 
@@ -370,15 +363,14 @@ fn test_hnsw_mvcc_uncommitted_not_visible() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id = TransactionId::from(1);
 
     // Insert a vector but don't commit it
     let vector = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector1", &vector, tx_id)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector, tx_id).unwrap();
 
     // Create a snapshot - uncommitted data should not be visible
     let snapshot = Snapshot::new(
@@ -406,8 +398,8 @@ fn test_hnsw_mvcc_concurrent_transactions() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id1 = TransactionId::from(1);
     let tx_id2 = TransactionId::from(2);
@@ -415,13 +407,11 @@ fn test_hnsw_mvcc_concurrent_transactions() {
 
     // Transaction 1: Insert vector1
     let vector1 = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1).unwrap();
 
     // Transaction 2: Insert vector2 (before tx1 commits)
     let vector2 = create_test_vector(4, 2.0);
-    hnsw.insert_vector_tx(b"vector2", &vector2, tx_id2)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector2", &vector2, tx_id2).unwrap();
 
     // Commit tx1 at LSN 10
     hnsw.commit_versions(tx_id1, LogSequenceNumber::from(10))
@@ -450,8 +440,7 @@ fn test_hnsw_mvcc_concurrent_transactions() {
 
     // Transaction 3: Insert vector3
     let vector3 = create_test_vector(4, 3.0);
-    hnsw.insert_vector_tx(b"vector3", &vector3, tx_id3)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector3", &vector3, tx_id3).unwrap();
     hnsw.commit_versions(tx_id3, LogSequenceNumber::from(30))
         .unwrap();
 
@@ -495,16 +484,15 @@ fn test_hnsw_mvcc_delete_and_reinsert() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id1 = TransactionId::from(1);
     let tx_id2 = TransactionId::from(2);
 
     // Transaction 1: Insert vector1
     let vector1 = create_test_vector(4, 1.0);
-    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1)
-        .unwrap();
+    hnsw.insert_vector_tx(b"vector1", &vector1, tx_id1).unwrap();
     hnsw.commit_versions(tx_id1, LogSequenceNumber::from(10))
         .unwrap();
 
@@ -557,8 +545,8 @@ fn test_hnsw_mvcc_search_with_limit() {
         dimensions: 4,
         ..Default::default()
     };
-    let hnsw = PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config)
-        .unwrap();
+    let hnsw =
+        PagedHnswVector::new(TableId::from(1), "test_hnsw".to_string(), pager, config).unwrap();
 
     let tx_id = TransactionId::from(1);
 

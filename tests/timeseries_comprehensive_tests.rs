@@ -93,8 +93,12 @@ fn test_insert_multiple_series() {
     .unwrap();
 
     let tx_id = create_tx_id();
-    table.append_point(b"cpu.usage", 100, b"10.5", tx_id).unwrap();
-    table.append_point(b"memory.usage", 100, b"50.0", tx_id).unwrap();
+    table
+        .append_point(b"cpu.usage", 100, b"10.5", tx_id)
+        .unwrap();
+    table
+        .append_point(b"memory.usage", 100, b"50.0", tx_id)
+        .unwrap();
     table.append_point(b"disk.io", 100, b"1000", tx_id).unwrap();
 
     let cursor = table.scan_series(b"cpu.usage", 0, 200).unwrap();
@@ -225,7 +229,9 @@ fn test_time_range_query_boundary_inclusive() {
 
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 100, b"first", tx_id).unwrap();
-    table.append_point(b"sensor", 200, b"middle", tx_id).unwrap();
+    table
+        .append_point(b"sensor", 200, b"middle", tx_id)
+        .unwrap();
     table.append_point(b"sensor", 300, b"last", tx_id).unwrap();
 
     // Range is [start, end) so use 301 to include 300
@@ -530,8 +536,12 @@ fn test_negative_timestamps_scan() {
 
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 1000, b"old", tx_id).unwrap();
-    table.append_point(b"sensor", 2000, b"older", tx_id).unwrap();
-    table.append_point(b"sensor", 3000, b"epoch", tx_id).unwrap();
+    table
+        .append_point(b"sensor", 2000, b"older", tx_id)
+        .unwrap();
+    table
+        .append_point(b"sensor", 3000, b"epoch", tx_id)
+        .unwrap();
     table.append_point(b"sensor", 4000, b"new", tx_id).unwrap();
 
     let cursor = table.scan_series(b"sensor", 1500, 2500).unwrap();
@@ -555,9 +565,15 @@ fn test_negative_timestamps_latest_before() {
     .unwrap();
 
     let tx_id = create_tx_id();
-    table.append_point(b"sensor", 1000, b"first", tx_id).unwrap();
-    table.append_point(b"sensor", 2000, b"second", tx_id).unwrap();
-    table.append_point(b"sensor", 3000, b"third", tx_id).unwrap();
+    table
+        .append_point(b"sensor", 1000, b"first", tx_id)
+        .unwrap();
+    table
+        .append_point(b"sensor", 2000, b"second", tx_id)
+        .unwrap();
+    table
+        .append_point(b"sensor", 3000, b"third", tx_id)
+        .unwrap();
 
     let result = table.latest_before(b"sensor", 2500).unwrap();
     assert!(result.is_some());
@@ -684,7 +700,9 @@ fn test_timestamp_ordering_in_scan() {
     let tx_id = create_tx_id();
     table.append_point(b"sensor", 300, b"third", tx_id).unwrap();
     table.append_point(b"sensor", 100, b"first", tx_id).unwrap();
-    table.append_point(b"sensor", 200, b"second", tx_id).unwrap();
+    table
+        .append_point(b"sensor", 200, b"second", tx_id)
+        .unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 400).unwrap();
     assert!(cursor.valid());

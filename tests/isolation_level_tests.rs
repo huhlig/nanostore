@@ -64,17 +64,17 @@ fn test_read_uncommitted_no_read_tracking() {
     );
 
     let table_id = TableId::from(1);
-    
+
     // Write some data
     tx.put(table_id, b"key1", b"value1").unwrap();
-    
+
     // Read it back from write set
     let value = tx.get(table_id, b"key1").unwrap();
     assert_eq!(value, Some(ValueBuf(b"value1".to_vec())));
-    
+
     // Manually record a read (normally internal)
     tx.record_read(table_id, b"key1".to_vec());
-    
+
     // ReadUncommitted should commit without checking read-write conflicts
     let result = tx.commit();
     assert!(result.is_ok(), "ReadUncommitted should not check conflicts");
@@ -89,18 +89,21 @@ fn test_read_committed_no_read_tracking() {
     );
 
     let table_id = TableId::from(1);
-    
+
     // Write and read
     tx.put(table_id, b"key1", b"value1").unwrap();
     let value = tx.get(table_id, b"key1").unwrap();
     assert_eq!(value, Some(ValueBuf(b"value1".to_vec())));
-    
+
     // Manually record a read
     tx.record_read(table_id, b"key1".to_vec());
-    
+
     // ReadCommitted should commit without checking read-write conflicts
     let result = tx.commit();
-    assert!(result.is_ok(), "ReadCommitted should not check read-write conflicts");
+    assert!(
+        result.is_ok(),
+        "ReadCommitted should not check read-write conflicts"
+    );
 }
 
 #[test]
@@ -112,19 +115,22 @@ fn test_repeatable_read_tracks_reads() {
     );
 
     let table_id = TableId::from(1);
-    
+
     // Write and read
     tx.put(table_id, b"key1", b"value1").unwrap();
     let value = tx.get(table_id, b"key1").unwrap();
     assert_eq!(value, Some(ValueBuf(b"value1".to_vec())));
-    
+
     // Manually record a read
     tx.record_read(table_id, b"key1".to_vec());
-    
+
     // RepeatableRead should check for read-write conflicts
     // Since there are no other transactions, this should succeed
     let result = tx.commit();
-    assert!(result.is_ok(), "RepeatableRead should commit when no conflicts");
+    assert!(
+        result.is_ok(),
+        "RepeatableRead should commit when no conflicts"
+    );
 }
 
 #[test]
@@ -136,19 +142,22 @@ fn test_serializable_tracks_reads() {
     );
 
     let table_id = TableId::from(1);
-    
+
     // Write and read
     tx.put(table_id, b"key1", b"value1").unwrap();
     let value = tx.get(table_id, b"key1").unwrap();
     assert_eq!(value, Some(ValueBuf(b"value1".to_vec())));
-    
+
     // Manually record a read
     tx.record_read(table_id, b"key1".to_vec());
-    
+
     // Serializable should check for read-write conflicts
     // Since there are no other transactions, this should succeed
     let result = tx.commit();
-    assert!(result.is_ok(), "Serializable should commit when no conflicts");
+    assert!(
+        result.is_ok(),
+        "Serializable should commit when no conflicts"
+    );
 }
 
 #[test]
@@ -160,18 +169,21 @@ fn test_snapshot_isolation_no_read_tracking() {
     );
 
     let table_id = TableId::from(1);
-    
+
     // Write and read
     tx.put(table_id, b"key1", b"value1").unwrap();
     let value = tx.get(table_id, b"key1").unwrap();
     assert_eq!(value, Some(ValueBuf(b"value1".to_vec())));
-    
+
     // Manually record a read
     tx.record_read(table_id, b"key1".to_vec());
-    
+
     // SnapshotIsolation should not check read-write conflicts
     let result = tx.commit();
-    assert!(result.is_ok(), "SnapshotIsolation should not check read-write conflicts");
+    assert!(
+        result.is_ok(),
+        "SnapshotIsolation should not check read-write conflicts"
+    );
 }
 
 #[test]
@@ -209,10 +221,10 @@ fn test_write_write_conflict_detection() {
         engine_registry.clone(),
         current_lsn.clone(),
     );
-    
+
     let result = tx2.put(table_id, b"key1", b"value2");
     assert!(result.is_err(), "Should detect write-write conflict");
-    
+
     // Clean up
     tx1.rollback().unwrap();
 }

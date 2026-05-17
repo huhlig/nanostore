@@ -720,15 +720,14 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         }
 
         // Deserialize version chain
-        let chain_len = u32::from_le_bytes(
-            data[pos..pos + 4]
-                .try_into()
-                .map_err(|e| TableError::Other(format!("Failed to read version chain length: {}", e)))?,
-        ) as usize;
+        let chain_len = u32::from_le_bytes(data[pos..pos + 4].try_into().map_err(|e| {
+            TableError::Other(format!("Failed to read version chain length: {}", e))
+        })?) as usize;
         pos += 4;
 
-        let version_chain = postcard::from_bytes(&data[pos..pos + chain_len])
-            .map_err(|e| TableError::Other(format!("Failed to deserialize version chain: {}", e)))?;
+        let version_chain = postcard::from_bytes(&data[pos..pos + chain_len]).map_err(|e| {
+            TableError::Other(format!("Failed to deserialize version chain: {}", e))
+        })?;
 
         Ok(HnswNode {
             id,
@@ -1150,12 +1149,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             let max_layer = *self.max_layer.read().unwrap();
 
             // Create initial node with transaction tracking
-            let initial_node = HnswNode::new(
-                id_buf.clone(),
-                vector.to_vec(),
-                layer,
-                tx_id,
-            );
+            let initial_node = HnswNode::new(id_buf.clone(), vector.to_vec(), layer, tx_id);
             let node_id = self.store_node(&initial_node)?;
 
             // Search from top layer down to layer+1
@@ -1206,12 +1200,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             node_id
         } else {
             // First node - becomes entry point
-            let node = HnswNode::new(
-                id_buf.clone(),
-                vector.to_vec(),
-                layer,
-                tx_id,
-            );
+            let node = HnswNode::new(id_buf.clone(), vector.to_vec(), layer, tx_id);
             let node_id = self.store_node(&node)?;
             *self.entry_point.write().unwrap() = Some(node_id);
             *self.max_layer.write().unwrap() = layer;
@@ -1292,14 +1281,14 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let mut results = Vec::new();
         for candidate in candidates {
             let node = self.load_node(candidate.node_id)?;
-            
+
             // Check visibility
             if node.is_visible(snapshot) {
                 results.push(VectorHit {
                     id: node.id,
                     distance: candidate.distance,
                 });
-                
+
                 if results.len() >= limit {
                     break;
                 }
@@ -1319,34 +1308,32 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let id_to_node = self.id_to_node.read().unwrap();
         for &node_id in id_to_node.values() {
             let mut node = self.load_node(node_id)?;
-            
-            if node.version_chain.created_by == tx_id
-                && node.version_chain.commit_lsn.is_none()
-            {
+
+            if node.version_chain.created_by == tx_id && node.version_chain.commit_lsn.is_none() {
                 node.commit(commit_lsn);
                 self.update_node(node_id, &node)?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Vacuum old versions that are no longer visible.
     pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
         let mut total_removed = 0;
-        
+
         // Iterate through all nodes and vacuum old versions
         let id_to_node = self.id_to_node.read().unwrap();
         for &node_id in id_to_node.values() {
             let mut node = self.load_node(node_id)?;
             let removed = node.vacuum(min_visible_lsn);
-            
+
             if removed > 0 {
                 total_removed += removed;
                 self.update_node(node_id, &node)?;
             }
         }
-        
+
         Ok(total_removed)
     }
 }

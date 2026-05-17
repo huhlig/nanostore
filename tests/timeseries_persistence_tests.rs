@@ -554,8 +554,12 @@ fn test_timeseries_cursor_downsampling_count_and_invalid_interval() {
     let series_key = b"sensor-count";
     let tx_id = create_tx_id();
     table.append_point(series_key, 10, b"bad", tx_id).unwrap();
-    table.append_point(series_key, 20, b"still-bad", tx_id).unwrap();
-    table.append_point(series_key, 70, b"ignored", tx_id).unwrap();
+    table
+        .append_point(series_key, 20, b"still-bad", tx_id)
+        .unwrap();
+    table
+        .append_point(series_key, 70, b"ignored", tx_id)
+        .unwrap();
 
     // Commit the versions so they become visible
     table
@@ -692,7 +696,9 @@ fn test_aggregation_with_zero_values() {
     let series_key = b"zero-values";
     let tx_id = create_tx_id();
     for i in 0..5 {
-        table.append_point(series_key, i * 100, b"0", tx_id).unwrap();
+        table
+            .append_point(series_key, i * 100, b"0", tx_id)
+            .unwrap();
     }
 
     // Commit the versions so they become visible

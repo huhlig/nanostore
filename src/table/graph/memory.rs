@@ -521,7 +521,8 @@ impl GraphAdjacency for MemoryGraphTable {
         let edge_key = GraphKey::EdgeData {
             edge_id: KeyBuf(edge_id.to_vec()),
         };
-        self.storage.put(&edge_key.encode(), tombstone, tx_id, lsn)?;
+        self.storage
+            .put(&edge_key.encode(), tombstone, tx_id, lsn)?;
 
         // Remove outgoing edge index by creating tombstone
         let out_key = GraphKey::Outgoing {
@@ -546,14 +547,16 @@ impl GraphAdjacency for MemoryGraphTable {
                 label: KeyBuf(label.to_vec()),
                 edge_id: KeyBuf(edge_id.to_vec()),
             };
-            self.storage.put(&rev_out_key.encode(), tombstone, tx_id, lsn)?;
+            self.storage
+                .put(&rev_out_key.encode(), tombstone, tx_id, lsn)?;
 
             let rev_in_key = GraphKey::Incoming {
                 target: KeyBuf(source.to_vec()),
                 label: KeyBuf(label.to_vec()),
                 edge_id: KeyBuf(edge_id.to_vec()),
             };
-            self.storage.put(&rev_in_key.encode(), tombstone, tx_id, lsn)?;
+            self.storage
+                .put(&rev_in_key.encode(), tombstone, tx_id, lsn)?;
         }
 
         // Update in-memory index with tombstones (empty value)

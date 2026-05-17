@@ -120,7 +120,11 @@ fn bench_insertion_by_strategy(c: &mut Criterion) {
 
                         for (id, point) in points {
                             rtree
-                                .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                                .insert_geometry(
+                                    id,
+                                    GeometryRef::Point(*point),
+                                    TransactionId::from(0),
+                                )
                                 .unwrap();
                         }
                         black_box(rtree);
@@ -154,7 +158,11 @@ fn bench_intersects_query(c: &mut Criterion) {
 
                     for (id, point) in points {
                         rtree
-                            .insert_geometry(&id, GeometryRef::Point(*point), TransactionId::from(0))
+                            .insert_geometry(
+                                &id,
+                                GeometryRef::Point(*point),
+                                TransactionId::from(0),
+                            )
                             .unwrap();
                     }
 
@@ -202,7 +210,11 @@ fn bench_nearest_query(c: &mut Criterion) {
 
                     for (id, point) in points {
                         rtree
-                            .insert_geometry(&id, GeometryRef::Point(*point), TransactionId::from(0))
+                            .insert_geometry(
+                                &id,
+                                GeometryRef::Point(*point),
+                                TransactionId::from(0),
+                            )
                             .unwrap();
                     }
 
@@ -354,7 +366,11 @@ fn bench_strategy_capacity_matrix(c: &mut Criterion) {
 
                         for (id, point) in points {
                             rtree
-                                .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                                .insert_geometry(
+                                    id,
+                                    GeometryRef::Point(*point),
+                                    TransactionId::from(0),
+                                )
                                 .unwrap();
                         }
 

@@ -76,7 +76,11 @@ fn test_rtree_intersects_query() {
                 y: y as f64,
             };
             rtree
-                .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+                .insert_geometry(
+                    id.as_bytes(),
+                    GeometryRef::Point(point),
+                    TransactionId::from(0),
+                )
                 .unwrap();
         }
     }
@@ -171,7 +175,11 @@ fn test_rtree_split_strategies() {
                 y: (i / 20) as f64,
             };
             rtree
-                .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+                .insert_geometry(
+                    id.as_bytes(),
+                    GeometryRef::Point(point),
+                    TransactionId::from(0),
+                )
                 .unwrap();
         }
 
@@ -222,7 +230,8 @@ fn test_rtree_bounding_box_insert() {
                     min: *min,
                     max: *max,
                 },
-                TransactionId::from(0))
+                TransactionId::from(0),
+            )
             .unwrap();
     }
 
@@ -255,7 +264,11 @@ fn test_rtree_3d_support() {
             y: i as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+            )
             .unwrap();
     }
 
@@ -285,7 +298,11 @@ fn test_rtree_large_dataset() {
             y: ((i * 23) % 100) as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+            )
             .unwrap();
     }
 
@@ -316,7 +333,11 @@ fn test_rtree_empty_queries() {
             y: i as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+            )
             .unwrap();
     }
 
@@ -381,7 +402,11 @@ fn test_rtree_persistence() {
                 y: i as f64,
             };
             rtree
-                .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+                .insert_geometry(
+                    id.as_bytes(),
+                    GeometryRef::Point(point),
+                    TransactionId::from(0),
+                )
                 .unwrap();
         }
     }
@@ -417,10 +442,18 @@ fn test_rtree_delete_geometry_removes_entry() {
     .unwrap();
 
     rtree
-        .insert_geometry(b"point1", GeometryRef::Point(GeoPoint { x: 1.0, y: 1.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point1",
+            GeometryRef::Point(GeoPoint { x: 1.0, y: 1.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree
-        .insert_geometry(b"point2", GeometryRef::Point(GeoPoint { x: 2.0, y: 2.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point2",
+            GeometryRef::Point(GeoPoint { x: 2.0, y: 2.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree.delete_geometry(b"point1").unwrap();
 
@@ -456,7 +489,11 @@ fn test_rtree_delete_geometry_missing_id_is_noop() {
     .unwrap();
 
     rtree
-        .insert_geometry(b"point1", GeometryRef::Point(GeoPoint { x: 1.0, y: 1.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point1",
+            GeometryRef::Point(GeoPoint { x: 1.0, y: 1.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree.delete_geometry(b"missing").unwrap();
 
@@ -485,7 +522,11 @@ fn test_rtree_delete_triggers_underflow_reinsertion() {
             y: (i % 3) as f64,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::Point(point), TransactionId::from(0))
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::Point(point),
+                TransactionId::from(0),
+            )
             .unwrap();
     }
 

@@ -441,13 +441,25 @@ fn test_rtree_insert_and_query() {
     )
     .unwrap();
     rtree
-        .insert_geometry(b"point1", GeometryRef::Point(GeoPoint { x: 1.0, y: 2.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point1",
+            GeometryRef::Point(GeoPoint { x: 1.0, y: 2.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree
-        .insert_geometry(b"point2", GeometryRef::Point(GeoPoint { x: 5.0, y: 5.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point2",
+            GeometryRef::Point(GeoPoint { x: 5.0, y: 5.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree
-        .insert_geometry(b"point3", GeometryRef::Point(GeoPoint { x: 10.0, y: 10.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point3",
+            GeometryRef::Point(GeoPoint { x: 10.0, y: 10.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
 
     let query_box = GeometryRef::BoundingBox {
@@ -471,13 +483,25 @@ fn test_rtree_nearest_neighbor() {
     )
     .unwrap();
     rtree
-        .insert_geometry(b"point1", GeometryRef::Point(GeoPoint { x: 0.0, y: 0.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point1",
+            GeometryRef::Point(GeoPoint { x: 0.0, y: 0.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree
-        .insert_geometry(b"point2", GeometryRef::Point(GeoPoint { x: 10.0, y: 10.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point2",
+            GeometryRef::Point(GeoPoint { x: 10.0, y: 10.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
     rtree
-        .insert_geometry(b"point3", GeometryRef::Point(GeoPoint { x: 20.0, y: 20.0 }), TransactionId::from(0))
+        .insert_geometry(
+            b"point3",
+            GeometryRef::Point(GeoPoint { x: 20.0, y: 20.0 }),
+            TransactionId::from(0),
+        )
         .unwrap();
 
     let nearest = rtree.nearest(GeoPoint { x: 1.0, y: 1.0 }, 1).unwrap();
@@ -500,7 +524,9 @@ fn test_timeseries_append_and_scan() {
     table.append_point(b"cpu.usage", 2000, b"value2").unwrap();
     table.append_point(b"cpu.usage", 3000, b"value3").unwrap();
     // append_point uses TransactionId::from(1), so commit with matching ID
-    table.commit_versions(TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    table
+        .commit_versions(TransactionId::from(1), LogSequenceNumber::from(1))
+        .unwrap();
 
     let mut cursor = table.scan_series(b"cpu.usage", 1500, 2500).unwrap();
     let mut count = 0;
@@ -564,7 +590,9 @@ fn test_graph_add_edge_and_traverse() {
     graph
         .add_edge(b"bob", b"follows", b"david", b"edge3")
         .unwrap();
-    graph.commit_versions(TransactionId::from(1), LogSequenceNumber::from(1)).unwrap();
+    graph
+        .commit_versions(TransactionId::from(1), LogSequenceNumber::from(1))
+        .unwrap();
 
     let mut cursor = graph.outgoing(b"alice", Some(b"follows")).unwrap();
     let mut count = 0;
