@@ -191,6 +191,20 @@ impl<FS: FileSystem> TimeSeriesTable<FS> {
         state.series.get_mut(series_key).unwrap()
     }
 
+    /// Append a point with a transaction ID (convenience method).
+    ///
+    /// This is a convenience method that accepts a transaction ID parameter.
+    /// For MVCC-aware operations, use `append_point_tx()` directly.
+    pub fn append_point(
+        &self,
+        series_key: &[u8],
+        timestamp: i64,
+        value_key: &[u8],
+        tx_id: TransactionId,
+    ) -> TableResult<()> {
+        self.append_point_tx(series_key, timestamp, value_key, tx_id)
+    }
+
     /// Append a point with transaction tracking (MVCC-aware).
     pub fn append_point_tx(
         &self,

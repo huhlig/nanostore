@@ -28,9 +28,15 @@ use nanokv::pager::{Pager, PagerConfig};
 use nanokv::table::TimeSeries;
 use nanokv::table::TimeSeriesCursor;
 use nanokv::table::timeseries::{TimeSeriesConfig, TimeSeriesTable};
+use nanokv::txn::TransactionId;
 use nanokv::types::TableId;
 use nanokv::vfs::MemoryFileSystem;
 use std::sync::Arc;
+
+// Helper function to create a transaction ID for testing
+fn create_tx_id() -> TransactionId {
+    TransactionId::from(1)
+}
 
 // =============================================================================
 // Basic Insert and Scan Operations
@@ -56,8 +62,9 @@ fn test_basic_insert_and_scan() {
         (400i64, b"40.0"),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in &points {
-        table.append_point(series_key, *ts, *value).unwrap();
+        table.append_point(series_key, *ts, *value, tx_id).unwrap();
     }
 
     let mut cursor = table.scan_series(series_key, 0, 500).unwrap();
@@ -85,9 +92,10 @@ fn test_insert_multiple_series() {
     )
     .unwrap();
 
-    table.append_point(b"cpu.usage", 100, b"10.5").unwrap();
-    table.append_point(b"memory.usage", 100, b"50.0").unwrap();
-    table.append_point(b"disk.io", 100, b"1000").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"cpu.usage", 100, b"10.5", tx_id).unwrap();
+    table.append_point(b"memory.usage", 100, b"50.0", tx_id).unwrap();
+    table.append_point(b"disk.io", 100, b"1000", tx_id).unwrap();
 
     let cursor = table.scan_series(b"cpu.usage", 0, 200).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -133,9 +141,10 @@ fn test_time_range_query_full_range() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..10 {
         table
-            .append_point(b"sensor", i * 100, format!("{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -155,9 +164,10 @@ fn test_time_range_query_partial_range() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..10 {
         table
-            .append_point(b"sensor", i * 100, format!("{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -189,9 +199,10 @@ fn test_time_range_query_no_overlap() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..5 {
         table
-            .append_point(b"sensor", i * 100, format!("{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -212,9 +223,10 @@ fn test_time_range_query_boundary_inclusive() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"first").unwrap();
-    table.append_point(b"sensor", 200, b"middle").unwrap();
-    table.append_point(b"sensor", 300, b"last").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"first", tx_id).unwrap();
+    table.append_point(b"sensor", 200, b"middle", tx_id).unwrap();
+    table.append_point(b"sensor", 300, b"last", tx_id).unwrap();
 
     // Range is [start, end) so use 301 to include 300
     let cursor = table.scan_series(b"sensor", 100, 301).unwrap();
@@ -233,7 +245,8 @@ fn test_time_range_query_single_point() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"only").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"only", tx_id).unwrap();
 
     let cursor = table.scan_series(b"sensor", 100, 101).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -255,9 +268,10 @@ fn test_latest_before_basic() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"10.5").unwrap();
-    table.append_point(b"sensor", 200, b"20.0").unwrap();
-    table.append_point(b"sensor", 300, b"30.5").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
+    table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
+    table.append_point(b"sensor", 300, b"30.5", tx_id).unwrap();
 
     let result = table.latest_before(b"sensor", 250).unwrap();
     assert!(result.is_some());
@@ -278,8 +292,9 @@ fn test_latest_before_exact_timestamp() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"10.5").unwrap();
-    table.append_point(b"sensor", 200, b"20.0").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
+    table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
 
     let result = table.latest_before(b"sensor", 200).unwrap();
     assert!(result.is_some());
@@ -298,8 +313,9 @@ fn test_latest_before_before_all_points() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"10.5").unwrap();
-    table.append_point(b"sensor", 200, b"20.0").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
+    table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
 
     let result = table.latest_before(b"sensor", 50).unwrap();
     assert!(result.is_none());
@@ -317,8 +333,9 @@ fn test_latest_before_after_all_points() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"10.5").unwrap();
-    table.append_point(b"sensor", 200, b"20.0").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"10.5", tx_id).unwrap();
+    table.append_point(b"sensor", 200, b"20.0", tx_id).unwrap();
 
     let result = table.latest_before(b"sensor", 300).unwrap();
     assert!(result.is_some());
@@ -360,12 +377,13 @@ fn test_bucket_creation_across_boundaries() {
 
     let bucket_size = 3600;
 
-    table.append_point(b"sensor", 0, b"bucket0").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 0, b"bucket0", tx_id).unwrap();
     table
-        .append_point(b"sensor", bucket_size as i64, b"bucket1")
+        .append_point(b"sensor", bucket_size as i64, b"bucket1", tx_id)
         .unwrap();
     table
-        .append_point(b"sensor", (bucket_size * 2) as i64, b"bucket2")
+        .append_point(b"sensor", (bucket_size * 2) as i64, b"bucket2", tx_id)
         .unwrap();
 
     let cursor = table
@@ -386,9 +404,10 @@ fn test_bucket_rolling_with_many_inserts() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..100 {
         table
-            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -410,9 +429,10 @@ fn test_table_statistics() {
 
     assert_eq!(table.stats().unwrap().entry_count, Some(0));
 
+    let tx_id = create_tx_id();
     for i in 0..10 {
         table
-            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -434,9 +454,10 @@ fn test_table_verify() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..5 {
         table
-            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -488,7 +509,8 @@ fn test_empty_time_range() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"value").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"value", tx_id).unwrap();
 
     let cursor = table.scan_series(b"sensor", 200, 200).unwrap();
     assert_eq!(cursor.count(), 0);
@@ -506,10 +528,11 @@ fn test_negative_timestamps_scan() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 1000, b"old").unwrap();
-    table.append_point(b"sensor", 2000, b"older").unwrap();
-    table.append_point(b"sensor", 3000, b"epoch").unwrap();
-    table.append_point(b"sensor", 4000, b"new").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 1000, b"old", tx_id).unwrap();
+    table.append_point(b"sensor", 2000, b"older", tx_id).unwrap();
+    table.append_point(b"sensor", 3000, b"epoch", tx_id).unwrap();
+    table.append_point(b"sensor", 4000, b"new", tx_id).unwrap();
 
     let cursor = table.scan_series(b"sensor", 1500, 2500).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -531,9 +554,10 @@ fn test_negative_timestamps_latest_before() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 1000, b"first").unwrap();
-    table.append_point(b"sensor", 2000, b"second").unwrap();
-    table.append_point(b"sensor", 3000, b"third").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 1000, b"first", tx_id).unwrap();
+    table.append_point(b"sensor", 2000, b"second", tx_id).unwrap();
+    table.append_point(b"sensor", 3000, b"third", tx_id).unwrap();
 
     let result = table.latest_before(b"sensor", 2500).unwrap();
     assert!(result.is_some());
@@ -552,9 +576,10 @@ fn test_cursor_iteration_stops_at_end() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..5 {
         table
-            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes())
+            .append_point(b"sensor", i * 100, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -583,7 +608,8 @@ fn test_cursor_next_beyond_end() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 100, b"value").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 100, b"value", tx_id).unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 200).unwrap();
     assert!(cursor.valid());
@@ -607,10 +633,11 @@ fn test_concurrent_series_independence() {
     )
     .unwrap();
 
-    table.append_point(b"series_a", 100, b"a1").unwrap();
-    table.append_point(b"series_a", 200, b"a2").unwrap();
-    table.append_point(b"series_b", 150, b"b1").unwrap();
-    table.append_point(b"series_b", 250, b"b2").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"series_a", 100, b"a1", tx_id).unwrap();
+    table.append_point(b"series_a", 200, b"a2", tx_id).unwrap();
+    table.append_point(b"series_b", 150, b"b1", tx_id).unwrap();
+    table.append_point(b"series_b", 250, b"b2", tx_id).unwrap();
 
     let cursor_a = table.scan_series(b"series_a", 0, 300).unwrap();
     assert_eq!(cursor_a.count(), 2);
@@ -631,9 +658,10 @@ fn test_large_number_of_points() {
     )
     .unwrap();
 
+    let tx_id = create_tx_id();
     for i in 0..10000 {
         table
-            .append_point(b"sensor", i, format!("value_{}", i).as_bytes())
+            .append_point(b"sensor", i, format!("value_{}", i).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -653,9 +681,10 @@ fn test_timestamp_ordering_in_scan() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 300, b"third").unwrap();
-    table.append_point(b"sensor", 100, b"first").unwrap();
-    table.append_point(b"sensor", 200, b"second").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 300, b"third", tx_id).unwrap();
+    table.append_point(b"sensor", 100, b"first", tx_id).unwrap();
+    table.append_point(b"sensor", 200, b"second", tx_id).unwrap();
 
     let mut cursor = table.scan_series(b"sensor", 0, 400).unwrap();
     assert!(cursor.valid());
@@ -690,9 +719,10 @@ fn test_value_key_preservation() {
         b"unicode:\xe6\xb5\x8b\xe8\xaf\x95".as_slice(),
     ];
 
+    let tx_id = create_tx_id();
     for (i, value) in values.iter().enumerate() {
         table
-            .append_point(b"sensor", i as i64 * 100, value)
+            .append_point(b"sensor", i as i64 * 100, value, tx_id)
             .unwrap();
     }
 
@@ -721,7 +751,8 @@ fn test_empty_series_key() {
     )
     .unwrap();
 
-    table.append_point(b"", 100, b"value").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"", 100, b"value", tx_id).unwrap();
 
     let cursor = table.scan_series(b"", 0, 200).unwrap();
     assert_eq!(cursor.count(), 1);
@@ -739,7 +770,8 @@ fn test_zero_timestamp() {
     )
     .unwrap();
 
-    table.append_point(b"sensor", 0, b"epoch").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(b"sensor", 0, b"epoch", tx_id).unwrap();
 
     let cursor = table.scan_series(b"sensor", 0, 1).unwrap();
     assert_eq!(cursor.count(), 1);

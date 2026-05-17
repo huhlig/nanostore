@@ -1757,7 +1757,7 @@ impl<FS: FileSystem> Transaction<FS> {
                             timestamp,
                             value_key,
                         } => {
-                            ts.append_point(series_key, *timestamp, value_key, self.txn_id, commit_lsn)
+                            TimeSeries::append_point(ts.as_ref(), series_key, *timestamp, value_key, self.txn_id, commit_lsn)
                                 .map_err(|e| {
                                     TransactionError::Other(format!(
                                         "TimeSeries append_point failed: {}",

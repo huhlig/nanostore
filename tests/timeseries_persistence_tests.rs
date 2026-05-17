@@ -433,8 +433,9 @@ fn test_timeseries_cursor_aggregations() {
         (400i64, b"40".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -475,8 +476,9 @@ fn test_timeseries_cursor_downsampling_avg() {
         (80i64, b"50".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -516,11 +518,12 @@ fn test_timeseries_cursor_skips_non_numeric_values_for_numeric_aggregations() {
     .unwrap();
 
     let series_key = b"sensor-mixed";
-    table.append_point(series_key, 100, b"12").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(series_key, 100, b"12", tx_id).unwrap();
     table
-        .append_point(series_key, 200, b"not-a-number")
+        .append_point(series_key, 200, b"not-a-number", tx_id)
         .unwrap();
-    table.append_point(series_key, 300, b"18").unwrap();
+    table.append_point(series_key, 300, b"18", tx_id).unwrap();
 
     // Commit the versions so they become visible
     table
@@ -549,9 +552,10 @@ fn test_timeseries_cursor_downsampling_count_and_invalid_interval() {
     .unwrap();
 
     let series_key = b"sensor-count";
-    table.append_point(series_key, 10, b"bad").unwrap();
-    table.append_point(series_key, 20, b"still-bad").unwrap();
-    table.append_point(series_key, 70, b"ignored").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(series_key, 10, b"bad", tx_id).unwrap();
+    table.append_point(series_key, 20, b"still-bad", tx_id).unwrap();
+    table.append_point(series_key, 70, b"ignored", tx_id).unwrap();
 
     // Commit the versions so they become visible
     table
@@ -617,7 +621,8 @@ fn test_aggregation_with_single_value() {
     .unwrap();
 
     let series_key = b"single-value";
-    table.append_point(series_key, 100, b"42.5").unwrap();
+    let tx_id = create_tx_id();
+    table.append_point(series_key, 100, b"42.5", tx_id).unwrap();
 
     // Commit the versions so they become visible
     table
@@ -653,8 +658,9 @@ fn test_aggregation_with_negative_values() {
         (400i64, b"-15.0".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -684,8 +690,9 @@ fn test_aggregation_with_zero_values() {
     .unwrap();
 
     let series_key = b"zero-values";
+    let tx_id = create_tx_id();
     for i in 0..5 {
-        table.append_point(series_key, i * 100, b"0").unwrap();
+        table.append_point(series_key, i * 100, b"0", tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -721,8 +728,9 @@ fn test_aggregation_with_very_large_values() {
         (300i64, b"1e306".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -757,8 +765,9 @@ fn test_aggregation_with_very_small_values() {
         (300i64, b"1e-306".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -795,8 +804,9 @@ fn test_downsampling_with_uneven_windows() {
         (95i64, b"40".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -840,8 +850,9 @@ fn test_downsampling_with_min_max() {
         (80i64, b"150".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -895,8 +906,9 @@ fn test_aggregation_with_json_nested_values() {
         (300i64, br#"{"sum": 30.5}"#.as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
@@ -924,9 +936,10 @@ fn test_aggregation_with_all_non_numeric() {
     .unwrap();
 
     let series_key = b"all-non-numeric";
+    let tx_id = create_tx_id();
     for i in 0..5 {
         table
-            .append_point(series_key, i * 100, b"not-a-number")
+            .append_point(series_key, i * 100, b"not-a-number", tx_id)
             .unwrap();
     }
 
@@ -960,9 +973,10 @@ fn test_downsampling_with_large_interval() {
     .unwrap();
 
     let series_key = b"large-interval";
+    let tx_id = create_tx_id();
     for i in 0..10 {
         table
-            .append_point(series_key, i * 10, format!("{}", i * 10).as_bytes())
+            .append_point(series_key, i * 10, format!("{}", i * 10).as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -998,8 +1012,9 @@ fn test_multiple_aggregations_consistency() {
         (300i64, b"30".as_slice()),
     ];
 
+    let tx_id = create_tx_id();
     for (ts, value) in samples {
-        table.append_point(series_key, ts, value).unwrap();
+        table.append_point(series_key, ts, value, tx_id).unwrap();
     }
 
     // Commit the versions so they become visible
