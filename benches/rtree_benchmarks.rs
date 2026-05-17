@@ -22,6 +22,7 @@ use nanokv::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig
 use nanokv::txn::TransactionId;
 use nanokv::types::TableId;
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 use std::hint::black_box;
 use std::sync::Arc;
 
@@ -78,7 +79,7 @@ fn bench_insertion_throughput(c: &mut Criterion) {
 
                 for (id, point) in &points {
                     rtree
-                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
                         .unwrap();
                 }
                 black_box(rtree);
@@ -124,6 +125,7 @@ fn bench_insertion_by_strategy(c: &mut Criterion) {
                                     id,
                                     GeometryRef::Point(*point),
                                     TransactionId::from(0),
+                                    LogSequenceNumber::from(0),
                                 )
                                 .unwrap();
                         }
@@ -162,6 +164,7 @@ fn bench_intersects_query(c: &mut Criterion) {
                                 &id,
                                 GeometryRef::Point(*point),
                                 TransactionId::from(0),
+                                LogSequenceNumber::from(0),
                             )
                             .unwrap();
                     }
@@ -214,6 +217,7 @@ fn bench_nearest_query(c: &mut Criterion) {
                                 &id,
                                 GeometryRef::Point(*point),
                                 TransactionId::from(0),
+                                LogSequenceNumber::from(0),
                             )
                             .unwrap();
                     }
@@ -250,7 +254,7 @@ fn bench_tree_height(c: &mut Criterion) {
 
                 for (id, point) in &points {
                     rtree
-                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
                         .unwrap();
                 }
 
@@ -281,7 +285,7 @@ fn bench_memory_usage(c: &mut Criterion) {
 
                 for (id, point) in &points {
                     rtree
-                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                        .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
                         .unwrap();
                 }
 
@@ -319,7 +323,7 @@ fn bench_node_capacity(c: &mut Criterion) {
 
                     for (id, point) in points {
                         rtree
-                            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
                             .unwrap();
                     }
 
@@ -370,6 +374,7 @@ fn bench_strategy_capacity_matrix(c: &mut Criterion) {
                                     id,
                                     GeometryRef::Point(*point),
                                     TransactionId::from(0),
+                                    LogSequenceNumber::from(0),
                                 )
                                 .unwrap();
                         }
@@ -411,7 +416,7 @@ fn bench_bulk_loading(c: &mut Criterion) {
 
                     for (id, point) in points {
                         rtree
-                            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+                            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
                             .unwrap();
                     }
 
@@ -473,7 +478,7 @@ fn bench_bulk_query_performance(c: &mut Criterion) {
     );
     for (id, point) in &points {
         rtree_seq
-            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0))
+            .insert_geometry(id, GeometryRef::Point(*point), TransactionId::from(0), LogSequenceNumber::from(0))
             .unwrap();
     }
 

@@ -20,6 +20,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, 
 use nanokv::pager::{Pager, PagerConfig};
 use nanokv::table::TimeSeries;
 use nanokv::table::timeseries::{TimeSeriesAggregation, TimeSeriesConfig, TimeSeriesTable};
+use nanokv::txn::TransactionId;
 use nanokv::types::TableId;
 use nanokv::vfs::MemoryFileSystem;
 use std::sync::Arc;
@@ -37,11 +38,12 @@ fn create_table_with_data(name: &str, num_points: usize) -> TimeSeriesTable<Memo
     .unwrap();
 
     let series_key = b"sensor-bench";
+    let tx_id = TransactionId::from(1);
     for i in 0..num_points {
         let timestamp = i as i64 * 1000; // 1 second intervals
         let value = format!("{}.{}", 20 + (i % 50), i % 10);
         table
-            .append_point(series_key, timestamp, value.as_bytes())
+            .append_point(series_key, timestamp, value.as_bytes(), tx_id)
             .unwrap();
     }
 
@@ -198,8 +200,9 @@ fn bench_sparse_aggregation(c: &mut Criterion) {
             } else {
                 format!("{}.{}", 20 + (i % 50), i % 10)
             };
+            let tx_id = TransactionId::from(1);
             table
-                .append_point(series_key, timestamp, value.as_bytes())
+                .append_point(series_key, timestamp, value.as_bytes(), tx_id)
                 .unwrap();
         }
 

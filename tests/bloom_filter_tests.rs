@@ -117,8 +117,10 @@ fn test_false_positive_rate_calculation() {
     .unwrap();
 
     // Insert items
+    let tx_id = TransactionId::from(1);
+    let commit_lsn = LogSequenceNumber::from(1);
     for i in 0..num_items {
-        filter.insert(&i.to_le_bytes()).unwrap();
+        filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
     }
 
     // Check theoretical false positive rate
@@ -194,8 +196,10 @@ fn test_large_filter() {
     .unwrap();
 
     // Insert many items
+    let tx_id = TransactionId::from(1);
+    let commit_lsn = LogSequenceNumber::from(1);
     for i in 0..num_items {
-        filter.insert(&i.to_le_bytes()).unwrap();
+        filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
     }
 
     // Verify all inserted items are found
@@ -237,8 +241,10 @@ fn test_different_bits_per_key() {
         .unwrap();
 
         // Insert items
+        let tx_id = TransactionId::from(1);
+        let commit_lsn = LogSequenceNumber::from(1);
         for i in 0u32..1000u32 {
-            filter.insert(&i.to_le_bytes()).unwrap();
+            filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
         }
 
         // Measure false positive rate
@@ -288,8 +294,10 @@ fn test_custom_hash_functions() {
         .unwrap();
 
         // Insert items
+        let tx_id = TransactionId::from(1);
+        let commit_lsn = LogSequenceNumber::from(1);
         for i in 0u32..1000u32 {
-            filter.insert(&i.to_le_bytes()).unwrap();
+            filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
         }
 
         // Verify all items are found
@@ -368,8 +376,10 @@ fn test_verification() {
     .unwrap();
 
     // Insert items
+    let tx_id = TransactionId::from(1);
+    let commit_lsn = LogSequenceNumber::from(1);
     for i in 0u32..50u32 {
-        filter.insert(&i.to_le_bytes()).unwrap();
+        filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
     }
 
     // Verify the filter
@@ -418,8 +428,10 @@ fn test_concurrent_reads() {
     .unwrap();
 
     // Insert items
+    let tx_id = TransactionId::from(1);
+    let commit_lsn = LogSequenceNumber::from(1);
     for i in 0u32..1000u32 {
-        filter.insert(&i.to_le_bytes()).unwrap();
+        filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
     }
 
     // Share the filter across threads (wrapped in Arc)
@@ -465,8 +477,10 @@ fn test_statistics() {
     .unwrap();
 
     // Insert items and check stats
+    let tx_id = TransactionId::from(1);
+    let commit_lsn = LogSequenceNumber::from(1);
     for i in 0u32..50u32 {
-        filter.insert(&i.to_le_bytes()).unwrap();
+        filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
     }
 
     use nanokv::table::ApproximateMembership;

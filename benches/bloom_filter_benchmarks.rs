@@ -19,8 +19,10 @@
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use nanokv::pager::{PageSize, Pager, PagerConfig};
 use nanokv::table::bloom::PagedBloomFilter;
+use nanokv::txn::TransactionId;
 use nanokv::types::TableId;
 use nanokv::vfs::MemoryFileSystem;
+use nanokv::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 fn create_test_pager() -> Arc<Pager<MemoryFileSystem>> {
@@ -54,8 +56,10 @@ fn bench_insert(c: &mut Criterion) {
                     .unwrap()
                 },
                 |mut filter| {
+                    let tx_id = TransactionId::from(1);
+                    let commit_lsn = LogSequenceNumber::from(1);
                     for i in 0..size {
-                        filter.insert(black_box(&i.to_le_bytes())).unwrap();
+                        filter.insert(black_box(&i.to_le_bytes()), tx_id, commit_lsn).unwrap();
                     }
                 },
                 criterion::BatchSize::SmallInput,
@@ -84,8 +88,10 @@ fn bench_contains(c: &mut Criterion) {
             )
             .unwrap();
 
+            let tx_id = TransactionId::from(1);
+            let commit_lsn = LogSequenceNumber::from(1);
             for i in 0..size {
-                filter.insert(&i.to_le_bytes()).unwrap();
+                filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
             }
 
             // Benchmark lookups
@@ -118,8 +124,10 @@ fn bench_false_positive_check(c: &mut Criterion) {
             )
             .unwrap();
 
+            let tx_id = TransactionId::from(1);
+            let commit_lsn = LogSequenceNumber::from(1);
             for i in 0..size {
-                filter.insert(&i.to_le_bytes()).unwrap();
+                filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
             }
 
             // Benchmark lookups for non-existent keys
@@ -156,8 +164,10 @@ fn bench_different_bits_per_key(c: &mut Criterion) {
                         )
                         .unwrap();
 
+                        let tx_id = TransactionId::from(1);
+                        let commit_lsn = LogSequenceNumber::from(1);
                         for i in 0..size {
-                            filter.insert(&i.to_le_bytes()).unwrap();
+                            filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
                         }
 
                         filter
@@ -198,8 +208,10 @@ fn bench_different_hash_functions(c: &mut Criterion) {
                         )
                         .unwrap();
 
+                        let tx_id = TransactionId::from(1);
+                        let commit_lsn = LogSequenceNumber::from(1);
                         for i in 0..size {
-                            filter.insert(&i.to_le_bytes()).unwrap();
+                            filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
                         }
 
                         filter
@@ -236,8 +248,10 @@ fn bench_clear(c: &mut Criterion) {
                     )
                     .unwrap();
 
+                    let tx_id = TransactionId::from(1);
+                    let commit_lsn = LogSequenceNumber::from(1);
                     for i in 0..size {
-                        filter.insert(&i.to_le_bytes()).unwrap();
+                        filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
                     }
 
                     filter
@@ -273,8 +287,10 @@ fn bench_persistence(c: &mut Criterion) {
                 )
                 .unwrap();
 
+                let tx_id = TransactionId::from(1);
+                let commit_lsn = LogSequenceNumber::from(1);
                 for i in 0..size {
-                    filter.insert(black_box(&i.to_le_bytes())).unwrap();
+                    filter.insert(black_box(&i.to_le_bytes()), tx_id, commit_lsn).unwrap();
                 }
 
                 black_box(filter.root_page_id())
@@ -298,8 +314,10 @@ fn bench_persistence(c: &mut Criterion) {
                 )
                 .unwrap();
 
+                let tx_id = TransactionId::from(1);
+                let commit_lsn = LogSequenceNumber::from(1);
                 for i in 0..size {
-                    filter.insert(&i.to_le_bytes()).unwrap();
+                    filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
                 }
 
                 (pager, filter.root_page_id())
