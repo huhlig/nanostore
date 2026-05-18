@@ -57,8 +57,10 @@ pub struct SegmentMetadata {
 pub struct PersistedSegment {
     /// Segment metadata
     pub metadata: SegmentMetadata,
-    /// Buffered segment bytes
+    /// Buffered segment bytes not yet flushed to pages
     pub buffer: Vec<u8>,
+    /// Fully flushed data pages in order
+    pub flushed_pages: Vec<PageId>,
 }
 
 /// A segment in the append log.
@@ -72,13 +74,44 @@ pub struct Segment {
     /// Metadata
     metadata: RwLock<SegmentMetadata>,
 
-    /// Persisted segment contents are tracked in-memory and flushed by AppendLog metadata persistence.
+    /// Pager for persistent storage
+    pager: Arc<dyn SegmentPager>,
+
+    /// Data pages that hold flushed bytes
+    flushed_pages: RwLock<Vec<PageId>>,
 
     /// Write buffer for the active segment
     write_buffer: RwLock<Vec<u8>>,
 }
 
+trait SegmentPager: Send + Sync {
+    fn allocate_page(&self, page_type: PageType) -> TableResult<PageId>;
+    fn write_page(&self, page: &Page) -> TableResult<()>;
+    fn read_page(&self, page_id: PageId) -> TableResult<Page>;
+    fn data_size(&self) -> usize;
+}
+
+impl<FS: FileSystem + 'static> SegmentPager for Pager<FS> {
+    fn allocate_page(&self, page_type: PageType) -> TableResult<PageId> {
+        Pager::allocate_page(self, page_type).map_err(TableError::from)
+    }
+
+    fn write_page(&self, page: &Page) -> TableResult<()> {
+        Pager::write_page(self, page).map_err(TableError::from)
+    }
+
+    fn read_page(&self, page_id: PageId) -> TableResult<Page> {
+        Pager::read_page(self, page_id).map_err(TableError::from)
+    }
+
+    fn data_size(&self) -> usize {
+        self.page_size().data_size()
+    }
+}
+
 impl Segment {
+    const PAGE_HEADER_SIZE: usize = 16;
+
     /// Create a new segment.
     pub fn new<FS: FileSystem + 'static>(
         id: SegmentId,
@@ -90,6 +123,7 @@ impl Segment {
             .map_err(|e| {
                 crate::table::TableError::Other(format!("Failed to allocate segment page: {}", e))
             })?;
+        let pager: Arc<dyn SegmentPager> = pager;
 
         let created_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -105,10 +139,11 @@ impl Segment {
             last_page_id: first_page_id,
         };
 
-        let _ = pager;
         Ok(Self {
             id,
             metadata: RwLock::new(metadata),
+            pager,
+            flushed_pages: RwLock::new(Vec::new()),
             write_buffer: RwLock::new(Vec::new()),
         })
     }
@@ -136,89 +171,56 @@ impl Segment {
     /// Append a key-value pair to the segment.
     ///
     /// Returns the offset where the entry was written.
-    pub fn append(&self, key: &[u8], value: &[u8]) -> TableResult<u64> {
+    pub fn append(&self, key: &[u8], value: &[u8], flush_threshold: usize) -> TableResult<u64> {
         let mut buffer = self.write_buffer.write().unwrap();
         let mut metadata = self.metadata.write().unwrap();
 
-        // Calculate entry size: key_len (4 bytes) + key + value_len (4 bytes) + value
         let entry_size = 4 + key.len() + 4 + value.len();
         let offset = metadata.size;
 
-        // Encode entry: [key_len: u32][key][value_len: u32][value]
         buffer.extend_from_slice(&(key.len() as u32).to_le_bytes());
         buffer.extend_from_slice(key);
         buffer.extend_from_slice(&(value.len() as u32).to_le_bytes());
         buffer.extend_from_slice(value);
 
-        // Update metadata
         metadata.entry_count += 1;
         metadata.size += entry_size as u64;
 
-        // TODO: Flush buffer to pages when it gets large enough
-        // For now, keep everything in memory
+        let should_flush = buffer.len() >= flush_threshold;
+        drop(metadata);
+
+        if should_flush {
+            self.flush_locked(&mut buffer)?;
+        }
 
         Ok(offset)
     }
 
     /// Read a value at the specified offset.
     pub fn read_at(&self, offset: u64) -> TableResult<Option<ValueBuf>> {
+        let total_size = self.metadata.read().unwrap().size;
+        if offset >= total_size {
+            return Ok(None);
+        }
+
+        let flushed_len = self.flushed_len()?;
+        if offset < flushed_len as u64 {
+            return self.read_at_from_flushed(offset, flushed_len);
+        }
+
         let buffer = self.write_buffer.read().unwrap();
+        let in_memory_offset = offset
+            .checked_sub(flushed_len as u64)
+            .ok_or_else(|| TableError::corruption("appendlog-segment", "offset-underflow", "offset before flushed prefix"))?
+            as usize;
 
-        // Check if offset is valid
-        if offset >= buffer.len() as u64 {
-            return Ok(None);
-        }
-
-        let mut pos = offset as usize;
-
-        // Read key length
-        if pos + 4 > buffer.len() {
-            return Ok(None);
-        }
-        let key_len = u32::from_le_bytes([
-            buffer[pos],
-            buffer[pos + 1],
-            buffer[pos + 2],
-            buffer[pos + 3],
-        ]) as usize;
-        pos += 4;
-
-        // Skip key
-        if pos + key_len > buffer.len() {
-            return Ok(None);
-        }
-        pos += key_len;
-
-        // Read value length
-        if pos + 4 > buffer.len() {
-            return Ok(None);
-        }
-        let value_len = u32::from_le_bytes([
-            buffer[pos],
-            buffer[pos + 1],
-            buffer[pos + 2],
-            buffer[pos + 3],
-        ]) as usize;
-        pos += 4;
-
-        // Read value
-        if pos + value_len > buffer.len() {
-            return Ok(None);
-        }
-        let value = buffer[pos..pos + value_len].to_vec();
-
-        Ok(Some(ValueBuf(value)))
+        Self::decode_value_at(&buffer, in_memory_offset)
     }
 
     /// Flush the write buffer to disk.
-    ///
-    /// Marks the buffer as flushed. The actual page writing is handled
-    /// by the AppendLog during segment rollover.
     pub fn flush(&self) -> TableResult<()> {
-        // Buffer is flushed when segment rolls over.
-        // The AppendLog handles writing buffered data to pages during rollover.
-        // For now, this is a no-op since data stays in memory until rollover.
-        Ok(())
+        let mut buffer = self.write_buffer.write().unwrap();
+        self.flush_locked(&mut buffer)
     }
 
     /// Get the metadata for this segment.
@@ -236,15 +238,168 @@ impl Segment {
         LogSequenceNumber::from(self.metadata.read().unwrap().created_at)
     }
 
+    fn flush_locked(&self, buffer: &mut Vec<u8>) -> TableResult<()> {
+        let page_payload_size = self.page_payload_size();
+        if page_payload_size == 0 || buffer.is_empty() {
+            return Ok(());
+        }
+
+        let flush_len = if buffer.len() < page_payload_size {
+            buffer.len()
+        } else {
+            (buffer.len() / page_payload_size) * page_payload_size
+        };
+        let bytes_to_flush = buffer[..flush_len].to_vec();
+        let new_pages = self.write_bytes_to_pages(&bytes_to_flush)?;
+
+        {
+            let mut pages = self.flushed_pages.write().unwrap();
+            pages.extend(new_pages);
+            let mut metadata = self.metadata.write().unwrap();
+            if let Some(last_page_id) = pages.last().copied() {
+                metadata.last_page_id = last_page_id;
+            }
+        }
+
+        buffer.drain(..flush_len);
+        Ok(())
+    }
+
+    fn flushed_len(&self) -> TableResult<usize> {
+        let page_ids = self.flushed_pages.read().unwrap().clone();
+        let mut total = 0usize;
+
+        for page_id in page_ids {
+            let page = self.pager.read_page(page_id)?;
+            if page.data.len() < Self::PAGE_HEADER_SIZE {
+                return Err(TableError::corruption(
+                    format!("appendlog-segment-page-{}", page_id.as_u64()),
+                    "short-page",
+                    "segment page missing appendlog payload header",
+                ));
+            }
+
+            let chunk_len = u64::from_le_bytes(page.data[0..8].try_into().unwrap()) as usize;
+            let available = page.data.len().saturating_sub(Self::PAGE_HEADER_SIZE);
+            if chunk_len > available {
+                return Err(TableError::corruption(
+                    format!("appendlog-segment-page-{}", page_id.as_u64()),
+                    "invalid-chunk-len",
+                    format!("chunk length {} exceeds available {}", chunk_len, available),
+                ));
+            }
+
+            total += chunk_len;
+        }
+
+        Ok(total)
+    }
+
+    fn page_payload_size(&self) -> usize {
+        self.pager.data_size().saturating_sub(Self::PAGE_HEADER_SIZE)
+    }
+
+    fn write_bytes_to_pages(&self, bytes: &[u8]) -> TableResult<Vec<PageId>> {
+        let payload_size = self.page_payload_size();
+        if payload_size == 0 {
+            return Err(TableError::Other(
+                "AppendLog segment page payload size is zero".to_string(),
+            ));
+        }
+
+        let total_pages = bytes.len().div_ceil(payload_size);
+        let mut written_pages = Vec::with_capacity(total_pages);
+
+        for (page_index, chunk) in bytes.chunks(payload_size).enumerate() {
+            let page_id = self.pager.allocate_page(PageType::LsmData)?;
+            let mut page = Page::new(page_id, PageType::LsmData, self.pager.data_size());
+            let next_page = if page_index + 1 < total_pages {
+                1u64
+            } else {
+                0u64
+            };
+
+            page.data.extend_from_slice(&(chunk.len() as u64).to_le_bytes());
+            page.data.extend_from_slice(&next_page.to_le_bytes());
+            page.data.extend_from_slice(chunk);
+            self.pager.write_page(&page)?;
+            written_pages.push(page_id);
+        }
+
+        Ok(written_pages)
+    }
+
+    fn read_at_from_flushed(&self, offset: u64, flushed_len: usize) -> TableResult<Option<ValueBuf>> {
+        let mut flushed_bytes = Vec::with_capacity(flushed_len);
+        let page_ids = self.flushed_pages.read().unwrap().clone();
+
+        for page_id in page_ids {
+            let page = self.pager.read_page(page_id)?;
+            if page.data.len() < Self::PAGE_HEADER_SIZE {
+                return Err(TableError::corruption(
+                    format!("appendlog-segment-page-{}", page_id.as_u64()),
+                    "short-page",
+                    "segment page missing appendlog payload header",
+                ));
+            }
+
+            let chunk_len = u64::from_le_bytes(page.data[0..8].try_into().unwrap()) as usize;
+            let available = page.data.len().saturating_sub(Self::PAGE_HEADER_SIZE);
+            if chunk_len > available {
+                return Err(TableError::corruption(
+                    format!("appendlog-segment-page-{}", page_id.as_u64()),
+                    "invalid-chunk-len",
+                    format!("chunk length {} exceeds available {}", chunk_len, available),
+                ));
+            }
+
+            flushed_bytes.extend_from_slice(&page.data[Self::PAGE_HEADER_SIZE..Self::PAGE_HEADER_SIZE + chunk_len]);
+        }
+
+        Self::decode_value_at(&flushed_bytes, offset as usize)
+    }
+
+    fn decode_value_at(bytes: &[u8], offset: usize) -> TableResult<Option<ValueBuf>> {
+        if offset >= bytes.len() {
+            return Ok(None);
+        }
+
+        let mut pos = offset;
+
+        if pos + 4 > bytes.len() {
+            return Ok(None);
+        }
+        let key_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
+        pos += 4;
+
+        if pos + key_len > bytes.len() {
+            return Ok(None);
+        }
+        pos += key_len;
+
+        if pos + 4 > bytes.len() {
+            return Ok(None);
+        }
+        let value_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
+        pos += 4;
+
+        if pos + value_len > bytes.len() {
+            return Ok(None);
+        }
+
+        Ok(Some(ValueBuf(bytes[pos..pos + value_len].to_vec())))
+    }
+
     /// Restore a segment from previously persisted metadata and buffer contents.
     pub fn from_persisted<FS: FileSystem + 'static>(
         persisted: PersistedSegment,
         pager: Arc<Pager<FS>>,
     ) -> TableResult<Self> {
-        let _ = pager;
         Ok(Self {
             id: persisted.metadata.id,
             metadata: RwLock::new(persisted.metadata),
+            pager,
+            flushed_pages: RwLock::new(persisted.flushed_pages),
             write_buffer: RwLock::new(persisted.buffer),
         })
     }
@@ -253,7 +408,12 @@ impl Segment {
     pub fn persist(&self) -> TableResult<PersistedSegment> {
         let metadata = self.metadata();
         let buffer = self.buffer();
-        Ok(PersistedSegment { metadata, buffer })
+        let flushed_pages = self.flushed_pages.read().unwrap().clone();
+        Ok(PersistedSegment {
+            metadata,
+            buffer,
+            flushed_pages,
+        })
     }
 }
 
@@ -287,7 +447,7 @@ mod tests {
         // Append an entry
         let key = b"test_key";
         let value = b"test_value";
-        let offset = segment.append(key, value).unwrap();
+        let offset = segment.append(key, value, usize::MAX).unwrap();
 
         assert_eq!(offset, 0);
         assert_eq!(segment.entry_count(), 1);
@@ -311,7 +471,7 @@ mod tests {
 
         let mut offsets = Vec::new();
         for (key, value) in &entries {
-            let offset = segment.append(key, value).unwrap();
+            let offset = segment.append(key, value, usize::MAX).unwrap();
             offsets.push(offset);
         }
 
@@ -333,7 +493,7 @@ mod tests {
         let value = b"value";
 
         // Entry size: 4 (key_len) + 3 (key) + 4 (value_len) + 5 (value) = 16 bytes
-        segment.append(key, value).unwrap();
+        segment.append(key, value, usize::MAX).unwrap();
 
         assert_eq!(segment.size(), 16);
     }

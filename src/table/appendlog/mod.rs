@@ -392,7 +392,9 @@ impl<FS: FileSystem> AppendLog<FS> {
         }
 
         // Append to active segment
-        let offset = state.active_segment.append(key, value)?;
+        let offset = state
+            .active_segment
+            .append(key, value, self.config.write_buffer_size)?;
         let segment_id = state.active_segment.id();
 
         // Update index with version chain

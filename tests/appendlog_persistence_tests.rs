@@ -90,4 +90,52 @@ fn test_appendlog_table_reopens_with_persisted_rows() {
     }
 }
 
+#[test]
+fn test_appendlog_table_reopens_with_flushed_segment_rows() {
+    let fs = MemoryFileSystem::new();
+    let table_id;
+
+    {
+        let db = Database::new(&fs, "appendlog-flush-persist.wal", "appendlog-flush-persist.db").unwrap();
+        let mut options = appendlog_table_options();
+        options.appendlog_config = Some(AppendLogConfig::default().with_write_buffer_size(1));
+        table_id = db.create_table("events", options).unwrap();
+
+        let table = db.table(table_id).unwrap();
+        table.insert(b"k1", b"v1").unwrap();
+        table.insert(b"k2", b"v2").unwrap();
+        table.insert(b"k3", b"v3").unwrap();
+    }
+
+    {
+        let reopened =
+            Database::open(&fs, "appendlog-flush-persist.wal", "appendlog-flush-persist.db").unwrap();
+        let reopened_id = reopened.open_table("events").unwrap().unwrap();
+        assert_eq!(reopened_id, table_id);
+
+        let table = reopened.table(reopened_id).unwrap();
+        assert_eq!(
+            table
+                .get(b"k1")
+                .unwrap()
+                .map(|value| value.as_ref().to_vec()),
+            Some(b"v1".to_vec())
+        );
+        assert_eq!(
+            table
+                .get(b"k2")
+                .unwrap()
+                .map(|value| value.as_ref().to_vec()),
+            Some(b"v2".to_vec())
+        );
+        assert_eq!(
+            table
+                .get(b"k3")
+                .unwrap()
+                .map(|value| value.as_ref().to_vec()),
+            Some(b"v3".to_vec())
+        );
+    }
+}
+
 // Made with Bob
