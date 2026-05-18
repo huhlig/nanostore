@@ -2183,27 +2183,22 @@ impl<FS: FileSystem> Transaction<FS> {
                 if let Some(engine) = self.engine_registry.get(*object_id) {
                     match &engine {
                         TableEngineInstance::AppendLog(appendlog) => {
-                            // AppendLog doesn't use writer pattern, access directly
-                            // Uses interior mutability (RwLock) so we can call methods on &AppendLog
                             match value_opt {
                                 Some(value) => {
-                                    MutableTable::put(&mut appendlog.as_ref(), key, value)
-                                        .map_err(|e| {
-                                            TransactionError::Other(format!(
-                                                "AppendLog put failed: {}",
-                                                e
-                                            ))
-                                        })?;
+                                    appendlog.put_tx(key, value, self.txn_id).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "AppendLog put_tx failed: {}",
+                                            e
+                                        ))
+                                    })?;
                                 }
                                 None => {
-                                    MutableTable::delete(&mut appendlog.as_ref(), key).map_err(
-                                        |e| {
-                                            TransactionError::Other(format!(
-                                                "AppendLog delete failed: {}",
-                                                e
-                                            ))
-                                        },
-                                    )?;
+                                    appendlog.delete_tx(key, self.txn_id).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "AppendLog delete_tx failed: {}",
+                                            e
+                                        ))
+                                    })?;
                                 }
                             }
 
@@ -2949,16 +2944,24 @@ impl<FS: FileSystem> Transaction<FS> {
                                 ))
                             })?;
                     }
+                    TableEngineInstance::AppendLog(appendlog) => {
+                        appendlog
+                            .commit_versions(self.txn_id, commit_lsn)
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "AppendLog commit_versions failed: {}",
+                                    e
+                                ))
+                            })?;
+                    }
                     // Specialty tables that don't yet have commit_versions() methods
                     // will be handled when they integrate VersionChain support
                     TableEngineInstance::PagedHnswVector(_)
                     | TableEngineInstance::PagedFullTextIndex(_)
                     | TableEngineInstance::MemoryGraphTable(_)
                     | TableEngineInstance::MemoryBlob(_)
-                    | TableEngineInstance::PagedBlob(_)
-                    | TableEngineInstance::AppendLog(_) => {
-                        // These tables either don't use version chains yet or are append-only
-                        // Skip commit_versions() for now
+                    | TableEngineInstance::PagedBlob(_) => {
+                        // These tables don't participate in transaction-level version commits yet
                     }
                 }
             }

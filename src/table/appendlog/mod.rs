@@ -63,7 +63,7 @@ mod config;
 mod segment;
 
 pub use self::config::{AppendLogConfig, CompressionType, RetentionPolicy};
-pub use self::segment::{Segment, SegmentId, SegmentMetadata};
+pub use self::segment::{PersistedSegment, Segment, SegmentId, SegmentMetadata};
 
 use crate::pager::{PageId, Pager};
 use crate::snap::Snapshot;
@@ -107,6 +107,24 @@ pub struct AppendLog<FS: FileSystem> {
 
     /// Internal state
     state: RwLock<AppendLogState>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedAppendLogEntry {
+    key: Vec<u8>,
+    segment_id: SegmentId,
+    offset: u64,
+    chain: VersionChain,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedAppendLogState {
+    active_segment: PersistedSegment,
+    immutable_segments: Vec<PersistedSegment>,
+    index: Vec<PersistedAppendLogEntry>,
+    next_segment_id: SegmentId,
+    entry_count: u64,
+    total_size: u64,
 }
 
 /// Internal mutable state of the AppendLog.
@@ -158,14 +176,16 @@ impl<FS: FileSystem> AppendLog<FS> {
             total_size: 0,
         };
 
-        Ok(Self {
+        let log = Self {
             table_id,
             name,
             config,
             pager,
             root_page_id,
             state: RwLock::new(state),
-        })
+        };
+        log.persist_metadata()?;
+        Ok(log)
     }
 
     /// Open an existing AppendLog table.
@@ -176,17 +196,40 @@ impl<FS: FileSystem> AppendLog<FS> {
         root_page_id: PageId,
         config: AppendLogConfig,
     ) -> TableResult<Self> {
-        // TODO: Load metadata from root page
-        // For now, create a new active segment
-        let active_segment = Segment::new(SegmentId(0), pager.clone())?;
+        let page = pager.read_page(root_page_id).map_err(|e| {
+            crate::table::TableError::Other(format!(
+                "Failed to read AppendLog metadata page {}: {}",
+                root_page_id, e
+            ))
+        })?;
+
+        let persisted: PersistedAppendLogState = serde_json::from_slice(&page.data).map_err(|e| {
+            crate::table::TableError::Other(format!(
+                "Failed to deserialize AppendLog metadata from page {}: {}",
+                root_page_id, e
+            ))
+        })?;
+
+        let active_segment = Segment::from_persisted(persisted.active_segment, pager.clone())?;
+        let mut immutable_segments = BTreeMap::new();
+        for segment in persisted.immutable_segments {
+            let restored = Segment::from_persisted(segment, pager.clone())?;
+            immutable_segments.insert(restored.id(), restored);
+        }
+
+        let index = persisted
+            .index
+            .into_iter()
+            .map(|entry| (entry.key, (entry.segment_id, entry.offset, entry.chain)))
+            .collect();
 
         let state = AppendLogState {
             active_segment,
-            immutable_segments: BTreeMap::new(),
-            index: BTreeMap::new(),
-            next_segment_id: SegmentId(1),
-            entry_count: 0,
-            total_size: 0,
+            immutable_segments,
+            index,
+            next_segment_id: persisted.next_segment_id,
+            entry_count: persisted.entry_count,
+            total_size: persisted.total_size,
         };
 
         Ok(Self {
@@ -222,6 +265,67 @@ impl<FS: FileSystem> AppendLog<FS> {
         state.next_segment_id = SegmentId(state.next_segment_id.0 + 1);
 
         debug!("Rolled segment {} to immutable", old_segment_id.0);
+
+        Ok(())
+    }
+
+    fn persist_metadata(&self) -> TableResult<()> {
+        let state = self.state.read().unwrap();
+
+        let active_segment = state.active_segment.persist()?;
+        let immutable_segments = state
+            .immutable_segments
+            .values()
+            .map(|segment| segment.persist())
+            .collect::<TableResult<Vec<_>>>()?;
+        let index = state
+            .index
+            .iter()
+            .map(|(key, (segment_id, offset, chain))| PersistedAppendLogEntry {
+                key: key.clone(),
+                segment_id: *segment_id,
+                offset: *offset,
+                chain: chain.clone(),
+            })
+            .collect();
+
+        let persisted = PersistedAppendLogState {
+            active_segment,
+            immutable_segments,
+            index,
+            next_segment_id: state.next_segment_id,
+            entry_count: state.entry_count,
+            total_size: state.total_size,
+        };
+
+        let metadata = serde_json::to_vec(&persisted).map_err(|e| {
+            crate::table::TableError::Other(format!(
+                "Failed to serialize AppendLog metadata: {}",
+                e
+            ))
+        })?;
+
+        let max_metadata = crate::pager::PageSize::default().data_size();
+        if metadata.len() > max_metadata {
+            return Err(crate::table::TableError::Other(format!(
+                "AppendLog metadata too large for root page: {} > {}",
+                metadata.len(),
+                max_metadata
+            )));
+        }
+
+        let mut page = crate::pager::Page::new(
+            self.root_page_id,
+            crate::pager::PageType::LsmMeta,
+            metadata.len(),
+        );
+        page.data = metadata;
+        self.pager.write_page(&page).map_err(|e| {
+            crate::table::TableError::Other(format!(
+                "Failed to write AppendLog metadata page {}: {}",
+                self.root_page_id, e
+            ))
+        })?;
 
         Ok(())
     }
@@ -306,6 +410,9 @@ impl<FS: FileSystem> AppendLog<FS> {
         let bytes_written = (key.len() + value.len()) as u64;
         state.total_size += bytes_written;
 
+        drop(state);
+        self.persist_metadata()?;
+
         Ok(bytes_written)
     }
 
@@ -332,6 +439,9 @@ impl<FS: FileSystem> AppendLog<FS> {
         if existed {
             state.entry_count = state.entry_count.saturating_sub(1);
         }
+
+        drop(state);
+        self.persist_metadata()?;
 
         Ok(existed)
     }
@@ -368,6 +478,9 @@ impl<FS: FileSystem> AppendLog<FS> {
             Self::commit_chain(chain, tx_id, commit_lsn);
         }
 
+        drop(state);
+        self.persist_metadata()?;
+
         Ok(())
     }
 
@@ -390,7 +503,27 @@ impl<FS: FileSystem> AppendLog<FS> {
             total_removed += Self::vacuum_chain(chain, min_visible_lsn);
         }
 
+        drop(state);
+        self.persist_metadata()?;
+
         Ok(total_removed)
+    }
+
+    fn latest_chain_lsn(chain: &VersionChain) -> Option<LogSequenceNumber> {
+        let mut current = Some(chain);
+        let mut latest: Option<LogSequenceNumber> = None;
+
+        while let Some(version) = current {
+            if let Some(commit_lsn) = version.commit_lsn {
+                latest = Some(match latest {
+                    Some(current_max) => current_max.max(commit_lsn),
+                    None => commit_lsn,
+                });
+            }
+            current = version.prev_version.as_deref();
+        }
+
+        latest
     }
 
     /// Helper to vacuum a version chain.
@@ -472,7 +605,15 @@ impl<FS: FileSystem> Table for AppendLog<FS> {
             key_stats: None,
             value_stats: None,
             histogram: None,
-            last_updated_lsn: Some(LogSequenceNumber::from(0)), // TODO: Track LSN
+            last_updated_lsn: state
+                .index
+                .values()
+                .filter_map(|(_, _, chain)| Self::latest_chain_lsn(chain))
+                .max()
+                .or_else(|| {
+                    let active_lsn = state.active_segment.latest_lsn();
+                    (active_lsn != LogSequenceNumber::from(0)).then_some(active_lsn)
+                }),
         })
     }
 }

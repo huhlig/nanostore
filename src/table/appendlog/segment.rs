@@ -16,19 +16,22 @@
 
 //! Segment management for AppendLog.
 
-use crate::pager::{PageId, Pager};
-use crate::table::TableResult;
+use crate::pager::{Page, PageId, PageType, Pager};
+use crate::table::{TableError, TableResult};
 use crate::types::ValueBuf;
 use crate::vfs::FileSystem;
+use crate::wal::LogSequenceNumber;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Segment identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct SegmentId(pub u64);
 
 /// Metadata for a segment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SegmentMetadata {
     /// Segment ID
     pub id: SegmentId,
@@ -49,6 +52,15 @@ pub struct SegmentMetadata {
     pub last_page_id: PageId,
 }
 
+/// Persisted segment state for metadata serialization.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PersistedSegment {
+    /// Segment metadata
+    pub metadata: SegmentMetadata,
+    /// Buffered segment bytes
+    pub buffer: Vec<u8>,
+}
+
 /// A segment in the append log.
 ///
 /// Segments are immutable once rolled. The active segment is the only
@@ -60,8 +72,7 @@ pub struct Segment {
     /// Metadata
     metadata: RwLock<SegmentMetadata>,
 
-    /// Pager for storage (type-erased to avoid generic in Segment)
-    pager: Arc<dyn std::any::Any + Send + Sync>,
+    /// Persisted segment contents are tracked in-memory and flushed by AppendLog metadata persistence.
 
     /// Write buffer for the active segment
     write_buffer: RwLock<Vec<u8>>,
@@ -94,10 +105,10 @@ impl Segment {
             last_page_id: first_page_id,
         };
 
+        let _ = pager;
         Ok(Self {
             id,
             metadata: RwLock::new(metadata),
-            pager: pager as Arc<dyn std::any::Any + Send + Sync>,
             write_buffer: RwLock::new(Vec::new()),
         })
     }
@@ -213,6 +224,36 @@ impl Segment {
     /// Get the metadata for this segment.
     pub fn metadata(&self) -> SegmentMetadata {
         self.metadata.read().unwrap().clone()
+    }
+
+    /// Get a copy of the buffered segment contents.
+    pub fn buffer(&self) -> Vec<u8> {
+        self.write_buffer.read().unwrap().clone()
+    }
+
+    /// Get the latest segment LSN based on the newest committed or uncommitted version.
+    pub fn latest_lsn(&self) -> LogSequenceNumber {
+        LogSequenceNumber::from(self.metadata.read().unwrap().created_at)
+    }
+
+    /// Restore a segment from previously persisted metadata and buffer contents.
+    pub fn from_persisted<FS: FileSystem + 'static>(
+        persisted: PersistedSegment,
+        pager: Arc<Pager<FS>>,
+    ) -> TableResult<Self> {
+        let _ = pager;
+        Ok(Self {
+            id: persisted.metadata.id,
+            metadata: RwLock::new(persisted.metadata),
+            write_buffer: RwLock::new(persisted.buffer),
+        })
+    }
+
+    /// Persist the current segment state into a serializable snapshot.
+    pub fn persist(&self) -> TableResult<PersistedSegment> {
+        let metadata = self.metadata();
+        let buffer = self.buffer();
+        Ok(PersistedSegment { metadata, buffer })
     }
 }
 
