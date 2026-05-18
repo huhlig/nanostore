@@ -445,9 +445,11 @@ fn test_vacuum_with_hash_engine() {
 }
 
 // Note: LSM and TimeSeries engines have special requirements and are tested
-// separately in their respective test files (lsm_tree_integration_tests.rs,
-// timeseries_comprehensive_tests.rs). LSM requires memtable to be immutable
-// before vacuum, and TimeSeries uses scan_series instead of get operations.
+// separately in their respective test files:
+// - lsm_vacuum_tests.rs: LSM-specific vacuum tests (memtable immutability, compaction)
+// - timeseries_comprehensive_tests.rs: TimeSeries vacuum tests (scan_series operations)
+// LSM requires memtable to be immutable before vacuum, and TimeSeries uses
+// scan_series instead of get operations.
 
 #[test]
 fn test_vacuum_handles_concurrent_reads() {
