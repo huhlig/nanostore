@@ -22,6 +22,7 @@
 //! designed for persistent storage and can handle filters larger than memory.
 
 use crate::pager::{Page, PageId, PageType, Pager};
+use crate::snap::Snapshot;
 use crate::table::{
     ApproximateMembership, SpecialtyTableCapabilities, SpecialtyTableStats, Table, TableEngineKind,
     TableError, TableResult, VerificationReport,
@@ -31,6 +32,8 @@ use crate::types::TableId;
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
 use std::sync::{Arc, RwLock};
+
+use super::tombstone::BloomTombstoneSet;
 
 /// Paged Bloom filter table for persistent approximate membership testing.
 ///
@@ -64,6 +67,9 @@ pub struct PagedBloomFilter<FS: FileSystem> {
 
     /// Bits per page (derived from page size)
     bits_per_page: usize,
+
+    /// Tombstones for rolled-back inserts
+    tombstones: RwLock<BloomTombstoneSet>,
 }
 
 /// Metadata stored in the root page
@@ -144,6 +150,7 @@ impl<FS: FileSystem> PagedBloomFilter<FS> {
             num_items: RwLock::new(0),
             bitmap_pages,
             bits_per_page,
+            tombstones: RwLock::new(BloomTombstoneSet::new()),
         };
 
         // Write metadata to root page
@@ -208,6 +215,7 @@ impl<FS: FileSystem> PagedBloomFilter<FS> {
             num_items: RwLock::new(num_items),
             bitmap_pages,
             bits_per_page,
+            tombstones: RwLock::new(BloomTombstoneSet::new()),
         })
     }
 
@@ -291,6 +299,46 @@ impl<FS: FileSystem> PagedBloomFilter<FS> {
         self.write_metadata()?;
 
         Ok(())
+    }
+
+    /// Add a tombstone for a rolled-back key.
+    ///
+    /// This marks a key as deleted due to transaction rollback.
+    /// The key will return false on contains() checks even though
+    /// the bits remain set in the filter.
+    pub fn add_tombstone(&self, key: Vec<u8>, tx_id: TransactionId) -> TableResult<()> {
+        let mut tombstones = self.tombstones.write().unwrap();
+        tombstones.add(key, tx_id);
+        Ok(())
+    }
+
+    /// Commit all tombstones created by the given transaction.
+    pub fn commit_tombstones(&self, tx_id: TransactionId, commit_lsn: LogSequenceNumber) {
+        let mut tombstones = self.tombstones.write().unwrap();
+        tombstones.commit_tombstones(tx_id, commit_lsn);
+    }
+
+    /// Check if a key is tombstoned for a given snapshot.
+    pub fn is_tombstoned(&self, key: &[u8], snapshot: &Snapshot) -> bool {
+        let tombstones = self.tombstones.read().unwrap();
+        tombstones.is_tombstoned(key, snapshot)
+    }
+
+    /// Remove tombstones that are no longer needed.
+    ///
+    /// Tombstones can be removed when they are committed and older
+    /// than the minimum visible LSN.
+    ///
+    /// Returns the number of tombstones removed.
+    pub fn vacuum_tombstones(&self, min_visible_lsn: LogSequenceNumber) -> usize {
+        let mut tombstones = self.tombstones.write().unwrap();
+        tombstones.vacuum(min_visible_lsn)
+    }
+
+    /// Get the number of tombstones.
+    pub fn tombstone_count(&self) -> usize {
+        let tombstones = self.tombstones.read().unwrap();
+        tombstones.len()
     }
 
     /// Write metadata to root page.

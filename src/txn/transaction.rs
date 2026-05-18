@@ -414,9 +414,17 @@ impl<FS: FileSystem> Transaction<FS> {
                     }
                 }
             }
-            UndoOperation::RemoveBloomEntry { .. } => {
-                // Bloom filters are append-only and cannot be undone
-                // This is a known limitation documented in TWO_PHASE_COMMIT_IMPLEMENTATION.md
+            UndoOperation::RemoveBloomEntry { object_id, key } => {
+                // Add a tombstone to mark this key as rolled back
+                // The key will return false on contains() checks even though
+                // the bits remain set in the filter
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::PagedBloomFilter(bloom) = &engine {
+                        bloom
+                            .add_tombstone(key.clone(), self.txn_id)
+                            .map_err(|e| TransactionError::Other(format!("Bloom undo tombstone failed: {}", e)))?;
+                    }
+                }
             }
             UndoOperation::RemoveGraphEdge {
                 object_id,
@@ -450,9 +458,20 @@ impl<FS: FileSystem> Transaction<FS> {
                     }
                 }
             }
-            UndoOperation::RemoveTimeSeriesPoint { .. } => {
-                // Time series are append-only and cannot be undone
-                // This is a known limitation documented in TWO_PHASE_COMMIT_IMPLEMENTATION.md
+            UndoOperation::RemoveTimeSeriesPoint {
+                object_id,
+                series_key,
+                timestamp,
+                value_key: _,
+            } => {
+                // Add a tombstone to mark this point as rolled back
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    if let crate::table::TableEngineInstance::TimeSeriesTable(timeseries) = &engine {
+                        timeseries
+                            .add_tombstone(series_key, *timestamp, self.txn_id)
+                            .map_err(|e| TransactionError::Other(format!("TimeSeries undo tombstone failed: {}", e)))?;
+                    }
+                }
             }
             UndoOperation::RemoveVector { object_id, id } => {
                 // Remove the vector that was inserted
@@ -2683,11 +2702,24 @@ impl<FS: FileSystem> Transaction<FS> {
                                 ))
                             })?;
                     }
+                    TableEngineInstance::PagedBloomFilter(bloom) => {
+                        // Commit tombstones for rolled-back inserts
+                        bloom.commit_tombstones(self.txn_id, commit_lsn);
+                    }
+                    TableEngineInstance::TimeSeriesTable(timeseries) => {
+                        // Commit version chains and tombstones
+                        timeseries
+                            .commit_versions(self.txn_id, commit_lsn)
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "TimeSeries commit_versions failed: {}",
+                                    e
+                                ))
+                            })?;
+                    }
                     // Specialty tables that don't yet have commit_versions() methods
                     // will be handled when they integrate VersionChain support
-                    TableEngineInstance::PagedBloomFilter(_)
-                    | TableEngineInstance::PagedHnswVector(_)
-                    | TableEngineInstance::TimeSeriesTable(_)
+                    TableEngineInstance::PagedHnswVector(_)
                     | TableEngineInstance::PagedFullTextIndex(_)
                     | TableEngineInstance::MemoryGraphTable(_)
                     | TableEngineInstance::MemoryBlob(_)
@@ -2822,6 +2854,10 @@ impl<FS: FileSystem> ApproximateMembership for Transaction<FS> {
 
         match self.engine_registry.get(table_id) {
             Some(crate::table::TableEngineInstance::PagedBloomFilter(bloom)) => {
+                // Note: Tombstone checking happens during transaction commit/rollback
+                // The bloom filter's might_contain will return true for tombstoned keys
+                // until they are vacuumed, but rolled-back transactions won't see their
+                // own uncommitted inserts due to the bloom_write_set check above
                 bloom.might_contain(key)
             }
             Some(_) => Err(crate::table::TableError::Other(

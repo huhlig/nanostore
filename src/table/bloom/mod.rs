@@ -26,8 +26,10 @@
 
 mod memory;
 mod paged;
+mod tombstone;
 
 pub use self::memory::{BloomFilter, BloomFilterBuilder};
 pub use self::paged::PagedBloomFilter;
+pub use self::tombstone::{BloomTombstone, BloomTombstoneSet};
 
 // Made with Bob

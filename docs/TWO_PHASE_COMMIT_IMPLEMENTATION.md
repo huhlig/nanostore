@@ -28,10 +28,10 @@ Issue `nanokv-igt`: If transaction commit fails partway through applying writes 
 Each type of operation needs corresponding undo logic:
 
 - **Put operations**: Store old value (if any) to restore on failure
-- **Delete operations**: Store old value to restore on failure  
-- **Bloom inserts**: Cannot be undone (bloom filters are append-only)
+- **Delete operations**: Store old value to restore on failure
+- **Bloom inserts**: Use tombstone-based undo (see [`BLOOM_FILTER_TOMBSTONE_ROLLBACK.md`](BLOOM_FILTER_TOMBSTONE_ROLLBACK.md))
 - **Graph operations**: Store reverse operations
-- **Time series**: Cannot be undone (append-only)
+- **Time series**: Use tombstone-based undo (see [`TIMESERIES_TOMBSTONE_ROLLBACK.md`](TIMESERIES_TOMBSTONE_ROLLBACK.md))
 - **Vector operations**: Store reverse operations
 - **Geospatial operations**: Store reverse operations
 - **Full-text operations**: Store reverse operations
@@ -88,6 +88,19 @@ During WAL recovery:
 
 ## Limitations
 
-- Bloom filters and time series are append-only, cannot be undone
+- Bloom filters use tombstone-based undo (see [`BLOOM_FILTER_TOMBSTONE_ROLLBACK.md`](BLOOM_FILTER_TOMBSTONE_ROLLBACK.md))
+- Time series use tombstone-based undo (see [`TIMESERIES_TOMBSTONE_ROLLBACK.md`](TIMESERIES_TOMBSTONE_ROLLBACK.md))
 - Undo operations add overhead to commit process
 - More complex recovery logic required
+- Tombstones consume memory until vacuumed
+
+## Time Series Rollback
+
+Time series operations now support rollback through a tombstone-based mechanism:
+
+- Rolled-back points are marked with tombstones instead of being deleted
+- Tombstones are persisted with bucket data in the pager
+- Scan operations filter out tombstoned points
+- Vacuum operations clean up old tombstones
+
+See [`TIMESERIES_TOMBSTONE_ROLLBACK.md`](TIMESERIES_TOMBSTONE_ROLLBACK.md) for complete details.

@@ -292,8 +292,38 @@ impl<FS: FileSystem> TimeSeriesTable<FS> {
         for manager in state.series.values_mut() {
             for bucket in manager.buckets.values_mut() {
                 bucket.commit_versions(tx_id, commit_lsn);
+                bucket.commit_tombstones(tx_id, commit_lsn);
             }
         }
+
+        Ok(())
+    }
+
+    /// Add a tombstone for a rolled-back time series point.
+    ///
+    /// This marks a point as deleted due to transaction rollback.
+    /// The point will be filtered out during scans.
+    pub fn add_tombstone(
+        &self,
+        series_key: &[u8],
+        timestamp: i64,
+        tx_id: TransactionId,
+    ) -> TableResult<()> {
+        let mut state = self.state.write().unwrap();
+
+        // Get or create the bucket manager for this series
+        let manager = Self::get_or_create_series_manager(
+            &mut state,
+            series_key,
+            &self.config,
+            self.pager.clone(),
+        );
+
+        // Get or create the appropriate bucket
+        let bucket = manager.get_or_create_bucket(timestamp)?;
+
+        // Add the tombstone
+        bucket.add_tombstone(series_key.to_vec(), timestamp, tx_id)?;
 
         Ok(())
     }

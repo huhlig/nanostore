@@ -26,8 +26,51 @@ use crate::table::TableResult;
 use crate::txn::{TransactionId, VersionChain};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Tombstone for a rolled-back time series point.
+///
+/// When a transaction is rolled back, we mark the appended points as tombstoned
+/// so they are filtered out during scans. This allows us to support rollback
+/// for append-only time series data.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct TimeSeriesTombstone {
+    /// Series key
+    pub series_key: Vec<u8>,
+    /// Timestamp of the tombstoned point
+    pub timestamp: i64,
+    /// Transaction ID that created this tombstone
+    pub tombstone_tx_id: TransactionId,
+    /// LSN when the tombstone was created
+    pub tombstone_lsn: Option<LogSequenceNumber>,
+}
+
+impl TimeSeriesTombstone {
+    /// Create a new tombstone for a time series point.
+    pub fn new(series_key: Vec<u8>, timestamp: i64, tx_id: TransactionId) -> Self {
+        Self {
+            series_key,
+            timestamp,
+            tombstone_tx_id: tx_id,
+            tombstone_lsn: None,
+        }
+    }
+
+    /// Mark the tombstone as committed.
+    pub fn commit(&mut self, lsn: LogSequenceNumber) {
+        self.tombstone_lsn = Some(lsn);
+    }
+
+    /// Check if this tombstone is visible to a snapshot.
+    pub fn is_visible(&self, snapshot: &Snapshot) -> bool {
+        if let Some(lsn) = self.tombstone_lsn {
+            lsn <= snapshot.lsn
+        } else {
+            false
+        }
+    }
+}
 
 /// Unique identifier for a time bucket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -80,6 +123,10 @@ pub struct TimeBucket<FS: FileSystem> {
     /// Each timestamp can have multiple versions for MVCC support
     points: BTreeMap<i64, VersionChain>,
 
+    /// Tombstones for rolled-back points: (timestamp, tombstone)
+    /// These mark points that should be filtered out during scans
+    tombstones: BTreeMap<i64, TimeSeriesTombstone>,
+
     /// Page ID where this bucket is stored (if persisted)
     page_id: Option<PageId>,
 
@@ -104,6 +151,7 @@ impl<FS: FileSystem> TimeBucket<FS> {
             start_ts,
             end_ts,
             points: BTreeMap::new(),
+            tombstones: BTreeMap::new(),
             page_id: None,
             pager,
             dirty: false,
@@ -172,9 +220,57 @@ impl<FS: FileSystem> TimeBucket<FS> {
         Ok(())
     }
 
+    /// Add a tombstone for a rolled-back point.
+    ///
+    /// This marks a point as deleted due to transaction rollback.
+    /// The point will be filtered out during scans.
+    pub fn add_tombstone(
+        &mut self,
+        series_key: Vec<u8>,
+        timestamp: i64,
+        tx_id: TransactionId,
+    ) -> TableResult<()> {
+        if !self.contains_timestamp(timestamp) {
+            return Err(crate::table::TableError::Other(format!(
+                "Timestamp {} is outside bucket range [{}, {})",
+                timestamp, self.start_ts, self.end_ts
+            )));
+        }
+
+        let tombstone = TimeSeriesTombstone::new(series_key, timestamp, tx_id);
+        self.tombstones.insert(timestamp, tombstone);
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Commit all tombstones created by the given transaction.
+    pub fn commit_tombstones(&mut self, tx_id: TransactionId, commit_lsn: LogSequenceNumber) {
+        for tombstone in self.tombstones.values_mut() {
+            if tombstone.tombstone_tx_id == tx_id && tombstone.tombstone_lsn.is_none() {
+                tombstone.commit(commit_lsn);
+            }
+        }
+        self.dirty = true;
+    }
+
+    /// Check if a timestamp is tombstoned for a given snapshot.
+    fn is_tombstoned(&self, timestamp: i64, snapshot: &Snapshot) -> bool {
+        if let Some(tombstone) = self.tombstones.get(&timestamp) {
+            tombstone.is_visible(snapshot)
+        } else {
+            false
+        }
+    }
+
     /// Get a data point by timestamp with snapshot visibility.
     pub fn get(&mut self, timestamp: i64, snapshot: &Snapshot) -> Option<Vec<u8>> {
         self.touch();
+        
+        // Check if tombstoned first
+        if self.is_tombstoned(timestamp, snapshot) {
+            return None;
+        }
+        
         if let Some(chain) = self.points.get(&timestamp) {
             chain.find_visible_version(snapshot).map(|v| v.to_vec())
         } else {
@@ -207,6 +303,10 @@ impl<FS: FileSystem> TimeBucket<FS> {
         self.points
             .range(start..end)
             .filter_map(move |(ts, chain)| {
+                // Filter out tombstoned points
+                if self.is_tombstoned(*ts, snapshot) {
+                    return None;
+                }
                 chain
                     .find_visible_version(snapshot)
                     .map(|v| (*ts, v.to_vec()))
@@ -216,6 +316,10 @@ impl<FS: FileSystem> TimeBucket<FS> {
     /// Get all points in the bucket with snapshot visibility.
     pub fn iter<'a>(&'a self, snapshot: &'a Snapshot) -> impl Iterator<Item = (i64, Vec<u8>)> + 'a {
         self.points.iter().filter_map(move |(ts, chain)| {
+            // Filter out tombstoned points
+            if self.is_tombstoned(*ts, snapshot) {
+                return None;
+            }
             chain
                 .find_visible_version(snapshot)
                 .map(|v| (*ts, v.to_vec()))
@@ -228,6 +332,10 @@ impl<FS: FileSystem> TimeBucket<FS> {
             .range(..=timestamp)
             .rev()
             .find_map(|(ts, chain)| {
+                // Filter out tombstoned points
+                if self.is_tombstoned(*ts, snapshot) {
+                    return None;
+                }
                 chain
                     .find_visible_version(snapshot)
                     .map(|v| (*ts, v.to_vec()))
@@ -261,6 +369,16 @@ impl<FS: FileSystem> TimeBucket<FS> {
             let chain_bytes = postcard::to_allocvec(chain).unwrap_or_default();
             bytes.extend_from_slice(&(chain_bytes.len() as u32).to_le_bytes());
             bytes.extend_from_slice(&chain_bytes);
+        }
+
+        // Write number of tombstones (4 bytes)
+        bytes.extend_from_slice(&(self.tombstones.len() as u32).to_le_bytes());
+
+        // Write each tombstone: serialized_tombstone_len (4 bytes) + serialized_tombstone
+        for tombstone in self.tombstones.values() {
+            let tombstone_bytes = postcard::to_allocvec(tombstone).unwrap_or_default();
+            bytes.extend_from_slice(&(tombstone_bytes.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&tombstone_bytes);
         }
 
         bytes
@@ -358,11 +476,41 @@ impl<FS: FileSystem> TimeBucket<FS> {
             points.insert(timestamp, chain);
         }
 
+        // Read tombstones (if present in newer format)
+        let mut tombstones = BTreeMap::new();
+        if pos < data.len() {
+            // Read number of tombstones
+            if data.len() >= pos + 4 {
+                let tombstone_count = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap());
+                pos += 4;
+
+                // Read tombstones
+                for _ in 0..tombstone_count {
+                    // Read tombstone length
+                    if data.len() < pos + 4 {
+                        break; // Gracefully handle incomplete data
+                    }
+                    let tombstone_len = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+                    pos += 4;
+
+                    // Read and deserialize tombstone
+                    if data.len() < pos + tombstone_len {
+                        break; // Gracefully handle incomplete data
+                    }
+                    if let Ok(tombstone) = postcard::from_bytes::<TimeSeriesTombstone>(&data[pos..pos + tombstone_len]) {
+                        tombstones.insert(tombstone.timestamp, tombstone);
+                    }
+                    pos += tombstone_len;
+                }
+            }
+        }
+
         Ok(Self {
             id: bucket_id,
             start_ts,
             end_ts,
             points,
+            tombstones,
             page_id: None,
             pager,
             dirty: false,
@@ -476,9 +624,31 @@ impl<FS: FileSystem> TimeBucket<FS> {
     /// Vacuum old versions that are no longer visible.
     pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
         let mut removed = 0;
+        
+        // Vacuum version chains
         for chain in self.points.values_mut() {
             removed += chain.vacuum(min_visible_lsn);
         }
+        
+        // Remove tombstones that are no longer needed
+        // (tombstones older than min_visible_lsn can be safely removed)
+        let tombstones_to_remove: Vec<i64> = self.tombstones
+            .iter()
+            .filter(|(_, tombstone)| {
+                if let Some(lsn) = tombstone.tombstone_lsn {
+                    lsn < min_visible_lsn
+                } else {
+                    false
+                }
+            })
+            .map(|(ts, _)| *ts)
+            .collect();
+        
+        for ts in tombstones_to_remove {
+            self.tombstones.remove(&ts);
+            removed += 1;
+        }
+        
         if removed > 0 {
             self.dirty = true;
         }
