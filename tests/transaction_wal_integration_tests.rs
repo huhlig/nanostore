@@ -30,26 +30,14 @@ use nanokv::wal::LogSequenceNumber;
 fn default_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Memory, // Memory engine for fast tests
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
 fn bloom_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Bloom,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 

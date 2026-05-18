@@ -83,6 +83,21 @@ pub enum TransactionError {
 }
 
 impl TransactionError {
+    /// Record abort reason metric based on error type
+    pub fn record_abort_metric(&self) {
+        let reason = match self {
+            Self::InvalidState { .. } => "invalid_state",
+            Self::WriteWriteConflict { .. } => "write_write_conflict",
+            Self::ReadWriteConflict { .. } => "read_write_conflict",
+            Self::SerializationConflict { .. } => "serialization_conflict",
+            Self::TransactionNotFound { .. } => "not_found",
+            Self::Deadlock { .. } => "deadlock",
+            Self::Other(_) => "other",
+        };
+        
+        metrics::counter!("nanokv.transaction.abort.total", "reason" => reason).increment(1);
+    }
+
     /// Create an invalid state error with full context
     pub fn invalid_state(
         transaction_id: TransactionId,

@@ -28,6 +28,7 @@ use crate::wal::{LogSequenceNumber, WalWriter, WriteOpType};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Instant;
 
 /// EdgeCursor for Transaction's GraphAdjacency implementation.
 /// Wraps the underlying MemoryEdgeCursor and owns the edge data.
@@ -907,6 +908,9 @@ pub struct Transaction<FS: FileSystem> {
     // Current table context for specialty table operations
     current_table_id: Option<TableId>,
     current_table_name: Option<String>,
+
+    // Timing for metrics
+    start_time: Instant,
 }
 
 impl<FS: FileSystem> Transaction<FS> {
@@ -940,10 +944,12 @@ impl<FS: FileSystem> Transaction<FS> {
             current_lsn,
             current_table_id: None,
             current_table_name: None,
+            start_time: Instant::now(),
         }
     }
 
     /// Create a new transaction with the given ID, snapshot LSN, isolation level, durability policy, and shared resources.
+    #[tracing::instrument(skip(conflict_detector, wal, engine_registry, current_lsn), fields(txn_id = %txn_id, isolation = ?isolation))]
     pub fn new(
         txn_id: TransactionId,
         snapshot_lsn: LogSequenceNumber,
@@ -954,8 +960,14 @@ impl<FS: FileSystem> Transaction<FS> {
         engine_registry: Arc<TableEngineRegistry<FS>>,
         current_lsn: Arc<RwLock<LogSequenceNumber>>,
     ) -> Self {
+        // Increment transaction begin counter
+        metrics::counter!("nanokv.transaction.begin.total").increment(1);
+        metrics::gauge!("nanokv.transaction.active").increment(1.0);
+
         // Write BEGIN record to WAL to register the transaction
         let _ = wal.write_begin(txn_id);
+
+        tracing::debug!("Transaction started");
 
         Self::build(
             txn_id,
@@ -1878,7 +1890,9 @@ impl<FS: FileSystem> Transaction<FS> {
     /// - WalOnly: Write to WAL buffer but don't force sync
     /// - FlushOnCommit: Flush WAL buffer to OS but don't force disk sync
     /// - SyncOnCommit: Force sync to stable storage before returning
+    #[tracing::instrument(skip(self), fields(txn_id = %self.txn_id, write_count = self.write_set.len()))]
     pub fn commit(mut self) -> TransactionResult<CommitInfo> {
+        let commit_start = Instant::now();
         // Validate state - must be Active or Preparing
         if self.state != TransactionState::Active && self.state != TransactionState::Preparing {
             return Err(TransactionError::invalid_state(
@@ -2981,6 +2995,22 @@ impl<FS: FileSystem> Transaction<FS> {
         detector.release_locks(self.txn_id);
         drop(detector);
 
+        // Record metrics
+        let commit_duration = commit_start.elapsed();
+        let transaction_duration = self.start_time.elapsed();
+        
+        metrics::counter!("nanokv.transaction.commit.total").increment(1);
+        metrics::histogram!("nanokv.transaction.commit.duration_seconds").record(commit_duration.as_secs_f64());
+        metrics::histogram!("nanokv.transaction.duration_seconds").record(transaction_duration.as_secs_f64());
+        metrics::gauge!("nanokv.transaction.active").decrement(1.0);
+        
+        tracing::info!(
+            duration_ms = transaction_duration.as_millis(),
+            commit_duration_ms = commit_duration.as_millis(),
+            write_count = self.write_set.len(),
+            "Transaction committed successfully"
+        );
+
         Ok(CommitInfo {
             tx_id: self.txn_id,
             commit_lsn,
@@ -2991,7 +3021,9 @@ impl<FS: FileSystem> Transaction<FS> {
     /// Rollback the transaction.
     ///
     /// Writes rollback record to WAL, discards all changes, and releases locks.
+    #[tracing::instrument(skip(self), fields(txn_id = %self.txn_id))]
     pub fn rollback(mut self) -> TransactionResult<()> {
+        let rollback_start = Instant::now();
         // Can rollback from Active or Preparing state
         if self.state != TransactionState::Active && self.state != TransactionState::Preparing {
             return Err(TransactionError::invalid_state(
@@ -3013,6 +3045,21 @@ impl<FS: FileSystem> Transaction<FS> {
         let mut detector = self.conflict_detector.lock().unwrap();
         detector.release_locks(self.txn_id);
         drop(detector);
+
+        // Record metrics
+        let rollback_duration = rollback_start.elapsed();
+        let transaction_duration = self.start_time.elapsed();
+        
+        metrics::counter!("nanokv.transaction.rollback.total").increment(1);
+        metrics::histogram!("nanokv.transaction.rollback.duration_seconds").record(rollback_duration.as_secs_f64());
+        metrics::histogram!("nanokv.transaction.duration_seconds").record(transaction_duration.as_secs_f64());
+        metrics::gauge!("nanokv.transaction.active").decrement(1.0);
+        
+        tracing::info!(
+            duration_ms = transaction_duration.as_millis(),
+            rollback_duration_ms = rollback_duration.as_millis(),
+            "Transaction rolled back"
+        );
 
         // Write set is automatically dropped when self is consumed
         Ok(())

@@ -59,39 +59,21 @@ fn create_test_tree() -> PagedBTree<MemoryFileSystem> {
 fn default_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Memory,
-        key_encoding: nanokv::types::KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
 fn btree_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::BTree,
-        key_encoding: nanokv::types::KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
 fn lsm_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::LsmTree,
-        key_encoding: nanokv::types::KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 

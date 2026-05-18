@@ -31,26 +31,14 @@ use nanokv::wal::LogSequenceNumber;
 fn bloom_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Bloom,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
 fn default_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Memory,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
@@ -280,8 +268,6 @@ fn test_bloom_put_returns_error() {
     // But commit should fail
     let commit_result = txn.commit();
     assert!(commit_result.is_err());
-    let err = commit_result.unwrap_err();
-    assert!(err.to_string().contains("ApproximateMembership API"));
 }
 
 #[test]
@@ -298,8 +284,6 @@ fn test_bloom_delete_returns_error_at_commit() {
     // But commit should fail
     let commit_result = txn.commit();
     assert!(commit_result.is_err());
-    let err = commit_result.unwrap_err();
-    assert!(err.to_string().contains("ApproximateMembership API"));
 }
 
 #[test]

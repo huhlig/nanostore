@@ -52,13 +52,7 @@ use nanokv::vfs::MemoryFileSystem;
 fn memory_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Memory,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
@@ -66,13 +60,7 @@ fn memory_table_options() -> TableOptions {
 fn lsm_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::LsmTree,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
@@ -230,13 +218,7 @@ fn test_data_persistence_btree_table() {
                 "users",
                 TableOptions {
                     engine: TableEngineKind::BTree,
-                    key_encoding: KeyEncoding::RawBytes,
-                    compression: None,
-                    encryption: None,
-                    page_size: None,
-                    format_version: 1,
-                    max_inline_size: None,
-                    max_value_size: None,
+                    ..TableOptions::default()
                 },
             )
             .expect("Failed to create users table");
@@ -340,13 +322,7 @@ fn test_mixed_operations_with_persistence() {
                 "users",
                 TableOptions {
                     engine: TableEngineKind::BTree,
-                    key_encoding: KeyEncoding::RawBytes,
-                    compression: None,
-                    encryption: None,
-                    page_size: None,
-                    format_version: 1,
-                    max_inline_size: None,
-                    max_value_size: None,
+                    ..TableOptions::default()
                 },
             )
             .unwrap();

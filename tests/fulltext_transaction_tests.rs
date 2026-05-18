@@ -35,26 +35,14 @@ use nanokv::wal::LogSequenceNumber;
 fn fulltext_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::FullText,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 
 fn default_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::Memory,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..TableOptions::default()
     }
 }
 

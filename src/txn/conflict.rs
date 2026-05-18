@@ -67,6 +67,9 @@ impl ConflictDetector {
         if let Some(&other_txn) = self.write_locks.get(&lock_key)
             && other_txn != txn_id
         {
+            // Record conflict metric
+            metrics::counter!("nanokv.transaction.conflict.write_write").increment(1);
+            
             return Err(TransactionError::write_write_conflict(
                 object_id,
                 key.to_vec(),
@@ -104,6 +107,9 @@ impl ConflictDetector {
             if let Some(&other_txn) = self.write_locks.get(&(*object_id, key.clone()))
                 && other_txn != txn_id
             {
+                // Record conflict metric
+                metrics::counter!("nanokv.transaction.conflict.read_write").increment(1);
+                
                 return Err(TransactionError::read_write_conflict(
                     *object_id,
                     key.clone(),
@@ -173,6 +179,9 @@ impl DeadlockDetector {
                 && let Some(cycle) =
                     self.dfs_detect_cycle(txn_id, &mut visited, &mut rec_stack, &mut path)
             {
+                // Record deadlock detection metric
+                metrics::counter!("nanokv.transaction.deadlock.detected").increment(1);
+                
                 return Some(cycle);
             }
         }

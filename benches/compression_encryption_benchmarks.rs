@@ -435,6 +435,7 @@ fn bench_wal_compression(c: &mut Criterion) {
                 let fs = MemoryFileSystem::new();
                 let mut config = WalWriterConfig::default();
                 config.compression = CompressionType::Lz4;
+                config.max_wal_size = 16 * 1024 * 1024 * 1024;
                 let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
                 let value = generate_compressible_data(size);
                 let mut counter = 0;
@@ -465,6 +466,7 @@ fn bench_wal_compression(c: &mut Criterion) {
                 let fs = MemoryFileSystem::new();
                 let mut config = WalWriterConfig::default();
                 config.compression = CompressionType::Zstd;
+                config.max_wal_size = 16 * 1024 * 1024 * 1024;
                 let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
                 let value = generate_compressible_data(size);
                 let mut counter = 0;
@@ -493,7 +495,8 @@ fn bench_wal_compression(c: &mut Criterion) {
             &value_size,
             |b, &size| {
                 let fs = MemoryFileSystem::new();
-                let config = WalWriterConfig::default();
+                let mut config = WalWriterConfig::default();
+                config.max_wal_size = 16 * 1024 * 1024 * 1024;
                 let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
                 let value = generate_compressible_data(size);
                 let mut counter = 0;
@@ -541,6 +544,7 @@ fn bench_wal_encryption(c: &mut Criterion) {
                 let mut config = WalWriterConfig::default();
                 config.encryption = EncryptionType::Aes256Gcm;
                 config.encryption_key = Some(encryption_key);
+                config.max_wal_size = 16 * 1024 * 1024 * 1024;
                 let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
                 let value = vec![0xAB; size];
                 let mut counter = 0;
@@ -569,7 +573,8 @@ fn bench_wal_encryption(c: &mut Criterion) {
             &value_size,
             |b, &size| {
                 let fs = MemoryFileSystem::new();
-                let config = WalWriterConfig::default();
+                let mut config = WalWriterConfig::default();
+                config.max_wal_size = 16 * 1024 * 1024 * 1024;
                 let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
                 let value = vec![0xAB; size];
                 let mut counter = 0;
@@ -613,6 +618,7 @@ fn bench_wal_combined(c: &mut Criterion) {
         let fs = MemoryFileSystem::new();
         let mut config = WalWriterConfig::default();
         config.compression = CompressionType::Lz4;
+        config.max_wal_size = 16 * 1024 * 1024 * 1024;
         config.encryption = EncryptionType::Aes256Gcm;
         config.encryption_key = Some(encryption_key);
         let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
@@ -641,6 +647,7 @@ fn bench_wal_combined(c: &mut Criterion) {
         let fs = MemoryFileSystem::new();
         let mut config = WalWriterConfig::default();
         config.compression = CompressionType::Zstd;
+        config.max_wal_size = 16 * 1024 * 1024 * 1024;
         config.encryption = EncryptionType::Aes256Gcm;
         config.encryption_key = Some(encryption_key);
         let writer = WalWriter::create(&fs, "/bench.wal", config).unwrap();
