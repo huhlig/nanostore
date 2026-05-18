@@ -453,6 +453,182 @@ fn test_vacuum_with_hash_engine() {
 fn test_vacuum_handles_concurrent_reads() {
     let db = Arc::new(create_test_db());
     
+
+#[test]
+fn test_vacuum_with_art_engine() {
+    let db = create_test_db();
+    
+    // Create ART table
+    let table_id = db
+        .create_table(
+            "art_table",
+            TableOptions {
+                engine: TableEngineKind::Art,
+                ..Default::default()
+            },
+        )
+        .expect("Failed to create table");
+    
+    // Insert multiple keys
+    for i in 0..10 {
+        let key = format!("key{}", i);
+        let value = format!("value{}", i);
+        db.insert(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to insert");
+    }
+    
+    // Update to create versions
+    for i in 0..10 {
+        let key = format!("key{}", i);
+        let value = format!("value{}_v2", i);
+        db.update(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to update");
+    }
+    
+    // Vacuum should work with ART
+    let removed = db.vacuum_table(table_id).expect("Failed to vacuum ART");
+    assert!(removed >= 0);
+    
+    // Verify data integrity
+    for i in 0..10 {
+        let key = format!("key{}", i);
+        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let expected = format!("value{}_v2", i);
+        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+    }
+}
+
+#[test]
+fn test_vacuum_with_memory_engine() {
+    let db = create_test_db();
+    
+    // Create Memory table (in-memory dense ordered)
+    let table_id = db
+        .create_table(
+            "memory_table",
+            TableOptions {
+                engine: TableEngineKind::Memory,
+                ..Default::default()
+            },
+        )
+        .expect("Failed to create table");
+    
+    // Insert data
+    for i in 0..10 {
+        let key = format!("key{}", i);
+        let value = format!("value{}", i);
+        db.insert(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to insert");
+    }
+    
+    // Update to create versions
+    for i in 0..10 {
+        let key = format!("key{}", i);
+        let value = format!("value{}_v2", i);
+        db.update(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to update");
+    }
+    
+    // Vacuum should work with Memory engine
+    let removed = db.vacuum_table(table_id).expect("Failed to vacuum Memory");
+    assert!(removed >= 0);
+    
+    // Verify data
+    for i in 0..10 {
+        let key = format!("key{}", i);
+        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let expected = format!("value{}_v2", i);
+        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+    }
+}
+
+#[test]
+fn test_vacuum_with_bplustree_engine() {
+    let db = create_test_db();
+    
+    // Create B+Tree table
+    let table_id = db
+        .create_table(
+            "bplustree_table",
+            TableOptions {
+                engine: TableEngineKind::BPlusTree,
+                ..Default::default()
+            },
+        )
+        .expect("Failed to create table");
+    
+    // Insert data
+    for i in 0..10 {
+        let key = format!("key{:03}", i);
+        let value = format!("value{}", i);
+        db.insert(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to insert");
+    }
+    
+    // Update to create versions
+    for i in 0..10 {
+        let key = format!("key{:03}", i);
+        let value = format!("value{}_v2", i);
+        db.update(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to update");
+    }
+    
+    // Vacuum should work with B+Tree
+    let removed = db.vacuum_table(table_id).expect("Failed to vacuum B+Tree");
+    assert!(removed >= 0);
+    
+    // Verify data
+    for i in 0..10 {
+        let key = format!("key{:03}", i);
+        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let expected = format!("value{}_v2", i);
+        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+    }
+}
+
+#[test]
+fn test_vacuum_with_graph_adjacency_engine() {
+    let db = create_test_db();
+    
+    // Create GraphAdjacency table
+    let table_id = db
+        .create_table(
+            "graph_table",
+            TableOptions {
+                engine: TableEngineKind::GraphAdjacency,
+                ..Default::default()
+            },
+        )
+        .expect("Failed to create table");
+    
+    // Insert edges
+    for i in 0..5 {
+        let key = format!("edge{}", i);
+        let value = format!("data{}", i);
+        db.insert(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to insert");
+    }
+    
+    // Update edges
+    for i in 0..5 {
+        let key = format!("edge{}", i);
+        let value = format!("data{}_v2", i);
+        db.update(table_id, key.as_bytes(), value.as_bytes())
+            .expect("Failed to update");
+    }
+    
+    // Vacuum should work with GraphAdjacency
+    let removed = db.vacuum_table(table_id).expect("Failed to vacuum GraphAdjacency");
+    assert!(removed >= 0);
+    
+    // Verify data
+    for i in 0..5 {
+        let key = format!("edge{}", i);
+        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let expected = format!("data{}_v2", i);
+        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+    }
+}
     let table_id = db
         .create_table("test_table", TableOptions::default())
         .expect("Failed to create table");
