@@ -21,9 +21,7 @@
 //! completing the node storage implementation (load_node/store_node methods).
 
 use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::{
-    HnswConfig, PagedHnswVector, VectorMetric, VectorSearch, VectorSearchOptions,
-};
+use nanokv::table::{HnswConfig, PagedHnswVector, VectorMetric, VectorSearch, VectorSearchOptions};
 use nanokv::txn::TransactionId;
 use nanokv::vfs::MemoryFileSystem;
 use nanokv::wal::LogSequenceNumber;
@@ -144,140 +142,140 @@ fn test_hnsw_configuration_parameters() {
 
 #[test]
 fn test_hnsw_delete_vector_removes_deleted_id_from_search_results() {
-   let fs = MemoryFileSystem::new();
-   let pager = Arc::new(Pager::create(&fs, "test.db", PagerConfig::default()).unwrap());
+    let fs = MemoryFileSystem::new();
+    let pager = Arc::new(Pager::create(&fs, "test.db", PagerConfig::default()).unwrap());
 
-   let config = HnswConfig {
-       dimensions: 2,
-       metric: VectorMetric::Euclidean,
-       max_connections: 4,
-       max_connections_layer0: 8,
-       ef_construction: 16,
-       ml: 10.0,
-   };
+    let config = HnswConfig {
+        dimensions: 2,
+        metric: VectorMetric::Euclidean,
+        max_connections: 4,
+        max_connections_layer0: 8,
+        ef_construction: 16,
+        ml: 10.0,
+    };
 
-   let hnsw = PagedHnswVector::new(10.into(), "test_delete_search".to_string(), pager, config)
-       .unwrap();
+    let hnsw =
+        PagedHnswVector::new(10.into(), "test_delete_search".to_string(), pager, config).unwrap();
 
-   hnsw.insert_vector(
-       b"a",
-       &[0.0, 0.0],
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
-   hnsw.insert_vector(
-       b"b",
-       &[1.0, 0.0],
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
-   hnsw.insert_vector(
-       b"c",
-       &[2.0, 0.0],
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
+    hnsw.insert_vector(
+        b"a",
+        &[0.0, 0.0],
+        TransactionId::from(0),
+        LogSequenceNumber::from(0),
+    )
+    .unwrap();
+    hnsw.insert_vector(
+        b"b",
+        &[1.0, 0.0],
+        TransactionId::from(0),
+        LogSequenceNumber::from(0),
+    )
+    .unwrap();
+    hnsw.insert_vector(
+        b"c",
+        &[2.0, 0.0],
+        TransactionId::from(0),
+        LogSequenceNumber::from(0),
+    )
+    .unwrap();
 
-   hnsw.delete_vector(b"b", TransactionId::from(0), LogSequenceNumber::from(0))
-       .unwrap();
+    hnsw.delete_vector(b"b", TransactionId::from(0), LogSequenceNumber::from(0))
+        .unwrap();
 
-   let results = hnsw
-       .search_vector(
-           &[1.0, 0.0],
-           VectorSearchOptions {
-               limit: 10,
-               ef_search: Some(16),
-               probes: None,
-               filter: None,
-           },
-       )
-       .unwrap();
+    let results = hnsw
+        .search_vector(
+            &[1.0, 0.0],
+            VectorSearchOptions {
+                limit: 10,
+                ef_search: Some(16),
+                probes: None,
+                filter: None,
+            },
+        )
+        .unwrap();
 
-   assert!(
-       !results.iter().any(|hit| hit.id.0 == b"b"),
-       "deleted vector should not appear in search results"
-   );
+    assert!(
+        !results.iter().any(|hit| hit.id.0 == b"b"),
+        "deleted vector should not appear in search results"
+    );
 
-   let report = hnsw.verify().unwrap();
-   assert!(
-       report.errors.is_empty(),
-       "graph verification should succeed after delete repair: {:?}",
-       report.errors
-   );
+    let report = hnsw.verify().unwrap();
+    assert!(
+        report.errors.is_empty(),
+        "graph verification should succeed after delete repair: {:?}",
+        report.errors
+    );
 }
 
 #[test]
 fn test_hnsw_delete_vector_updates_entry_point_and_keeps_graph_searchable() {
-   let fs = MemoryFileSystem::new();
-   let pager = Arc::new(Pager::create(&fs, "test.db", PagerConfig::default()).unwrap());
+    let fs = MemoryFileSystem::new();
+    let pager = Arc::new(Pager::create(&fs, "test.db", PagerConfig::default()).unwrap());
 
-   let config = HnswConfig {
-       dimensions: 2,
-       metric: VectorMetric::Euclidean,
-       max_connections: 4,
-       max_connections_layer0: 8,
-       ef_construction: 16,
-       ml: 10.0,
-   };
+    let config = HnswConfig {
+        dimensions: 2,
+        metric: VectorMetric::Euclidean,
+        max_connections: 4,
+        max_connections_layer0: 8,
+        ef_construction: 16,
+        ml: 10.0,
+    };
 
-   let hnsw = PagedHnswVector::new(11.into(), "test_delete_entry".to_string(), pager, config)
-       .unwrap();
+    let hnsw =
+        PagedHnswVector::new(11.into(), "test_delete_entry".to_string(), pager, config).unwrap();
 
-   hnsw.insert_vector(
-       b"root",
-       &[0.0, 0.0],
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
-   hnsw.insert_vector(
-       b"left",
-       &[1.0, 0.0],
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
-   hnsw.insert_vector(
-       b"right",
-       &[2.0, 0.0],
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
+    hnsw.insert_vector(
+        b"root",
+        &[0.0, 0.0],
+        TransactionId::from(0),
+        LogSequenceNumber::from(0),
+    )
+    .unwrap();
+    hnsw.insert_vector(
+        b"left",
+        &[1.0, 0.0],
+        TransactionId::from(0),
+        LogSequenceNumber::from(0),
+    )
+    .unwrap();
+    hnsw.insert_vector(
+        b"right",
+        &[2.0, 0.0],
+        TransactionId::from(0),
+        LogSequenceNumber::from(0),
+    )
+    .unwrap();
 
-   hnsw.delete_vector(
-       b"root",
-       TransactionId::from(0),
-       LogSequenceNumber::from(0),
-   )
-   .unwrap();
+    hnsw.delete_vector(b"root", TransactionId::from(0), LogSequenceNumber::from(0))
+        .unwrap();
 
-   let results = hnsw
-       .search_vector(
-           &[1.5, 0.0],
-           VectorSearchOptions {
-               limit: 10,
-               ef_search: Some(16),
-               probes: None,
-               filter: None,
-           },
-       )
-       .unwrap();
+    let results = hnsw
+        .search_vector(
+            &[1.5, 0.0],
+            VectorSearchOptions {
+                limit: 10,
+                ef_search: Some(16),
+                probes: None,
+                filter: None,
+            },
+        )
+        .unwrap();
 
-   assert_eq!(results.len(), 2, "remaining vectors should still be searchable");
-   assert!(results.iter().any(|hit| hit.id.0 == b"left"));
-   assert!(results.iter().any(|hit| hit.id.0 == b"right"));
-   assert!(!results.iter().any(|hit| hit.id.0 == b"root"));
+    assert_eq!(
+        results.len(),
+        2,
+        "remaining vectors should still be searchable"
+    );
+    assert!(results.iter().any(|hit| hit.id.0 == b"left"));
+    assert!(results.iter().any(|hit| hit.id.0 == b"right"));
+    assert!(!results.iter().any(|hit| hit.id.0 == b"root"));
 
-   let report = hnsw.verify().unwrap();
-   assert!(
-       report.errors.is_empty(),
-       "graph verification should succeed after entry point replacement: {:?}",
-       report.errors
-   );
+    let report = hnsw.verify().unwrap();
+    assert!(
+        report.errors.is_empty(),
+        "graph verification should succeed after entry point replacement: {:?}",
+        report.errors
+    );
 }
 
 // Made with Bob

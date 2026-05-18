@@ -200,7 +200,7 @@ impl PageCache {
         if shard.entries.contains_key(&page_id) {
             // Cache hit
             shard.stats.hits += 1;
-            counter!("cache.hit").increment(1);
+            counter!("nanokv.pager.cache.hit").increment(1);
 
             // Clone the page before moving to front
             let page = shard.entries.get(&page_id).unwrap().page.clone();
@@ -212,7 +212,7 @@ impl PageCache {
         } else {
             // Cache miss
             shard.stats.misses += 1;
-            counter!("cache.miss").increment(1);
+            counter!("nanokv.pager.cache.miss").increment(1);
             None
         }
     }
@@ -275,6 +275,10 @@ impl PageCache {
                     shard.stats.dirty_pages += 1;
                 }
 
+                // Update gauges
+                gauge!("nanokv.pager.cache.size").set(shard.stats.current_size as f64);
+                gauge!("nanokv.pager.cache.dirty_pages").set(shard.stats.dirty_pages as f64);
+
                 evicted
             }
         }
@@ -317,6 +321,8 @@ impl PageCache {
                 entry.dirty = false;
                 shard.stats.dirty_pages = shard.stats.dirty_pages.saturating_sub(1);
                 shard.stats.flushes += 1;
+                counter!("nanokv.pager.cache.dirty_flush").increment(1);
+                gauge!("nanokv.pager.cache.dirty_pages").set(shard.stats.dirty_pages as f64);
             }
             true
         } else {
@@ -401,9 +407,8 @@ impl PageCache {
         }
 
         // Update metrics gauges
-        gauge!("cache.size").set(total_stats.current_size as f64);
-        gauge!("cache.dirty_pages").set(total_stats.dirty_pages as f64);
-        gauge!("cache.hit_rate").set(total_stats.hit_rate());
+        gauge!("nanokv.pager.cache.size").set(total_stats.current_size as f64);
+        gauge!("nanokv.pager.cache.dirty_pages").set(total_stats.dirty_pages as f64);
 
         total_stats
     }
@@ -493,7 +498,7 @@ impl CacheShard {
     fn evict_lru(&mut self) -> Option<Page> {
         let tail_id = self.lru_tail?;
         self.stats.evictions += 1;
-        counter!("cache.eviction").increment(1);
+        counter!("nanokv.pager.cache.eviction").increment(1);
         self.remove_entry(tail_id)
     }
 

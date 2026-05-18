@@ -94,7 +94,7 @@ impl TransactionError {
             Self::Deadlock { .. } => "deadlock",
             Self::Other(_) => "other",
         };
-        
+
         metrics::counter!("nanokv.transaction.abort.total", "reason" => reason).increment(1);
     }
 

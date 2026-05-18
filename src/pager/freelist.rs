@@ -18,6 +18,7 @@
 
 use crate::pager::{PageId, PagerError, PagerResult};
 use crossbeam::queue::SegQueue;
+use metrics::{counter, gauge};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Free list page structure
@@ -222,7 +223,9 @@ impl FreeList {
     /// Push a page ID onto the reusable stack (lock-free)
     pub fn push_page(&self, page_id: PageId) {
         self.free_pages.push(page_id);
-        self.total_free.fetch_add(1, Ordering::AcqRel);
+        let new_total = self.total_free.fetch_add(1, Ordering::AcqRel) + 1;
+        counter!("nanokv.pager.freelist.push").increment(1);
+        gauge!("nanokv.pager.freelist.size").set(new_total as f64);
     }
 
     /// Pop a page ID from the reusable stack (lock-free)
@@ -230,6 +233,8 @@ impl FreeList {
         let page_id = self.free_pages.pop();
         if page_id.is_some() {
             let prev = self.total_free.fetch_sub(1, Ordering::AcqRel);
+            counter!("nanokv.pager.freelist.pop").increment(1);
+            gauge!("nanokv.pager.freelist.size").set((prev - 1) as f64);
             if prev == 1 {
                 // Was the last page
                 self.first_page.store(0, Ordering::Release);

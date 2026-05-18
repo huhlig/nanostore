@@ -2998,12 +2998,14 @@ impl<FS: FileSystem> Transaction<FS> {
         // Record metrics
         let commit_duration = commit_start.elapsed();
         let transaction_duration = self.start_time.elapsed();
-        
+
         metrics::counter!("nanokv.transaction.commit.total").increment(1);
-        metrics::histogram!("nanokv.transaction.commit.duration_seconds").record(commit_duration.as_secs_f64());
-        metrics::histogram!("nanokv.transaction.duration_seconds").record(transaction_duration.as_secs_f64());
+        metrics::histogram!("nanokv.transaction.commit.duration_seconds")
+            .record(commit_duration.as_secs_f64());
+        metrics::histogram!("nanokv.transaction.duration_seconds")
+            .record(transaction_duration.as_secs_f64());
         metrics::gauge!("nanokv.transaction.active").decrement(1.0);
-        
+
         tracing::info!(
             duration_ms = transaction_duration.as_millis(),
             commit_duration_ms = commit_duration.as_millis(),
@@ -3049,12 +3051,14 @@ impl<FS: FileSystem> Transaction<FS> {
         // Record metrics
         let rollback_duration = rollback_start.elapsed();
         let transaction_duration = self.start_time.elapsed();
-        
+
         metrics::counter!("nanokv.transaction.rollback.total").increment(1);
-        metrics::histogram!("nanokv.transaction.rollback.duration_seconds").record(rollback_duration.as_secs_f64());
-        metrics::histogram!("nanokv.transaction.duration_seconds").record(transaction_duration.as_secs_f64());
+        metrics::histogram!("nanokv.transaction.rollback.duration_seconds")
+            .record(rollback_duration.as_secs_f64());
+        metrics::histogram!("nanokv.transaction.duration_seconds")
+            .record(transaction_duration.as_secs_f64());
         metrics::gauge!("nanokv.transaction.active").decrement(1.0);
-        
+
         tracing::info!(
             duration_ms = transaction_duration.as_millis(),
             rollback_duration_ms = rollback_duration.as_millis(),

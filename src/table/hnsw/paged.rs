@@ -1051,10 +1051,8 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                         }
 
                         let candidate_node = self.load_node(candidate_id)?;
-                        let distance = self.distance(
-                            &self.load_node(neighbor_id)?.vector,
-                            &candidate_node.vector,
-                        );
+                        let distance = self
+                            .distance(&self.load_node(neighbor_id)?.vector, &candidate_node.vector);
                         candidates.push(Candidate {
                             node_id: candidate_id,
                             distance,
@@ -1359,7 +1357,12 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
 
         self.repair_graph_after_deletion(node_id)?;
 
-        let was_entry_point = self.entry_point.read().unwrap().map(|ep| ep == node_id).unwrap_or(false);
+        let was_entry_point = self
+            .entry_point
+            .read()
+            .unwrap()
+            .map(|ep| ep == node_id)
+            .unwrap_or(false);
         if was_entry_point {
             let (replacement, replacement_layer) = self.select_replacement_entry_point(node_id)?;
             *self.entry_point.write().unwrap() = replacement;

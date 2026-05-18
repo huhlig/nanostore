@@ -69,7 +69,7 @@ impl ConflictDetector {
         {
             // Record conflict metric
             metrics::counter!("nanokv.transaction.conflict.write_write").increment(1);
-            
+
             return Err(TransactionError::write_write_conflict(
                 object_id,
                 key.to_vec(),
@@ -109,7 +109,7 @@ impl ConflictDetector {
             {
                 // Record conflict metric
                 metrics::counter!("nanokv.transaction.conflict.read_write").increment(1);
-                
+
                 return Err(TransactionError::read_write_conflict(
                     *object_id,
                     key.clone(),
@@ -181,7 +181,7 @@ impl DeadlockDetector {
             {
                 // Record deadlock detection metric
                 metrics::counter!("nanokv.transaction.deadlock.detected").increment(1);
-                
+
                 return Some(cycle);
             }
         }
