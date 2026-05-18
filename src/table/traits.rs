@@ -55,7 +55,7 @@ pub struct TableOptions {
     pub max_inline_size: Option<usize>,
     /// Maximum value size supported by this table.
     pub max_value_size: Option<u64>,
-    
+
     // Engine-specific configuration fields
     /// AppendLog configuration
     pub appendlog_config: Option<crate::table::appendlog::AppendLogConfig>,

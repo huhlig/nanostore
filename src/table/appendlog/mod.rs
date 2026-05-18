@@ -203,12 +203,13 @@ impl<FS: FileSystem> AppendLog<FS> {
             ))
         })?;
 
-        let persisted: PersistedAppendLogState = serde_json::from_slice(&page.data).map_err(|e| {
-            crate::table::TableError::Other(format!(
-                "Failed to deserialize AppendLog metadata from page {}: {}",
-                root_page_id, e
-            ))
-        })?;
+        let persisted: PersistedAppendLogState =
+            serde_json::from_slice(&page.data).map_err(|e| {
+                crate::table::TableError::Other(format!(
+                    "Failed to deserialize AppendLog metadata from page {}: {}",
+                    root_page_id, e
+                ))
+            })?;
 
         let active_segment = Segment::from_persisted(persisted.active_segment, pager.clone())?;
         let mut immutable_segments = BTreeMap::new();
@@ -281,12 +282,14 @@ impl<FS: FileSystem> AppendLog<FS> {
         let index = state
             .index
             .iter()
-            .map(|(key, (segment_id, offset, chain))| PersistedAppendLogEntry {
-                key: key.clone(),
-                segment_id: *segment_id,
-                offset: *offset,
-                chain: chain.clone(),
-            })
+            .map(
+                |(key, (segment_id, offset, chain))| PersistedAppendLogEntry {
+                    key: key.clone(),
+                    segment_id: *segment_id,
+                    offset: *offset,
+                    chain: chain.clone(),
+                },
+            )
             .collect();
 
         let persisted = PersistedAppendLogState {

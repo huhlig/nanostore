@@ -185,10 +185,7 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
 
         // Load inverted index from pages
         let inverted_index = if metadata.index_start_page != 0 {
-            Self::load_inverted_index_from_pages(
-                &pager,
-                PageId::from(metadata.index_start_page),
-            )?
+            Self::load_inverted_index_from_pages(&pager, PageId::from(metadata.index_start_page))?
         } else {
             HashMap::new()
         };
@@ -244,9 +241,12 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             }
 
             // Read term length
-            let term_len =
-                u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
-                    as usize;
+            let term_len = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]) as usize;
             offset += 4;
 
             if offset + term_len > data.len() {
@@ -309,9 +309,12 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             }
 
             // Read doc_id length
-            let doc_id_len =
-                u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
-                    as usize;
+            let doc_id_len = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]) as usize;
             offset += 4;
 
             if offset + doc_id_len > data.len() {
@@ -340,9 +343,10 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             }
 
             // Deserialize document entry
-            let entry = DocumentEntry::from_bytes(&data[offset..offset + entry_len]).map_err(
-                |e| TableError::Other(format!("Failed to deserialize document entry: {}", e)),
-            )?;
+            let entry =
+                DocumentEntry::from_bytes(&data[offset..offset + entry_len]).map_err(|e| {
+                    TableError::Other(format!("Failed to deserialize document entry: {}", e))
+                })?;
             offset += entry_len;
 
             store.insert(doc_id, entry);

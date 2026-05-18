@@ -1477,15 +1477,40 @@ impl<FS: FileSystem> Table for PagedRTree<FS> {
     }
 
     fn stats(&self) -> TableResult<crate::table::TableStatistics> {
-        let count = *self.object_count.read().unwrap();
+        let count = *self.object_count.read().unwrap() as u64;
+        let height = *self.height.read().unwrap() as u64;
+
+        // Estimate size based on tree structure
+        // Each object: MBR (4 * 8 bytes for coordinates) + key overhead + value overhead
+        let mbr_size = count * 32; // 4 coordinates * 8 bytes each
+        let key_overhead = count * 32; // Approximate key size
+        let value_overhead = count * 64; // Approximate geometry data
+
+        // Internal nodes: estimate based on tree height and branching factor
+        // Typical R-Tree has branching factor around 50-100
+        let branching_factor = self.config.max_entries_per_node as u64;
+        let internal_nodes = if height > 1 {
+            (0..height - 1)
+                .map(|level| {
+                    let nodes_at_level =
+                        count / branching_factor.pow((height - level - 1) as u32).max(1);
+                    nodes_at_level.max(1) * 64 // Approximate size per internal node
+                })
+                .sum()
+        } else {
+            0
+        };
+
+        let estimated_size = mbr_size + key_overhead + value_overhead + internal_nodes + 4096; // +4KB for root
+
         Ok(crate::table::TableStatistics {
-            row_count: Some(count as u64),
-            total_size_bytes: None, // TODO: Calculate actual size
+            row_count: Some(count),
+            total_size_bytes: Some(estimated_size),
             key_stats: Some(crate::table::KeyStatistics {
                 min_size: 0,
                 max_size: 0,
                 avg_size: 0.0,
-                distinct_count: Some(count as u64),
+                distinct_count: Some(count),
             }),
             value_stats: Some(crate::table::ValueStatistics {
                 min_size: 0,
@@ -1552,11 +1577,36 @@ impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
     }
 
     fn stats(&self) -> TableResult<SpecialtyTableStats> {
-        let count = *self.object_count.read().unwrap();
+        let count = *self.object_count.read().unwrap() as u64;
+        let height = *self.height.read().unwrap() as u64;
+
+        // Estimate size based on tree structure
+        // Each object: MBR (4 * 8 bytes for coordinates) + key overhead + value overhead
+        let mbr_size = count * 32; // 4 coordinates * 8 bytes each
+        let key_overhead = count * 32; // Approximate key size
+        let value_overhead = count * 64; // Approximate geometry data
+
+        // Internal nodes: estimate based on tree height and branching factor
+        // Typical R-Tree has branching factor around 50-100
+        let branching_factor = self.config.max_entries_per_node as u64;
+        let internal_nodes = if height > 1 {
+            (0..height - 1)
+                .map(|level| {
+                    let nodes_at_level =
+                        count / branching_factor.pow((height - level - 1) as u32).max(1);
+                    nodes_at_level.max(1) * 64 // Approximate size per internal node
+                })
+                .sum()
+        } else {
+            0
+        };
+
+        let estimated_size = mbr_size + key_overhead + value_overhead + internal_nodes + 4096; // +4KB for root
+
         Ok(SpecialtyTableStats {
-            entry_count: Some(count as u64),
-            size_bytes: None, // TODO: Calculate actual size
-            distinct_keys: Some(count as u64),
+            entry_count: Some(count),
+            size_bytes: Some(estimated_size),
+            distinct_keys: Some(count),
             stale_entries: None,
             last_updated_lsn: None,
         })

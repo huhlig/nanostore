@@ -53,7 +53,8 @@ fn test_appendlog_table_reopens_with_persisted_rows() {
     }
 
     {
-        let reopened = Database::open(&fs, "appendlog-persist.wal", "appendlog-persist.db").unwrap();
+        let reopened =
+            Database::open(&fs, "appendlog-persist.wal", "appendlog-persist.db").unwrap();
         let reopened_id = reopened.open_table("events").unwrap().unwrap();
         assert_eq!(reopened_id, table_id);
 
@@ -70,11 +71,17 @@ fn test_appendlog_table_reopens_with_persisted_rows() {
             expected_root_page
         );
         assert_eq!(
-            table.get(b"k1").unwrap().map(|value| value.as_ref().to_vec()),
+            table
+                .get(b"k1")
+                .unwrap()
+                .map(|value| value.as_ref().to_vec()),
             Some(b"v1".to_vec())
         );
         assert_eq!(
-            table.get(b"k2").unwrap().map(|value| value.as_ref().to_vec()),
+            table
+                .get(b"k2")
+                .unwrap()
+                .map(|value| value.as_ref().to_vec()),
             Some(b"v2".to_vec())
         );
 

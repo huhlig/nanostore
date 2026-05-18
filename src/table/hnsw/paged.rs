@@ -759,19 +759,16 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         })
     }
     /// Serialize id_to_node mapping to pages
-    fn serialize_mapping(
-        &self,
-        mapping: &HashMap<KeyBuf, NodeId>,
-    ) -> TableResult<PageId> {
+    fn serialize_mapping(&self, mapping: &HashMap<KeyBuf, NodeId>) -> TableResult<PageId> {
         if mapping.is_empty() {
             return Ok(PageId::from(0u64));
         }
 
         let mut data = Vec::new();
-        
+
         // Write number of entries
         data.extend_from_slice(&(mapping.len() as u32).to_le_bytes());
-        
+
         // Write each entry: key_len + key_bytes + node_id
         for (key, node_id) in mapping {
             let key_bytes = key.as_ref();
@@ -783,7 +780,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         // Allocate page(s) and write data
         let page_size = self.pager.page_size().to_u32() as usize;
         let data_size = page_size - 8; // Reserve 8 bytes for next_page_id
-        
+
         let mut first_page_id = PageId::from(0u64);
         let mut prev_page_id = None;
         let mut offset = 0;
@@ -792,7 +789,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             let page_id = self
                 .pager
                 .allocate_page(PageType::VectorIndex)
-                .map_err(|e| TableError::Other(format!("Failed to allocate mapping page: {}", e)))?;
+                .map_err(|e| {
+                    TableError::Other(format!("Failed to allocate mapping page: {}", e))
+                })?;
 
             if first_page_id.as_u64() == 0 {
                 first_page_id = page_id;
@@ -800,17 +799,19 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
             let chunk_size = std::cmp::min(data_size, data.len() - offset);
             let mut page = Page::new(page_id, PageType::VectorIndex, page_size);
-            
+
             // Write data chunk
-            page.data_mut().extend_from_slice(&data[offset..offset + chunk_size]);
-            
+            page.data_mut()
+                .extend_from_slice(&data[offset..offset + chunk_size]);
+
             // Write next_page_id (0 if last page)
             let next_page_id = if offset + chunk_size < data.len() {
                 u64::MAX // Placeholder, will be updated
             } else {
                 0u64
             };
-            page.data_mut().extend_from_slice(&next_page_id.to_le_bytes());
+            page.data_mut()
+                .extend_from_slice(&next_page_id.to_le_bytes());
 
             self.pager
                 .write_page(&page)
@@ -818,17 +819,17 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
             // Update previous page's next_page_id
             if let Some(prev_id) = prev_page_id {
-                let mut prev_page = self
-                    .pager
-                    .read_page(prev_id)
-                    .map_err(|e| TableError::Other(format!("Failed to read previous mapping page: {}", e)))?;
-                
+                let mut prev_page = self.pager.read_page(prev_id).map_err(|e| {
+                    TableError::Other(format!("Failed to read previous mapping page: {}", e))
+                })?;
+
                 let next_offset = prev_page.data().len() - 8;
-                prev_page.data_mut()[next_offset..].copy_from_slice(&page_id.as_u64().to_le_bytes());
-                
-                self.pager
-                    .write_page(&prev_page)
-                    .map_err(|e| TableError::Other(format!("Failed to update previous mapping page: {}", e)))?;
+                prev_page.data_mut()[next_offset..]
+                    .copy_from_slice(&page_id.as_u64().to_le_bytes());
+
+                self.pager.write_page(&prev_page).map_err(|e| {
+                    TableError::Other(format!("Failed to update previous mapping page: {}", e))
+                })?;
             }
 
             prev_page_id = Some(page_id);
@@ -839,10 +840,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     }
 
     /// Deserialize id_to_node mapping from pages
-    fn deserialize_mapping(
-        &self,
-        first_page_id: PageId,
-    ) -> TableResult<HashMap<KeyBuf, NodeId>> {
+    fn deserialize_mapping(&self, first_page_id: PageId) -> TableResult<HashMap<KeyBuf, NodeId>> {
         if first_page_id.as_u64() == 0 {
             return Ok(HashMap::new());
         }
@@ -868,11 +866,10 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
             // Read next_page_id from last 8 bytes
             let next_offset = page_data.len() - 8;
-            let next_page_id = u64::from_le_bytes(
-                page_data[next_offset..next_offset + 8]
-                    .try_into()
-                    .map_err(|e| TableError::Other(format!("Failed to read next page id: {}", e)))?,
-            );
+            let next_page_id =
+                u64::from_le_bytes(page_data[next_offset..next_offset + 8].try_into().map_err(
+                    |e| TableError::Other(format!("Failed to read next page id: {}", e)),
+                )?);
 
             // Append data (excluding next_page_id)
             data.extend_from_slice(&page_data[..next_offset]);
@@ -924,19 +921,22 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                 return Err(TableError::corruption(
                     "HNSW mapping",
                     "truncated entry data",
-                    format!("position: {}, key_len: {}, data size: {}", pos, key_len, data.len()),
+                    format!(
+                        "position: {}, key_len: {}, data size: {}",
+                        pos,
+                        key_len,
+                        data.len()
+                    ),
                 ));
             }
 
             let key = KeyBuf(data[pos..pos + key_len].to_vec());
             pos += key_len;
 
-
-            let node_id = NodeId(u32::from_le_bytes(
-                data[pos..pos + 4]
-                    .try_into()
-                    .map_err(|e| TableError::Other(format!("Failed to read node id: {}", e)))?,
-            ));
+            let node_id =
+                NodeId(u32::from_le_bytes(data[pos..pos + 4].try_into().map_err(
+                    |e| TableError::Other(format!("Failed to read node id: {}", e)),
+                )?));
             pos += 4;
 
             mapping.insert(key, node_id);
@@ -956,13 +956,11 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         metadata.num_vectors = *self.num_vectors.read().unwrap() as u64;
         metadata.entry_point = self.entry_point.read().unwrap().map(|n| n.0).unwrap_or(0);
         metadata.max_layer = *self.max_layer.read().unwrap() as u32;
-        
+
         Self::write_metadata(&self.pager, self.root_page_id, &metadata)?;
-        
+
         Ok(())
     }
-
-
 
     /// Select M neighbors from candidates using heuristic
     fn select_neighbors(
@@ -1060,9 +1058,22 @@ impl<FS: FileSystem> Table for PagedHnswVector<FS> {
     }
 
     fn stats(&self) -> TableResult<crate::table::TableStatistics> {
+        let num_vectors = *self.num_vectors.read().unwrap() as u64;
+        let config = self.config.read().unwrap();
+
+        // Estimate size based on vector data and graph structure
+        // Each vector: dimensions * 4 bytes (f32) + key overhead + neighbors overhead
+        let vector_data_size = num_vectors * config.dimensions as u64 * 4;
+        let key_overhead = num_vectors * 32; // Approximate key size
+        let neighbors_overhead = num_vectors * config.max_connections_layer0 as u64 * 4; // Node IDs
+        let metadata_overhead = 4096; // Root page and metadata
+
+        let estimated_size =
+            vector_data_size + key_overhead + neighbors_overhead + metadata_overhead;
+
         Ok(crate::table::TableStatistics {
-            row_count: Some(*self.num_vectors.read().unwrap() as u64),
-            total_size_bytes: Some(0), // TODO: Calculate actual size
+            row_count: Some(num_vectors),
+            total_size_bytes: Some(estimated_size),
             key_stats: None,
             value_stats: None,
             histogram: None,
@@ -1303,10 +1314,23 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
     }
 
     fn stats(&self) -> TableResult<SpecialtyTableStats> {
+        let num_vectors = *self.num_vectors.read().unwrap() as u64;
+        let config = self.config.read().unwrap();
+
+        // Estimate size based on vector data and graph structure
+        // Each vector: dimensions * 4 bytes (f32) + key overhead + neighbors overhead
+        let vector_data_size = num_vectors * config.dimensions as u64 * 4;
+        let key_overhead = num_vectors * 32; // Approximate key size
+        let neighbors_overhead = num_vectors * config.max_connections_layer0 as u64 * 4; // Node IDs
+        let metadata_overhead = 4096; // Root page and metadata
+
+        let estimated_size =
+            vector_data_size + key_overhead + neighbors_overhead + metadata_overhead;
+
         Ok(SpecialtyTableStats {
-            entry_count: Some(*self.num_vectors.read().unwrap() as u64),
-            size_bytes: Some(0), // TODO: Calculate actual size
-            distinct_keys: Some(*self.num_vectors.read().unwrap() as u64),
+            entry_count: Some(num_vectors),
+            size_bytes: Some(estimated_size),
+            distinct_keys: Some(num_vectors),
             stale_entries: None,
             last_updated_lsn: None,
         })
