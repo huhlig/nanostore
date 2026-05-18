@@ -1269,6 +1269,164 @@ impl<FS: FileSystem> PagedBTree<FS> {
         Ok(())
     }
 
+    fn update_separator_after_child_change(
+        &self,
+        parent_page_id: PageId,
+        child_page_id: PageId,
+        replacement_key: Vec<u8>,
+    ) -> TableResult<()> {
+        let mut parent_node = self.read_node(parent_page_id)?;
+        if let BTreeNode::Internal {
+            ref mut entries,
+            rightmost_child,
+        } = parent_node
+        {
+            for i in 0..entries.len() {
+                let next_child = if i + 1 < entries.len() {
+                    entries[i + 1].child_page_id
+                } else {
+                    rightmost_child
+                };
+                if next_child == child_page_id {
+                    entries[i].key = replacement_key;
+                    self.write_node(parent_page_id, &parent_node)?;
+                    return Ok(());
+                }
+            }
+        }
+
+        Err(crate::table::TableError::corruption(
+            "PagedBTree::update_separator_after_child_change",
+            "missing_child_reference",
+            format!(
+                "Could not find child {:?} in parent {:?} as right-side child",
+                child_page_id, parent_page_id
+            ),
+        ))
+    }
+
+    fn rebalance_leaf_after_delete(
+        &self,
+        leaf_page_id: PageId,
+        path: &[(PageId, PageId)],
+    ) -> TableResult<()> {
+        if path.is_empty() {
+            return Ok(());
+        }
+
+        let (parent_page_id, _child_page_id) = *path.last().unwrap();
+        let parent_node = self.read_node(parent_page_id)?;
+        let (entries, rightmost_child) = match parent_node {
+            BTreeNode::Internal {
+                entries,
+                rightmost_child,
+            } => (entries, rightmost_child),
+            _ => {
+                return Err(crate::table::TableError::corruption(
+                    "PagedBTree::rebalance_leaf_after_delete",
+                    "parent_not_internal",
+                    format!("Parent {:?} was not an internal node", parent_page_id),
+                ))
+            }
+        };
+
+        let mut children = entries
+            .iter()
+            .map(|entry| entry.child_page_id)
+            .collect::<Vec<_>>();
+        children.push(rightmost_child);
+
+        let child_index = children
+            .iter()
+            .position(|&child| child == leaf_page_id)
+            .ok_or_else(|| {
+                crate::table::TableError::corruption(
+                    "PagedBTree::rebalance_leaf_after_delete",
+                    "missing_child",
+                    format!(
+                        "Could not find leaf {:?} in parent {:?}",
+                        leaf_page_id, parent_page_id
+                    ),
+                )
+            })?;
+
+        if child_index > 0 {
+            let left_sibling_page_id = children[child_index - 1];
+            let separator_index = child_index - 1;
+            if let Some(new_separator) = self.redistribute_keys(
+                left_sibling_page_id,
+                leaf_page_id,
+                &entries[separator_index].key,
+            )? {
+                self.update_separator_after_child_change(
+                    parent_page_id,
+                    leaf_page_id,
+                    new_separator,
+                )?;
+                return Ok(());
+            }
+
+            if self.merge_nodes(
+                left_sibling_page_id,
+                leaf_page_id,
+                &entries[separator_index].key,
+            )? {
+                let mut updated_parent = self.read_node(parent_page_id)?;
+                if let BTreeNode::Internal {
+                    ref mut entries,
+                    ref mut rightmost_child,
+                } = updated_parent
+                {
+                    entries.remove(separator_index);
+                    if child_index == children.len() - 1 {
+                        *rightmost_child = left_sibling_page_id;
+                    }
+                    self.write_node(parent_page_id, &updated_parent)?;
+                    return Ok(());
+                }
+            }
+        }
+
+        if child_index + 1 < children.len() {
+            let right_sibling_page_id = children[child_index + 1];
+            let separator_index = child_index;
+            if let Some(new_separator) = self.redistribute_keys(
+                leaf_page_id,
+                right_sibling_page_id,
+                &entries[separator_index].key,
+            )? {
+                self.update_separator_after_child_change(
+                    parent_page_id,
+                    right_sibling_page_id,
+                    new_separator,
+                )?;
+                return Ok(());
+            }
+
+            if self.merge_nodes(
+                leaf_page_id,
+                right_sibling_page_id,
+                &entries[separator_index].key,
+            )? {
+                let mut updated_parent = self.read_node(parent_page_id)?;
+                if let BTreeNode::Internal {
+                    ref mut entries,
+                    ref mut rightmost_child,
+                } = updated_parent
+                {
+                    entries.remove(separator_index);
+                    if separator_index >= entries.len() {
+                        *rightmost_child = leaf_page_id;
+                    }
+                    self.write_node(parent_page_id, &updated_parent)?;
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Delete a key from the tree, handling merges and redistributions as needed.
     fn delete_internal(
         &self,
@@ -1277,7 +1435,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
         _commit_lsn: LogSequenceNumber,
     ) -> TableResult<bool> {
         // Find the leaf page
-        let (leaf_page_id, pos) = self.search(key)?;
+        let (leaf_page_id, pos, path) = self.search_with_path(key)?;
         let mut node = self.read_node(leaf_page_id)?;
 
         if let BTreeNode::Leaf {
@@ -1300,8 +1458,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
                 // Check if node needs rebalancing
                 if !node.has_minimum_keys() && leaf_page_id != self.get_root_page_id() {
-                    // TODO: Implement rebalancing with siblings
-                    // This requires finding siblings and parent
+                    self.rebalance_leaf_after_delete(leaf_page_id, &path)?;
                 }
 
                 return Ok(true);

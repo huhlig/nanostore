@@ -328,4 +328,112 @@ fn test_btree_mixed_operations() {
     }
 }
 
+#[test]
+fn test_btree_delete_rebalances_across_leaf_siblings() {
+   let fs = MemoryFileSystem::new();
+   let config = PagerConfig::default();
+   let pager = Arc::new(Pager::create(&fs, "test.db", config).unwrap());
+
+   let table = PagedBTree::new(TableId::from(1), "test_table".to_string(), pager).unwrap();
+
+   let tx_insert = TransactionId::from(1);
+   let mut writer = table
+       .writer(tx_insert, LogSequenceNumber::from(0))
+       .unwrap();
+
+   for i in 0..100 {
+       let key = format!("key_{:04}", i);
+       let value = format!("value_{:04}", i);
+       writer.put(key.as_bytes(), value.as_bytes()).unwrap();
+   }
+
+   writer.flush().unwrap();
+   writer
+       .commit_versions(LogSequenceNumber::from(100))
+       .unwrap();
+
+   let tx_delete = TransactionId::from(2);
+   let mut delete_writer = table
+       .writer(tx_delete, LogSequenceNumber::from(100))
+       .unwrap();
+
+   for i in 0..40 {
+       let key = format!("key_{:04}", i);
+       assert!(delete_writer.delete(key.as_bytes()).unwrap());
+   }
+
+   delete_writer.flush().unwrap();
+   delete_writer
+       .commit_versions(LogSequenceNumber::from(200))
+       .unwrap();
+
+   let reader = table.reader(LogSequenceNumber::from(200)).unwrap();
+
+   for i in 0..40 {
+       let key = format!("key_{:04}", i);
+       let result = reader.get(key.as_bytes(), LogSequenceNumber::from(200)).unwrap();
+       assert!(result.is_none(), "Deleted key {} should not be visible", key);
+   }
+
+   for i in 40..100 {
+       let key = format!("key_{:04}", i);
+       let result = reader.get(key.as_bytes(), LogSequenceNumber::from(200)).unwrap();
+       assert!(result.is_some(), "Remaining key {} should still be visible", key);
+   }
+}
+
+#[test]
+fn test_btree_delete_rebalances_rightmost_leaf() {
+   let fs = MemoryFileSystem::new();
+   let config = PagerConfig::default();
+   let pager = Arc::new(Pager::create(&fs, "test.db", config).unwrap());
+
+   let table = PagedBTree::new(TableId::from(1), "test_table".to_string(), pager).unwrap();
+
+   let tx_insert = TransactionId::from(1);
+   let mut writer = table
+       .writer(tx_insert, LogSequenceNumber::from(0))
+       .unwrap();
+
+   for i in 0..100 {
+       let key = format!("key_{:04}", i);
+       let value = format!("value_{:04}", i);
+       writer.put(key.as_bytes(), value.as_bytes()).unwrap();
+   }
+
+   writer.flush().unwrap();
+   writer
+       .commit_versions(LogSequenceNumber::from(100))
+       .unwrap();
+
+   let tx_delete = TransactionId::from(2);
+   let mut delete_writer = table
+       .writer(tx_delete, LogSequenceNumber::from(100))
+       .unwrap();
+
+   for i in 60..100 {
+       let key = format!("key_{:04}", i);
+       assert!(delete_writer.delete(key.as_bytes()).unwrap());
+   }
+
+   delete_writer.flush().unwrap();
+   delete_writer
+       .commit_versions(LogSequenceNumber::from(200))
+       .unwrap();
+
+   let reader = table.reader(LogSequenceNumber::from(200)).unwrap();
+
+   for i in 0..60 {
+       let key = format!("key_{:04}", i);
+       let result = reader.get(key.as_bytes(), LogSequenceNumber::from(200)).unwrap();
+       assert!(result.is_some(), "Remaining key {} should still be visible", key);
+   }
+
+   for i in 60..100 {
+       let key = format!("key_{:04}", i);
+       let result = reader.get(key.as_bytes(), LogSequenceNumber::from(200)).unwrap();
+       assert!(result.is_none(), "Deleted key {} should not be visible", key);
+   }
+}
+
 // Made with Bob
