@@ -650,6 +650,22 @@ impl<FS: FileSystem> Pager<FS> {
         self.write_page(&page)
     }
 
+    /// Persist the B-Tree root page ID to the superblock.
+    pub fn set_root_btree_page(&self, root_page_id: PageId) -> PagerResult<()> {
+        let superblock_snapshot = {
+            let mut superblock = self.superblock.write();
+            superblock.root_btree_page = root_page_id;
+            superblock.clone()
+        };
+
+        self.write_superblock(&superblock_snapshot)
+    }
+
+    /// Read the persisted B-Tree root page ID from the superblock.
+    pub fn root_btree_page(&self) -> PageId {
+        self.superblock.read().root_btree_page
+    }
+
     // =========================================================================
     // Overflow Page Chain Methods
     // =========================================================================

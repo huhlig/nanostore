@@ -166,13 +166,12 @@ pub enum TableEngineInstance<FS: FileSystem> {
     PagedRTree(Arc<PagedRTree<FS>>),
     TimeSeriesTable(Arc<TimeSeriesTable<FS>>),
     PagedFullTextIndex(Arc<PagedFullTextIndex<FS>>),
+    PagedBlob(Arc<PagedBlob<FS>>),
     MemoryBTree(Arc<MemoryBTree>),
     MemoryHashTable(Arc<MemoryHashTable>),
     MemoryGraphTable(Arc<MemoryGraphTable>),
     MemoryBlob(Arc<MemoryBlob>),
     MemoryART(Arc<MemoryART>),
-    // Note: PagedBlob is not included as it doesn't take FS generic parameter
-    // TODO: Refactor PagedBlob to take Pager parameter
 }
 
 impl<FS: FileSystem> TableEngineInstance<FS> {
@@ -187,6 +186,7 @@ impl<FS: FileSystem> TableEngineInstance<FS> {
             Self::PagedRTree(engine) => crate::table::Table::table_id(engine.as_ref()),
             Self::TimeSeriesTable(engine) => crate::table::Table::table_id(engine.as_ref()),
             Self::PagedFullTextIndex(engine) => crate::table::Table::table_id(engine.as_ref()),
+            Self::PagedBlob(engine) => crate::table::Table::table_id(engine.as_ref()),
             Self::MemoryBTree(engine) => crate::table::Table::table_id(engine.as_ref()),
             Self::MemoryHashTable(engine) => crate::table::Table::table_id(engine.as_ref()),
             Self::MemoryGraphTable(engine) => crate::table::Table::table_id(engine.as_ref()),
@@ -206,6 +206,7 @@ impl<FS: FileSystem> TableEngineInstance<FS> {
             Self::PagedRTree(engine) => crate::table::Table::name(engine.as_ref()),
             Self::TimeSeriesTable(engine) => crate::table::Table::name(engine.as_ref()),
             Self::PagedFullTextIndex(engine) => crate::table::Table::name(engine.as_ref()),
+            Self::PagedBlob(engine) => crate::table::Table::name(engine.as_ref()),
             Self::MemoryBTree(engine) => crate::table::Table::name(engine.as_ref()),
             Self::MemoryHashTable(engine) => crate::table::Table::name(engine.as_ref()),
             Self::MemoryGraphTable(engine) => crate::table::Table::name(engine.as_ref()),
@@ -225,6 +226,7 @@ impl<FS: FileSystem> TableEngineInstance<FS> {
             Self::PagedRTree(engine) => engine.kind(),
             Self::TimeSeriesTable(engine) => engine.kind(),
             Self::PagedFullTextIndex(engine) => engine.kind(),
+            Self::PagedBlob(engine) => engine.kind(),
             Self::MemoryBTree(engine) => engine.kind(),
             Self::MemoryHashTable(engine) => engine.kind(),
             Self::MemoryGraphTable(engine) => engine.kind(),
@@ -245,6 +247,7 @@ impl<FS: FileSystem> TableEngineInstance<FS> {
             Self::PagedRTree(engine) => Some(engine.root_page_id()),
             Self::TimeSeriesTable(engine) => Some(engine.root_page_id()),
             Self::PagedFullTextIndex(engine) => Some(engine.root_page_id()),
+            Self::PagedBlob(engine) => Some(engine.root_page_id()),
             Self::MemoryBTree(_) => None,
             Self::MemoryHashTable(_) => None,
             Self::MemoryGraphTable(_) => None,
@@ -265,6 +268,7 @@ impl<FS: FileSystem> Clone for TableEngineInstance<FS> {
             Self::PagedRTree(engine) => Self::PagedRTree(Arc::clone(engine)),
             Self::TimeSeriesTable(engine) => Self::TimeSeriesTable(Arc::clone(engine)),
             Self::PagedFullTextIndex(engine) => Self::PagedFullTextIndex(Arc::clone(engine)),
+            Self::PagedBlob(engine) => Self::PagedBlob(Arc::clone(engine)),
             Self::MemoryBTree(engine) => Self::MemoryBTree(Arc::clone(engine)),
             Self::MemoryHashTable(engine) => Self::MemoryHashTable(Arc::clone(engine)),
             Self::MemoryGraphTable(engine) => Self::MemoryGraphTable(Arc::clone(engine)),
@@ -462,9 +466,17 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 ))
             }
             TableEngineKind::Blob => {
-                // PagedBlob not yet supported in registry (doesn't take FS generic)
-                // TODO: Refactor PagedBlob to work with registry
-                Err(RegistryError::UnsupportedEngine(options.engine))
+                // Create PagedBlob
+                let blob = PagedBlob::new(table_id, name, self.pager.clone())
+                    .map_err(|e| RegistryError::EngineCreationFailed {
+                        engine: options.engine,
+                        details: format!("Failed to create PagedBlob: {}", e),
+                    })?;
+                let root_page_id = blob.root_page_id();
+                Ok((
+                    TableEngineInstance::PagedBlob(Arc::new(blob)),
+                    Some(root_page_id),
+                ))
             }
             _ => Err(RegistryError::UnsupportedEngine(options.engine)),
         }
@@ -552,8 +564,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 Ok(TableEngineInstance::PagedFullTextIndex(Arc::new(fulltext)))
             }
             TableEngineKind::Blob => {
-                // PagedBlob not yet supported in registry
-                Err(RegistryError::UnsupportedEngine(options.engine))
+                let blob = PagedBlob::open(table_id, name, self.pager.clone(), root_page_id);
+                Ok(TableEngineInstance::PagedBlob(Arc::new(blob)))
             }
             TableEngineKind::Memory => {
                 // Memory tables don't persist, create new
@@ -677,6 +689,11 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
             TableEngineInstance::TimeSeriesTable(ts) => {
                 // TimeSeriesTable supports vacuum
                 ts.vacuum(min_visible_lsn)
+                    .map_err(|e| crate::kvdb::DatabaseError::other(format!("Vacuum failed: {}", e)))
+            }
+            TableEngineInstance::PagedBlob(blob) => {
+                // PagedBlob supports vacuum
+                blob.vacuum(min_visible_lsn)
                     .map_err(|e| crate::kvdb::DatabaseError::other(format!("Vacuum failed: {}", e)))
             }
             // Engines that don't support vacuum

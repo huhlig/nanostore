@@ -25,7 +25,7 @@
 use nanokv::kvdb::{Database, DatabaseErrorKind};
 use nanokv::table::{TableEngineKind, TableOptions};
 use nanokv::types::{KeyEncoding, TableId};
-use nanokv::vfs::MemoryFileSystem;
+use nanokv::vfs::{FileSystem, MemoryFileSystem};
 
 /// Helper to create a test database
 fn create_test_db() -> Database<MemoryFileSystem> {
@@ -413,6 +413,51 @@ fn test_crud_sequence() {
         b"Bob Smith"
     );
     assert!(db.get(table_id, b"user3").unwrap().is_none());
+}
+
+#[test]
+fn test_btree_table_persists_root_and_reopens_after_restart() {
+    let fs = MemoryFileSystem::new();
+    let options = TableOptions {
+        engine: TableEngineKind::BTree,
+        key_encoding: KeyEncoding::RawBytes,
+        compression: None,
+        encryption: None,
+        page_size: None,
+        format_version: 1,
+        max_inline_size: None,
+        max_value_size: None,
+    };
+
+    let table_id = {
+        let db = Database::new(&fs, "btree_restart.wal", "btree_restart.db")
+            .expect("Failed to create database");
+        let table_id = db
+            .create_table("users", options.clone())
+            .expect("Failed to create BTree table");
+
+        db.insert(table_id, b"user1", b"Alice")
+            .expect("Failed to insert first value");
+        db.insert(table_id, b"user2", b"Bob")
+            .expect("Failed to insert second value");
+
+        table_id
+    };
+
+    assert!(fs.exists("btree_restart.db").unwrap());
+
+    let reopened = Database::open(&fs, "btree_restart.wal", "btree_restart.db")
+        .expect("Failed to reopen database");
+
+    assert!(reopened.is_table(table_id).unwrap());
+    assert_eq!(
+        reopened.get(table_id, b"user1").unwrap().unwrap().as_ref(),
+        b"Alice"
+    );
+    assert_eq!(
+        reopened.get(table_id, b"user2").unwrap().unwrap().as_ref(),
+        b"Bob"
+    );
 }
 
 // =============================================================================

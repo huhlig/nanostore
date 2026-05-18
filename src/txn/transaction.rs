@@ -1275,6 +1275,12 @@ impl<FS: FileSystem> Transaction<FS> {
                         TransactionError::Other(format!("Memory Blob get failed: {}", e))
                     })?
                 }
+                TableEngineInstance::PagedBlob(blob) => {
+                    // PagedBlob uses MVCC internally, get latest committed version
+                    blob.get(key).map_err(|e| {
+                        TransactionError::Other(format!("Paged Blob get failed: {}", e))
+                    })?
+                }
                 TableEngineInstance::PagedBloomFilter(bloom) => {
                     // Bloom filters support approximate membership check
                     // Returns Some(empty) if probably present, None if definitely absent
@@ -1475,6 +1481,14 @@ impl<FS: FileSystem> Transaction<FS> {
                             })?
                             .is_some()
                     }
+                    TableEngineInstance::PagedBlob(blob) => {
+                        // PagedBlob uses MVCC internally, check latest committed version
+                        blob.get(key)
+                            .map_err(|e| {
+                                TransactionError::Other(format!("Paged Blob get failed: {}", e))
+                            })?
+                            .is_some()
+                    }
                     TableEngineInstance::PagedBloomFilter(bloom) => {
                         // Bloom filters support approximate membership check
                         bloom.contains(key).map_err(|e| {
@@ -1666,6 +1680,11 @@ impl<FS: FileSystem> Transaction<FS> {
                 TableEngineInstance::PagedRTree(_) => {
                     return Err(TransactionError::Other(
                         "range_delete is not supported for R-Tree tables".to_string(),
+                    ));
+                }
+                TableEngineInstance::PagedBlob(_) => {
+                    return Err(TransactionError::Other(
+                        "range_delete is not supported for Blob tables".to_string(),
                     ));
                 }
                 TableEngineInstance::MemoryGraphTable(_) => {
@@ -2221,6 +2240,21 @@ impl<FS: FileSystem> Transaction<FS> {
                                 .to_string(),
                         ));
                     }
+                    TableEngineInstance::PagedBlob(blob) => {
+                        // PagedBlob supports transactional put/delete with interior mutability
+                        match value_opt {
+                            Some(value) => {
+                                blob.put_tx(key, value, self.txn_id).map_err(|e| {
+                                    TransactionError::Other(format!("PagedBlob put failed: {}", e))
+                                })?;
+                            }
+                            None => {
+                                blob.delete_tx(key, self.txn_id).map_err(|e| {
+                                    TransactionError::Other(format!("PagedBlob delete failed: {}", e))
+                                })?;
+                            }
+                        }
+                    }
                     TableEngineInstance::MemoryGraphTable(_) => {
                         // Graph tables don't support transactional put/delete operations
                         // They should be updated through their specialized GraphAdjacency API
@@ -2723,6 +2757,7 @@ impl<FS: FileSystem> Transaction<FS> {
                     | TableEngineInstance::PagedFullTextIndex(_)
                     | TableEngineInstance::MemoryGraphTable(_)
                     | TableEngineInstance::MemoryBlob(_)
+                    | TableEngineInstance::PagedBlob(_)
                     | TableEngineInstance::AppendLog(_) => {
                         // These tables either don't use version chains yet or are append-only
                         // Skip commit_versions() for now

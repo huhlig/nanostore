@@ -54,22 +54,47 @@ struct BlobMetadata {
 pub struct PagedBlob<FS: FileSystem> {
     id: TableId,
     name: String,
-    page_size: usize,
     pager: Arc<Pager<FS>>,
+    /// Root page ID for metadata
+    root_page_id: PageId,
     /// Index mapping keys to their metadata version chains
     index: Arc<RwLock<HashMap<Vec<u8>, VersionChain>>>,
 }
 
 impl<FS: FileSystem> PagedBlob<FS> {
     /// Create a new paged blob storage table.
-    pub fn new(id: TableId, name: String, page_size: usize, pager: Arc<Pager<FS>>) -> Self {
+    pub fn new(id: TableId, name: String, pager: Arc<Pager<FS>>) -> TableResult<Self> {
+        // Allocate root page for metadata
+        let root_page_id = pager.allocate_page(PageType::Catalog)?;
+        
+        // Initialize root page with empty metadata
+        let mut page = Page::new(root_page_id, PageType::Catalog, pager.page_size().data_size());
+        page.data_mut().resize(pager.page_size().data_size(), 0);
+        pager.write_page(&page)?;
+        
+        Ok(Self {
+            id,
+            name,
+            pager,
+            root_page_id,
+            index: Arc::new(RwLock::new(HashMap::new())),
+        })
+    }
+
+    /// Open an existing paged blob storage table.
+    pub fn open(id: TableId, name: String, pager: Arc<Pager<FS>>, root_page_id: PageId) -> Self {
         Self {
             id,
             name,
-            page_size,
             pager,
+            root_page_id,
             index: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Get the root page ID.
+    pub fn root_page_id(&self) -> PageId {
+        self.root_page_id
     }
 
     /// Read blob data from linked pages.
@@ -152,7 +177,8 @@ impl<FS: FileSystem> PagedBlob<FS> {
 
     /// Write blob data to linked pages and return metadata.
     fn write_blob_data(&self, value: &[u8]) -> TableResult<BlobMetadata> {
-        let data_size = self.page_size - 16; // 8 bytes for next_page_id, 8 bytes for page header overhead
+        let page_data_size = self.pager.page_size().data_size();
+        let data_size = page_data_size - 8; // 8 bytes for next_page_id
         let mut first_page_id: Option<PageId> = None;
         let mut prev_page_id: Option<PageId> = None;
         let mut page_count = 0;
@@ -167,11 +193,11 @@ impl<FS: FileSystem> PagedBlob<FS> {
             let next_page_id: u64 = if end_offset >= value.len() { 0 } else { 0 }; // Will update later
 
             // Create page data: [next_page_id: 8 bytes][blob chunk]
-            let mut page_data = vec![0u8; self.page_size - 16];
+            let mut page_data = vec![0u8; page_data_size];
             page_data[..8].copy_from_slice(&next_page_id.to_le_bytes());
             page_data[8..8 + chunk_size].copy_from_slice(&value[offset..end_offset]);
 
-            let mut page = Page::new(page_id, PageType::Overflow, self.page_size - 16);
+            let mut page = Page::new(page_id, PageType::Overflow, page_data_size);
             *page.data_mut() = page_data;
             self.pager.write_page(&page)?;
 
@@ -195,9 +221,10 @@ impl<FS: FileSystem> PagedBlob<FS> {
         // Handle empty value case
         if first_page_id.is_none() {
             let page_id = self.pager.allocate_page(PageType::Overflow)?;
-            let mut page_data = vec![0u8; self.page_size - 16];
+            let page_data_size = self.pager.page_size().data_size();
+            let mut page_data = vec![0u8; page_data_size];
             page_data[..8].copy_from_slice(&0u64.to_le_bytes());
-            let mut page = Page::new(page_id, PageType::Overflow, self.page_size - 16);
+            let mut page = Page::new(page_id, PageType::Overflow, page_data_size);
             *page.data_mut() = page_data;
             self.pager.write_page(&page)?;
             first_page_id = Some(page_id);
@@ -212,12 +239,12 @@ impl<FS: FileSystem> PagedBlob<FS> {
     }
 
     /// Put a key-value pair (non-transactional).
-    pub fn put(&mut self, key: &[u8], value: &[u8]) -> TableResult<u64> {
+    pub fn put(&self, key: &[u8], value: &[u8]) -> TableResult<u64> {
         self.put_tx(key, value, TransactionId::from(0))
     }
 
     /// Put a key-value pair with transaction tracking.
-    pub fn put_tx(&mut self, key: &[u8], value: &[u8], tx_id: TransactionId) -> TableResult<u64> {
+    pub fn put_tx(&self, key: &[u8], value: &[u8], tx_id: TransactionId) -> TableResult<u64> {
         // Write blob data to pages
         let metadata = self.write_blob_data(value)?;
 
@@ -273,12 +300,12 @@ impl<FS: FileSystem> PagedBlob<FS> {
     }
 
     /// Delete a key (non-transactional).
-    pub fn delete(&mut self, key: &[u8]) -> TableResult<bool> {
+    pub fn delete(&self, key: &[u8]) -> TableResult<bool> {
         self.delete_tx(key, TransactionId::from(0))
     }
 
     /// Delete a key with transaction tracking.
-    pub fn delete_tx(&mut self, key: &[u8], tx_id: TransactionId) -> TableResult<bool> {
+    pub fn delete_tx(&self, key: &[u8], tx_id: TransactionId) -> TableResult<bool> {
         let mut index = self.index.write().unwrap();
         if let Some(existing_chain) = index.get(key) {
             // Create a tombstone (empty metadata with invalid page ID)

@@ -390,6 +390,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
         );
         page.data_mut().extend_from_slice(&root_node.to_bytes());
         pager.write_page(&page)?;
+        pager.set_root_btree_page(root_page_id)?;
 
         Ok(Self {
             id,
@@ -415,8 +416,12 @@ impl<FS: FileSystem> PagedBTree<FS> {
     }
 
     /// Update the root page ID (used during root splits).
-    fn set_root_page_id(&self, new_root: PageId) {
+    fn set_root_page_id(&self, new_root: PageId) -> TableResult<()> {
+        self.pager
+            .set_root_btree_page(new_root)
+            .map_err(crate::table::TableError::from)?;
         *self.root_page_id.write().unwrap() = new_root;
+        Ok(())
     }
 
     /// Read a node from disk.
@@ -1002,10 +1007,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
             self.write_node(new_root_page_id, &new_root)?;
 
-            // Update root pointer atomically
-            self.set_root_page_id(new_root_page_id);
-
-            // TODO: Persist root pointer to superblock for durability
+            // Update root pointer atomically and persist it for durability
+            self.set_root_page_id(new_root_page_id)?;
 
             Ok(())
         } else {
