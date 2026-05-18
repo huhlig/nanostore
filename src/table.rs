@@ -313,9 +313,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
     ) -> Result<(TableEngineInstance<FS>, Option<PageId>), RegistryError> {
         match options.engine {
             TableEngineKind::AppendLog => {
-                // Create AppendLog with default config
-                // TODO: Extract config from options
-                let config = AppendLogConfig::default();
+                // Extract config from options or use default
+                let config = options.appendlog_config.clone().unwrap_or_default();
 
                 let appendlog = AppendLog::new(table_id, name, self.pager.clone(), config)
                     .map_err(|e| RegistryError::EngineCreationFailed {
@@ -352,8 +351,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                         details: format!("Failed to allocate manifest page: {}", e),
                     })?;
 
-                // Create LSM config from table options
-                let lsm_config = LsmConfig::default(); // TODO: Extract from options
+                // Extract LSM config from options or use default
+                let lsm_config = options.lsm_config.clone().unwrap_or_default();
 
                 let lsm = crate::table::lsm::LsmTree::new(
                     table_id,
@@ -372,10 +371,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 ))
             }
             TableEngineKind::Bloom => {
-                // Create Bloom filter with default parameters
-                // TODO: Extract parameters from options
-                let num_items = 10000; // Default expected items
-                let bits_per_key = 10; // ~1% false positive rate
+                // Extract Bloom filter parameters from options or use defaults
+                let (num_items, bits_per_key) = options.bloom_config.unwrap_or((10000, 10));
 
                 let bloom = PagedBloomFilter::new(
                     table_id,
@@ -417,9 +414,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 Ok((TableEngineInstance::MemoryART(Arc::new(art)), None))
             }
             TableEngineKind::GeoSpatial => {
-                // Create R-Tree with default spatial config
-                // TODO: Extract config from options
-                let spatial_config = SpatialConfig::default();
+                // Extract spatial config from options or use default
+                let spatial_config = options.spatial_config.clone().unwrap_or_default();
 
                 let rtree = PagedRTree::new(table_id, name, self.pager.clone(), spatial_config)
                     .map_err(|e| RegistryError::EngineCreationFailed {
@@ -433,9 +429,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 ))
             }
             TableEngineKind::TimeSeries => {
-                // Create TimeSeries with default config
-                // TODO: Extract config from options
-                let config = TimeSeriesConfig::default();
+                // Extract TimeSeries config from options or use default
+                let config = options.timeseries_config.clone().unwrap_or_default();
 
                 let timeseries = TimeSeriesTable::new(table_id, name, self.pager.clone(), config)
                     .map_err(|e| RegistryError::EngineCreationFailed {
@@ -449,9 +444,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 ))
             }
             TableEngineKind::FullText => {
-                // Create FullText index with default config
-                // TODO: Extract config from options
-                let config = FullTextConfig::default();
+                // Extract FullText config from options or use default
+                let config = options.fulltext_config.clone().unwrap_or_default();
 
                 let fulltext = PagedFullTextIndex::new(table_id, name, self.pager.clone(), config)
                     .map_err(|e| RegistryError::EngineCreationFailed {
@@ -492,7 +486,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
     ) -> Result<TableEngineInstance<FS>, RegistryError> {
         match options.engine {
             TableEngineKind::AppendLog => {
-                let config = AppendLogConfig::default(); // TODO: Extract from options
+                // Extract config from options or use default
+                let config = options.appendlog_config.clone().unwrap_or_default();
                 let appendlog =
                     AppendLog::open(table_id, name, self.pager.clone(), root_page_id, config)
                         .map_err(|e| RegistryError::EngineOpenFailed {
@@ -506,7 +501,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 Ok(TableEngineInstance::PagedBTree(Arc::new(btree)))
             }
             TableEngineKind::LsmTree => {
-                let lsm_config = LsmConfig::default(); // TODO: Extract from options
+                // Extract LSM config from options or use default
+                let lsm_config = options.lsm_config.clone().unwrap_or_default();
                 let lsm = crate::table::lsm::LsmTree::open(
                     table_id,
                     name,
@@ -530,7 +526,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 Ok(TableEngineInstance::PagedBloomFilter(Arc::new(bloom)))
             }
             TableEngineKind::GeoSpatial => {
-                let spatial_config = SpatialConfig::default(); // TODO: Extract from options
+                // Extract spatial config from options or use default
+                let spatial_config = options.spatial_config.clone().unwrap_or_default();
                 let rtree = PagedRTree::open(
                     table_id,
                     name,
@@ -545,7 +542,8 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
                 Ok(TableEngineInstance::PagedRTree(Arc::new(rtree)))
             }
             TableEngineKind::TimeSeries => {
-                let config = TimeSeriesConfig::default(); // TODO: Extract from options
+                // Extract TimeSeries config from options or use default
+                let config = options.timeseries_config.clone().unwrap_or_default();
                 let timeseries =
                     TimeSeriesTable::open(table_id, name, self.pager.clone(), root_page_id, config)
                         .map_err(|e| RegistryError::EngineOpenFailed {

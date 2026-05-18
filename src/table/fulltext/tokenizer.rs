@@ -24,7 +24,7 @@
 use std::collections::HashSet;
 
 /// Tokenizer type for full-text search.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TokenizerKind {
     /// Simple whitespace splitting
     Whitespace,
@@ -36,7 +36,7 @@ pub enum TokenizerKind {
 }
 
 /// Configuration for tokenization.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TokenizerConfig {
     /// Tokenizer kind
     pub kind: TokenizerKind,

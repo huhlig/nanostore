@@ -17,7 +17,7 @@
 //! R-Tree configuration and parameters.
 
 /// R-Tree configuration parameters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SpatialConfig {
     /// Number of spatial dimensions (2 or 3)
     pub dimensions: usize,
@@ -121,7 +121,7 @@ impl SpatialConfig {
 }
 
 /// Node splitting strategy for R-Tree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SplitStrategy {
     /// Linear split (O(n) complexity, fast but lower quality)
     /// Picks two entries that are farthest apart along one dimension

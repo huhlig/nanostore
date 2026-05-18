@@ -35,16 +35,7 @@ fn create_test_db() -> Database<MemoryFileSystem> {
 
 /// Helper to create default table options
 fn default_table_options() -> TableOptions {
-    TableOptions {
-        engine: TableEngineKind::Memory, // Memory engine provides DenseOrdered capability
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
-    }
+    TableOptions::default()
 }
 
 // =============================================================================
@@ -420,13 +411,7 @@ fn test_btree_table_persists_root_and_reopens_after_restart() {
     let fs = MemoryFileSystem::new();
     let options = TableOptions {
         engine: TableEngineKind::BTree,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..Default::default()
     };
 
     let table_id = {
@@ -468,13 +453,7 @@ fn test_btree_table_persists_root_and_reopens_after_restart() {
 fn lsm_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::LsmTree,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..Default::default()
     }
 }
 
@@ -733,13 +712,7 @@ fn test_lsm_table_handle() {
 fn btree_table_options() -> TableOptions {
     TableOptions {
         engine: TableEngineKind::BTree,
-        key_encoding: KeyEncoding::RawBytes,
-        compression: None,
-        encryption: None,
-        page_size: None,
-        format_version: 1,
-        max_inline_size: None,
-        max_value_size: None,
+        ..Default::default()
     }
 }
 

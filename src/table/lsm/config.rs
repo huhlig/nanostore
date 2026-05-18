@@ -23,7 +23,7 @@
 use crate::types::{CompressionKind, EncryptionKind};
 
 /// LSM tree configuration.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct LsmConfig {
     /// Memtable configuration
     pub memtable: MemtableConfig,
@@ -42,7 +42,7 @@ pub struct LsmConfig {
 }
 
 /// Memtable configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MemtableConfig {
     /// Maximum memtable size in bytes before flush (default: 64MB)
     pub max_size: usize,
@@ -65,7 +65,7 @@ impl Default for MemtableConfig {
 }
 
 /// Memtable implementation type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MemtableType {
     /// Skip list based (better for concurrent writes)
     SkipList,
@@ -74,7 +74,7 @@ pub enum MemtableType {
 }
 
 /// SSTable configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SStableConfig {
     /// Target SSTable size in bytes (default: 2MB)
     pub target_size: usize,
@@ -109,7 +109,7 @@ impl Default for SStableConfig {
 }
 
 /// Compaction configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CompactionConfig {
     /// Compaction strategy
     pub strategy: CompactionStrategy,
@@ -190,7 +190,7 @@ impl CompactionConfig {
 }
 
 /// Compaction strategy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CompactionStrategy {
     /// Leveled compaction (RocksDB-style)
     /// - Each level has a size limit
@@ -211,7 +211,7 @@ pub enum CompactionStrategy {
 }
 
 /// Per-level configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LevelConfig {
     /// Level number (0 = L0, 1 = L1, etc.)
     pub level: u32,
@@ -227,7 +227,7 @@ pub struct LevelConfig {
 }
 
 /// Bloom filter configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BloomFilterConfig {
     /// Enable bloom filters (default: true)
     pub enabled: bool,
@@ -270,7 +270,7 @@ impl BloomFilterConfig {
 }
 
 /// Block cache configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BlockCacheConfig {
     /// Enable block cache (default: true)
     pub enabled: bool,
@@ -293,7 +293,7 @@ impl Default for BlockCacheConfig {
 }
 
 /// Cache eviction policy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CacheEvictionPolicy {
     /// Least Recently Used
     Lru,

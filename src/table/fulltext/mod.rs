@@ -46,7 +46,7 @@ const FULLTEXT_MAGIC: u32 = 0x46545854; // "FTXT"
 const FULLTEXT_VERSION: u32 = 1;
 
 /// Configuration for full-text search index.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FullTextConfig {
     /// Tokenizer configuration
     pub tokenizer: TokenizerConfig,
@@ -71,7 +71,9 @@ struct FullTextMetadata {
     num_documents: u64,
     num_terms: u64,
     root_page_id: u64,
-    _reserved: [u8; 40],
+    index_start_page: u64,
+    doc_store_start_page: u64,
+    _reserved: [u8; 24],
 }
 
 /// Paged full-text search index.
@@ -135,7 +137,9 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             num_documents: 0,
             num_terms: 0,
             root_page_id: root_page_id.as_u64(),
-            _reserved: [0; 40],
+            index_start_page: 0,
+            doc_store_start_page: 0,
+            _reserved: [0; 24],
         };
         let metadata_bytes = unsafe {
             std::slice::from_raw_parts(
@@ -179,7 +183,26 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             ));
         }
 
-        // TODO: Load inverted index and document store from pages
+        // Load inverted index from pages
+        let inverted_index = if metadata.index_start_page != 0 {
+            Self::load_inverted_index_from_pages(
+                &pager,
+                PageId::from(metadata.index_start_page),
+            )?
+        } else {
+            HashMap::new()
+        };
+
+        // Load document store from pages
+        let document_store = if metadata.doc_store_start_page != 0 {
+            Self::load_document_store_from_pages(
+                &pager,
+                PageId::from(metadata.doc_store_start_page),
+            )?
+        } else {
+            HashMap::new()
+        };
+
         Ok(Self {
             table_id,
             name,
@@ -187,8 +210,8 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             root_page_id,
             tokenizer: TextTokenizer::default(),
             enable_positions: true,
-            inverted_index: RwLock::new(HashMap::new()),
-            document_store: RwLock::new(HashMap::new()),
+            inverted_index: RwLock::new(inverted_index),
+            document_store: RwLock::new(document_store),
             num_documents: RwLock::new(metadata.num_documents),
             num_terms: RwLock::new(metadata.num_terms),
         })
@@ -197,6 +220,173 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
     /// Get the root page ID.
     pub fn root_page_id(&self) -> PageId {
         self.root_page_id
+    }
+
+    /// Load inverted index from pages.
+    fn load_inverted_index_from_pages(
+        pager: &Arc<Pager<FS>>,
+        start_page_id: PageId,
+    ) -> TableResult<HashMap<String, PostingList>> {
+        let data = Self::read_data_from_pages(pager, start_page_id)?;
+        let mut offset = 0;
+        let mut index = HashMap::new();
+
+        if data.len() < 4 {
+            return Ok(index);
+        }
+
+        let term_count = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+        offset += 4;
+
+        for _ in 0..term_count {
+            if offset + 4 > data.len() {
+                break;
+            }
+
+            // Read term length
+            let term_len =
+                u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
+                    as usize;
+            offset += 4;
+
+            if offset + term_len > data.len() {
+                break;
+            }
+
+            // Read term
+            let term = String::from_utf8_lossy(&data[offset..offset + term_len]).to_string();
+            offset += term_len;
+
+            if offset + 4 > data.len() {
+                break;
+            }
+
+            // Read posting list length
+            let posting_len = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]) as usize;
+            offset += 4;
+
+            if offset + posting_len > data.len() {
+                break;
+            }
+
+            // Deserialize posting list
+            let posting_list = PostingList::from_bytes(&data[offset..offset + posting_len])
+                .map_err(|e| {
+                    TableError::Other(format!("Failed to deserialize posting list: {}", e))
+                })?;
+            offset += posting_len;
+
+            index.insert(term, posting_list);
+        }
+
+        Ok(index)
+    }
+
+    /// Load document store from pages.
+    fn load_document_store_from_pages(
+        pager: &Arc<Pager<FS>>,
+        start_page_id: PageId,
+    ) -> TableResult<HashMap<Vec<u8>, DocumentEntry>> {
+        let data = Self::read_data_from_pages(pager, start_page_id)?;
+        let mut offset = 0;
+        let mut store = HashMap::new();
+
+        if data.len() < 4 {
+            return Ok(store);
+        }
+
+        let doc_count = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+        offset += 4;
+
+        for _ in 0..doc_count {
+            if offset + 4 > data.len() {
+                break;
+            }
+
+            // Read doc_id length
+            let doc_id_len =
+                u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
+                    as usize;
+            offset += 4;
+
+            if offset + doc_id_len > data.len() {
+                break;
+            }
+
+            // Read doc_id
+            let doc_id = data[offset..offset + doc_id_len].to_vec();
+            offset += doc_id_len;
+
+            if offset + 4 > data.len() {
+                break;
+            }
+
+            // Read entry length
+            let entry_len = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]) as usize;
+            offset += 4;
+
+            if offset + entry_len > data.len() {
+                break;
+            }
+
+            // Deserialize document entry
+            let entry = DocumentEntry::from_bytes(&data[offset..offset + entry_len]).map_err(
+                |e| TableError::Other(format!("Failed to deserialize document entry: {}", e)),
+            )?;
+            offset += entry_len;
+
+            store.insert(doc_id, entry);
+        }
+
+        Ok(store)
+    }
+
+    /// Read data from a chain of pages.
+    fn read_data_from_pages(pager: &Arc<Pager<FS>>, start_page_id: PageId) -> TableResult<Vec<u8>> {
+        let mut data = Vec::new();
+        let mut current_page_id = start_page_id;
+
+        loop {
+            let page = pager.read_page(current_page_id)?;
+            let page_data = page.data();
+
+            if page_data.len() < 8 {
+                break;
+            }
+
+            // Read next page pointer
+            let next_page_id = u64::from_le_bytes([
+                page_data[0],
+                page_data[1],
+                page_data[2],
+                page_data[3],
+                page_data[4],
+                page_data[5],
+                page_data[6],
+                page_data[7],
+            ]);
+
+            // Append data (skip the 8-byte next pointer)
+            data.extend_from_slice(&page_data[8..]);
+
+            if next_page_id == 0 {
+                break;
+            }
+
+            current_page_id = PageId::from(next_page_id);
+        }
+
+        Ok(data)
     }
 
     /// Persist the inverted index to disk.
@@ -243,38 +433,40 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             doc_data.extend_from_slice(&entry_bytes);
         }
 
-        // Write index data to pages
-        self.write_data_to_pages(&index_data, PageType::InvertedIndex)?;
+        // Write index data to pages and get start page
+        let index_start_page = self.write_data_to_pages(&index_data, PageType::InvertedIndex)?;
 
-        // Write document store to pages
-        self.write_data_to_pages(&doc_data, PageType::InvertedIndex)?;
+        // Write document store to pages and get start page
+        let doc_store_start_page = self.write_data_to_pages(&doc_data, PageType::InvertedIndex)?;
 
-        // Update metadata
-        self.update_metadata()?;
+        // Update metadata with page IDs
+        self.update_metadata_with_pages(index_start_page, doc_store_start_page)?;
 
         Ok(())
     }
 
-    /// Write data to pages, allocating as needed.
-    fn write_data_to_pages(&self, data: &[u8], page_type: PageType) -> TableResult<()> {
+    /// Write data to pages, allocating as needed. Returns the start page ID.
+    fn write_data_to_pages(&self, data: &[u8], page_type: PageType) -> TableResult<PageId> {
         if data.is_empty() {
-            return Ok(());
+            return Ok(PageId::from(0));
         }
 
         let data_size = self.pager.page_size().data_size();
         let mut offset = 0;
         let mut prev_page_id: Option<PageId> = None;
+        let mut start_page_id: Option<PageId> = None;
 
         while offset < data.len() {
             let chunk_size = std::cmp::min(data_size - 8, data.len() - offset);
             let page_id = self.pager.allocate_page(page_type)?;
 
+            // Track the first page
+            if start_page_id.is_none() {
+                start_page_id = Some(page_id);
+            }
+
             let mut page_data = vec![0u8; data_size];
-            let next_page_id = if offset + chunk_size >= data.len() {
-                0u64
-            } else {
-                0u64
-            };
+            let next_page_id = 0u64; // Will be updated when we write the next page
             page_data[..8].copy_from_slice(&next_page_id.to_le_bytes());
             page_data[8..8 + chunk_size].copy_from_slice(&data[offset..offset + chunk_size]);
 
@@ -293,11 +485,15 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             offset += chunk_size;
         }
 
-        Ok(())
+        Ok(start_page_id.unwrap_or(PageId::from(0)))
     }
 
-    /// Update metadata in root page.
-    fn update_metadata(&self) -> TableResult<()> {
+    /// Update metadata in root page with page IDs.
+    fn update_metadata_with_pages(
+        &self,
+        index_start_page: PageId,
+        doc_store_start_page: PageId,
+    ) -> TableResult<()> {
         let mut root_page = Page::new(
             self.root_page_id,
             PageType::InvertedIndex,
@@ -312,7 +508,9 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
             num_documents: *self.num_documents.read().unwrap(),
             num_terms: *self.num_terms.read().unwrap(),
             root_page_id: self.root_page_id.as_u64(),
-            _reserved: [0; 40],
+            index_start_page: index_start_page.as_u64(),
+            doc_store_start_page: doc_store_start_page.as_u64(),
+            _reserved: [0; 24],
         };
         let metadata_bytes = unsafe {
             std::slice::from_raw_parts(
@@ -561,7 +759,7 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
         }
         *self.num_terms.write().unwrap() = self.inverted_index.read().unwrap().len() as u64;
 
-        // self.persist_index()?; // TODO: Enable when persistence is implemented
+        self.persist_index()?;
 
         Ok(())
     }

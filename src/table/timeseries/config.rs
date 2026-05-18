@@ -19,7 +19,7 @@
 use std::time::Duration;
 
 /// Configuration for TimeSeries table engine.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TimeSeriesConfig {
     /// Time bucket size for organizing data (in seconds).
     /// Data points are grouped into buckets based on their timestamp.
@@ -111,7 +111,7 @@ impl TimeSeriesConfig {
 }
 
 /// Compression type for time series data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TimeSeriesCompression {
     /// No compression
     None,
@@ -126,7 +126,7 @@ pub enum TimeSeriesCompression {
 }
 
 /// Retention policy for time series data.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TimeSeriesRetentionPolicy {
     /// Keep all data (no retention)
     None,

@@ -19,7 +19,7 @@
 use std::time::Duration;
 
 /// Configuration for AppendLog table engine.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AppendLogConfig {
     /// Maximum size of a segment before rolling to a new one (in bytes).
     /// Default: 64 MB
@@ -92,7 +92,7 @@ impl AppendLogConfig {
 }
 
 /// Compression type for segments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CompressionType {
     /// No compression
     None,
@@ -105,7 +105,7 @@ pub enum CompressionType {
 }
 
 /// Retention policy for old segments.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RetentionPolicy {
     /// Keep all segments (no retention)
     None,

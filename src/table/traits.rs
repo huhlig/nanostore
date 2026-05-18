@@ -55,6 +55,41 @@ pub struct TableOptions {
     pub max_inline_size: Option<usize>,
     /// Maximum value size supported by this table.
     pub max_value_size: Option<u64>,
+    
+    // Engine-specific configuration fields
+    /// AppendLog configuration
+    pub appendlog_config: Option<crate::table::appendlog::AppendLogConfig>,
+    /// LSM tree configuration
+    pub lsm_config: Option<crate::table::lsm::LsmConfig>,
+    /// Bloom filter configuration (num_items, bits_per_key)
+    pub bloom_config: Option<(usize, usize)>,
+    /// R-Tree spatial configuration
+    pub spatial_config: Option<crate::table::rtree::SpatialConfig>,
+    /// TimeSeries configuration
+    pub timeseries_config: Option<crate::table::timeseries::TimeSeriesConfig>,
+    /// FullText search configuration
+    pub fulltext_config: Option<crate::table::fulltext::FullTextConfig>,
+}
+
+impl Default for TableOptions {
+    fn default() -> Self {
+        Self {
+            engine: TableEngineKind::Memory,
+            key_encoding: KeyEncoding::RawBytes,
+            compression: None,
+            encryption: None,
+            page_size: None,
+            format_version: 1,
+            max_inline_size: None,
+            max_value_size: None,
+            appendlog_config: None,
+            lsm_config: None,
+            bloom_config: None,
+            spatial_config: None,
+            timeseries_config: None,
+            fulltext_config: None,
+        }
+    }
 }
 
 /// Table metadata from the catalog.
