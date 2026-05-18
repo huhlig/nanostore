@@ -272,7 +272,7 @@ impl<FS: FileSystem> TimeBucket<FS> {
         }
 
         if let Some(chain) = self.points.get(&timestamp) {
-            chain.find_visible_version(snapshot).map(|v| v.to_vec())
+            chain.find_visible_inline(snapshot).map(|v| v.to_vec())
         } else {
             None
         }
@@ -308,7 +308,7 @@ impl<FS: FileSystem> TimeBucket<FS> {
                     return None;
                 }
                 chain
-                    .find_visible_version(snapshot)
+                    .find_visible_inline(snapshot)
                     .map(|v| (*ts, v.to_vec()))
             })
     }
@@ -321,7 +321,7 @@ impl<FS: FileSystem> TimeBucket<FS> {
                 return None;
             }
             chain
-                .find_visible_version(snapshot)
+                .find_visible_inline(snapshot)
                 .map(|v| (*ts, v.to_vec()))
         })
     }
@@ -337,7 +337,7 @@ impl<FS: FileSystem> TimeBucket<FS> {
                     return None;
                 }
                 chain
-                    .find_visible_version(snapshot)
+                    .find_visible_inline(snapshot)
                     .map(|v| (*ts, v.to_vec()))
             })
     }
@@ -630,7 +630,9 @@ impl<FS: FileSystem> TimeBucket<FS> {
 
         // Vacuum version chains
         for chain in self.points.values_mut() {
-            removed += chain.vacuum(min_visible_lsn);
+            let (count, _freed_refs) = chain.vacuum(min_visible_lsn);
+            removed += count;
+            // TODO: Free overflow pages for external values in _freed_refs
         }
 
         // Remove tombstones that are no longer needed

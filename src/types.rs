@@ -165,7 +165,7 @@ impl AsRef<[u8]> for ValueBuf {
 /// - Inline: No encoding needed (value stored directly)
 /// - SinglePage: 11 bytes (1 type + 4 page_id + 2 offset + 4 length)
 /// - OverflowChain: 17 bytes (1 type + 4 page_id + 8 length + 4 page_count)
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ValueRef {
     /// Value is stored inline in the table structure (no external reference)
     Inline,

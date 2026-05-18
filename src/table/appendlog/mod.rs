@@ -458,12 +458,12 @@ impl<FS: FileSystem> AppendLog<FS> {
         // Look up key in index
         if let Some((_segment_id, _offset, chain)) = state.index.get(key) {
             // Find visible version
-            if let Some(value) = chain.find_visible_version(snapshot) {
+            if let Some(value) = chain.find_visible_inline(snapshot) {
                 // Empty value means tombstone (deleted)
                 if value.is_empty() {
                     return Ok(None);
                 }
-                return Ok(Some(ValueBuf(value.to_vec())));
+                return Ok(Some(ValueBuf(Vec::from(value))));
             }
         }
 
@@ -644,12 +644,12 @@ impl<FS: FileSystem> PointLookup for AppendLog<FS> {
             );
 
             // Find visible version
-            if let Some(value) = chain.find_visible_version(&snapshot) {
+            if let Some(value) = chain.find_visible_inline(&snapshot) {
                 // Empty value means tombstone (deleted)
                 if value.is_empty() {
                     return Ok(None);
                 }
-                return Ok(Some(ValueBuf(value.to_vec())));
+                return Ok(Some(ValueBuf(Vec::from(value))));
             }
         }
 
