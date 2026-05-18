@@ -785,11 +785,12 @@ mod tests {
                 Some(&snapshot1),
             )
             .unwrap();
-        assert!(!results.is_empty(), "Document should be visible before deletion");
+        assert!(
+            !results.is_empty(),
+            "Document should be visible before deletion"
+        );
 
-        index
-            .delete_document(b"doc1", tx_id, lsn2)
-            .unwrap();
+        index.delete_document(b"doc1", tx_id, lsn2).unwrap();
 
         // Commit the deletion
         index.commit_versions(lsn2).unwrap();
@@ -817,7 +818,10 @@ mod tests {
             )
             .unwrap();
 
-        assert!(results.is_empty(), "Document should not be visible after deletion");
+        assert!(
+            results.is_empty(),
+            "Document should not be visible after deletion"
+        );
     }
 
     #[test]
@@ -907,7 +911,10 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!results.is_empty(), "Updated document should contain 'rust'");
+        assert!(
+            !results.is_empty(),
+            "Updated document should contain 'rust'"
+        );
 
         // Search for "world" with snapshot after update
         let results = index
@@ -922,6 +929,9 @@ mod tests {
             )
             .unwrap();
 
-        assert!(results.is_empty(), "Updated document should not contain 'world'");
+        assert!(
+            results.is_empty(),
+            "Updated document should not contain 'world'"
+        );
     }
 }

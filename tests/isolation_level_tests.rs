@@ -305,7 +305,7 @@ fn test_read_committed_sees_concurrent_commits() {
     // Test demonstrating that read-committed and snapshot isolation
     // both use snapshot-based reads in this implementation.
     // The key difference is in conflict detection at commit time.
-    
+
     let fs = MemoryFileSystem::new();
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
     let wal = Arc::new(WalWriter::create(&fs, "test.wal", WalWriterConfig::default()).unwrap());
@@ -365,7 +365,7 @@ fn test_read_committed_sees_concurrent_commits() {
     // - ReadCommitted: Only checks write-write conflicts
     // - SnapshotIsolation: Only checks write-write conflicts (no read tracking)
     // - RepeatableRead/Serializable: Check both read-write and write-write conflicts
-    
+
     // Clean up
     tx2_rc.rollback().unwrap();
     tx3_si.rollback().unwrap();
@@ -375,7 +375,7 @@ fn test_read_committed_sees_concurrent_commits() {
 fn test_snapshot_isolation_consistent_view() {
     // Test that snapshot isolation maintains a consistent view throughout
     // the transaction. This test verifies the isolation level is set correctly.
-    
+
     let fs = MemoryFileSystem::new();
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
     let wal = Arc::new(WalWriter::create(&fs, "test.wal", WalWriterConfig::default()).unwrap());
@@ -415,7 +415,10 @@ fn test_snapshot_isolation_consistent_view() {
     );
 
     // Verify snapshot isolation is set
-    assert_eq!(tx_snapshot.isolation_level(), IsolationLevel::SnapshotIsolation);
+    assert_eq!(
+        tx_snapshot.isolation_level(),
+        IsolationLevel::SnapshotIsolation
+    );
     assert_eq!(tx_snapshot.snapshot_lsn(), snapshot_lsn);
 
     // Another transaction modifies key2 and commits
@@ -444,7 +447,7 @@ fn test_phantom_reads_behavior() {
     // Test that demonstrates phantom read prevention through snapshot isolation.
     // Both ReadCommitted and SnapshotIsolation use snapshot-based reads in this
     // implementation, so they both prevent phantom reads at the read level.
-    
+
     let fs = MemoryFileSystem::new();
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
     let wal = Arc::new(WalWriter::create(&fs, "test.wal", WalWriterConfig::default()).unwrap());
@@ -482,7 +485,10 @@ fn test_phantom_reads_behavior() {
     );
 
     // Verify isolation level
-    assert_eq!(tx_snapshot.isolation_level(), IsolationLevel::SnapshotIsolation);
+    assert_eq!(
+        tx_snapshot.isolation_level(),
+        IsolationLevel::SnapshotIsolation
+    );
 
     // Another transaction inserts a new key (phantom)
     let mut tx_insert = Transaction::new(
@@ -509,7 +515,7 @@ fn test_phantom_reads_behavior() {
 fn test_read_committed_no_dirty_reads() {
     // Test that read-committed prevents dirty reads (reading uncommitted data).
     // This is enforced through MVCC - uncommitted writes are not visible to other transactions.
-    
+
     let fs = MemoryFileSystem::new();
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
     let wal = Arc::new(WalWriter::create(&fs, "test.wal", WalWriterConfig::default()).unwrap());
@@ -562,7 +568,7 @@ fn test_snapshot_isolation_write_skew_prevention() {
     // Note: Classic write skew (where transactions read different keys and write
     // to different keys) is NOT prevented by snapshot isolation - only Serializable
     // isolation prevents that. This test verifies write-write conflict detection.
-    
+
     let fs = MemoryFileSystem::new();
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
     let wal = Arc::new(WalWriter::create(&fs, "test.wal", WalWriterConfig::default()).unwrap());
@@ -611,15 +617,15 @@ fn test_snapshot_isolation_write_skew_prevention() {
         engine_registry.clone(),
         current_lsn.clone(),
     );
-    
+
     // This should fail due to write-write conflict
     let result = tx2.put(table_id, b"x", b"30");
-    
+
     assert!(
         result.is_err(),
         "Snapshot isolation should detect write-write conflicts on the same key"
     );
-    
+
     // Clean up
     tx1.rollback().unwrap();
 }
@@ -627,7 +633,7 @@ fn test_snapshot_isolation_write_skew_prevention() {
 #[test]
 fn test_isolation_level_comparison_summary() {
     // Summary test demonstrating key differences between isolation levels
-    
+
     let levels = vec![
         (IsolationLevel::ReadUncommitted, "ReadUncommitted"),
         (IsolationLevel::ReadCommitted, "ReadCommitted"),
@@ -638,15 +644,15 @@ fn test_isolation_level_comparison_summary() {
 
     for (level, name) in levels {
         let tx = create_test_transaction(1, LogSequenceNumber::from(100), level);
-        
+
         assert_eq!(tx.isolation_level(), level, "Level mismatch for {}", name);
-        
+
         // Verify that isolation level is correctly set
         // Behavioral differences:
         // - ReadUncommitted/ReadCommitted: No read tracking, only write-write conflicts
         // - RepeatableRead/Serializable: Read tracking enabled, checks read-write conflicts
         // - SnapshotIsolation: Snapshot-based, only write-write conflicts
-        
+
         match level {
             IsolationLevel::ReadUncommitted | IsolationLevel::ReadCommitted => {
                 // These levels don't track reads for conflict detection

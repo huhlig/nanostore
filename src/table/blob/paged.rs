@@ -27,7 +27,9 @@
 
 use crate::pager::{Page, PageId, PageType, Pager};
 use crate::snap::Snapshot;
-use crate::table::{Table, TableCapabilities, TableEngineKind, TableError, TableResult, TableStatistics};
+use crate::table::{
+    Table, TableCapabilities, TableEngineKind, TableError, TableResult, TableStatistics,
+};
 use crate::txn::{TransactionId, VersionChain};
 use crate::types::{TableId, ValueBuf};
 use crate::vfs::FileSystem;
@@ -66,12 +68,16 @@ impl<FS: FileSystem> PagedBlob<FS> {
     pub fn new(id: TableId, name: String, pager: Arc<Pager<FS>>) -> TableResult<Self> {
         // Allocate root page for metadata
         let root_page_id = pager.allocate_page(PageType::Catalog)?;
-        
+
         // Initialize root page with empty metadata
-        let mut page = Page::new(root_page_id, PageType::Catalog, pager.page_size().data_size());
+        let mut page = Page::new(
+            root_page_id,
+            PageType::Catalog,
+            pager.page_size().data_size(),
+        );
         page.data_mut().resize(pager.page_size().data_size(), 0);
         pager.write_page(&page)?;
-        
+
         Ok(Self {
             id,
             name,
@@ -145,9 +151,11 @@ impl<FS: FileSystem> PagedBlob<FS> {
             while let Some(version) = current {
                 if version.commit_lsn.is_some() {
                     // Deserialize metadata
-                    let metadata: BlobMetadata = postcard::from_bytes(&version.value)
-                        .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
-                    
+                    let metadata: BlobMetadata =
+                        postcard::from_bytes(&version.value).map_err(|e| {
+                            TableError::Other(format!("Failed to deserialize metadata: {}", e))
+                        })?;
+
                     // Read blob data from pages
                     let data = self.read_blob_data(metadata.first_page_id)?;
                     return Ok(Some(ValueBuf(data)));
@@ -164,9 +172,10 @@ impl<FS: FileSystem> PagedBlob<FS> {
         if let Some(chain) = index.get(key) {
             if let Some(value) = chain.find_visible_version(snapshot) {
                 // Deserialize metadata
-                let metadata: BlobMetadata = postcard::from_bytes(value)
-                    .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
-                
+                let metadata: BlobMetadata = postcard::from_bytes(value).map_err(|e| {
+                    TableError::Other(format!("Failed to deserialize metadata: {}", e))
+                })?;
+
                 // Read blob data from pages
                 let data = self.read_blob_data(metadata.first_page_id)?;
                 return Ok(Some(ValueBuf(data)));
@@ -327,7 +336,11 @@ impl<FS: FileSystem> PagedBlob<FS> {
     }
 
     /// Commit all uncommitted versions for a transaction.
-    pub fn commit_versions(&self, _tx_id: TransactionId, commit_lsn: LogSequenceNumber) -> TableResult<()> {
+    pub fn commit_versions(
+        &self,
+        _tx_id: TransactionId,
+        commit_lsn: LogSequenceNumber,
+    ) -> TableResult<()> {
         let mut index = self.index.write().unwrap();
         for chain in index.values_mut() {
             Self::commit_all_uncommitted(chain, commit_lsn);
@@ -377,7 +390,10 @@ impl<FS: FileSystem> PagedBlob<FS> {
         for page_id in pages_to_free {
             if let Err(e) = self.free_blob_pages(page_id) {
                 // Log error but continue - don't fail entire vacuum
-                eprintln!("Warning: Failed to free blob pages starting at {:?}: {}", page_id, e);
+                eprintln!(
+                    "Warning: Failed to free blob pages starting at {:?}: {}",
+                    page_id, e
+                );
             }
         }
 

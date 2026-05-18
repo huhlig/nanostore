@@ -103,7 +103,9 @@ impl BloomTombstoneSet {
     /// Returns true if the key has a visible tombstone, meaning it should
     /// be treated as not present in the bloom filter.
     pub fn is_tombstoned(&self, key: &[u8], snapshot: &Snapshot) -> bool {
-        self.tombstones.iter().any(|t| t.key == key && t.is_visible(snapshot))
+        self.tombstones
+            .iter()
+            .any(|t| t.key == key && t.is_visible(snapshot))
     }
 
     /// Commit all tombstones created by the given transaction.

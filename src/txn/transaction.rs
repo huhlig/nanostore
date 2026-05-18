@@ -219,10 +219,7 @@ enum UndoOperation {
         old_value: Vec<u8>,
     },
     /// Remove a bloom filter entry (for bloom inserts)
-    RemoveBloomEntry {
-        object_id: TableId,
-        key: Vec<u8>,
-    },
+    RemoveBloomEntry { object_id: TableId, key: Vec<u8> },
     /// Remove a graph edge (for graph add operations)
     RemoveGraphEdge {
         object_id: TableId,
@@ -247,10 +244,7 @@ enum UndoOperation {
         value_key: Vec<u8>,
     },
     /// Remove a vector (for vector inserts)
-    RemoveVector {
-        object_id: TableId,
-        id: Vec<u8>,
-    },
+    RemoveVector { object_id: TableId, id: Vec<u8> },
     /// Restore a vector (for vector deletes)
     RestoreVector {
         object_id: TableId,
@@ -258,10 +252,7 @@ enum UndoOperation {
         vector: Vec<f32>,
     },
     /// Remove a geometry (for geospatial inserts)
-    RemoveGeometry {
-        object_id: TableId,
-        id: Vec<u8>,
-    },
+    RemoveGeometry { object_id: TableId, id: Vec<u8> },
     /// Restore a geometry (for geospatial deletes)
     RestoreGeometry {
         object_id: TableId,
@@ -269,10 +260,7 @@ enum UndoOperation {
         geometry: SerializedGeometry,
     },
     /// Remove a document (for full-text index operations)
-    RemoveDocument {
-        object_id: TableId,
-        doc_id: Vec<u8>,
-    },
+    RemoveDocument { object_id: TableId, doc_id: Vec<u8> },
     /// Restore a document (for full-text delete operations)
     RestoreDocument {
         object_id: TableId,
@@ -317,64 +305,134 @@ impl<FS: FileSystem> Transaction<FS> {
             } => {
                 // Restore previous value or delete if None
                 if let Some(engine) = self.engine_registry.get(*object_id) {
-                    use crate::table::{Flushable, MutableTable, SearchableTable, TableEngineInstance};
-                    
+                    use crate::table::{
+                        Flushable, MutableTable, SearchableTable, TableEngineInstance,
+                    };
+
                     match &engine {
                         TableEngineInstance::PagedBTree(btree) => {
-                            let mut writer = SearchableTable::writer(btree.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| TransactionError::Other(format!("Failed to get BTree writer for undo: {}", e)))?;
-                            
+                            let mut writer = SearchableTable::writer(
+                                btree.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get BTree writer for undo: {}",
+                                    e
+                                ))
+                            })?;
+
                             if let Some(value) = old_value {
-                                MutableTable::put(&mut writer, key, value)
-                                    .map_err(|e| TransactionError::Other(format!("BTree undo put failed: {}", e)))?;
+                                MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                    TransactionError::Other(format!("BTree undo put failed: {}", e))
+                                })?;
                             } else {
-                                MutableTable::delete(&mut writer, key)
-                                    .map_err(|e| TransactionError::Other(format!("BTree undo delete failed: {}", e)))?;
+                                MutableTable::delete(&mut writer, key).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "BTree undo delete failed: {}",
+                                        e
+                                    ))
+                                })?;
                             }
-                            Flushable::flush(&mut writer)
-                                .map_err(|e| TransactionError::Other(format!("BTree undo flush failed: {}", e)))?;
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("BTree undo flush failed: {}", e))
+                            })?;
                         }
                         TableEngineInstance::LsmTree(lsm) => {
-                            let mut writer = SearchableTable::writer(lsm.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| TransactionError::Other(format!("Failed to get LSM writer for undo: {}", e)))?;
-                            
+                            let mut writer = SearchableTable::writer(
+                                lsm.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get LSM writer for undo: {}",
+                                    e
+                                ))
+                            })?;
+
                             if let Some(value) = old_value {
-                                MutableTable::put(&mut writer, key, value)
-                                    .map_err(|e| TransactionError::Other(format!("LSM undo put failed: {}", e)))?;
+                                MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                    TransactionError::Other(format!("LSM undo put failed: {}", e))
+                                })?;
                             } else {
-                                MutableTable::delete(&mut writer, key)
-                                    .map_err(|e| TransactionError::Other(format!("LSM undo delete failed: {}", e)))?;
+                                MutableTable::delete(&mut writer, key).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "LSM undo delete failed: {}",
+                                        e
+                                    ))
+                                })?;
                             }
-                            Flushable::flush(&mut writer)
-                                .map_err(|e| TransactionError::Other(format!("LSM undo flush failed: {}", e)))?;
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("LSM undo flush failed: {}", e))
+                            })?;
                         }
                         TableEngineInstance::MemoryBTree(mem) => {
-                            let mut writer = SearchableTable::writer(mem.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| TransactionError::Other(format!("Failed to get Memory BTree writer for undo: {}", e)))?;
-                            
+                            let mut writer = SearchableTable::writer(
+                                mem.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get Memory BTree writer for undo: {}",
+                                    e
+                                ))
+                            })?;
+
                             if let Some(value) = old_value {
-                                MutableTable::put(&mut writer, key, value)
-                                    .map_err(|e| TransactionError::Other(format!("Memory BTree undo put failed: {}", e)))?;
+                                MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Memory BTree undo put failed: {}",
+                                        e
+                                    ))
+                                })?;
                             } else {
-                                MutableTable::delete(&mut writer, key)
-                                    .map_err(|e| TransactionError::Other(format!("Memory BTree undo delete failed: {}", e)))?;
+                                MutableTable::delete(&mut writer, key).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Memory BTree undo delete failed: {}",
+                                        e
+                                    ))
+                                })?;
                             }
-                            Flushable::flush(&mut writer)
-                                .map_err(|e| TransactionError::Other(format!("Memory BTree undo flush failed: {}", e)))?;
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Memory BTree undo flush failed: {}",
+                                    e
+                                ))
+                            })?;
                         }
                         TableEngineInstance::MemoryHashTable(hash) => {
-                            let mut writer = hash.writer(self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| TransactionError::Other(format!("Failed to get Hash table writer for undo: {}", e)))?;
-                            
+                            let mut writer =
+                                hash.writer(self.txn_id, self.snapshot_lsn).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Failed to get Hash table writer for undo: {}",
+                                        e
+                                    ))
+                                })?;
+
                             if let Some(value) = old_value {
-                                MutableTable::put(&mut writer, key, value)
-                                    .map_err(|e| TransactionError::Other(format!("Hash table undo put failed: {}", e)))?;
+                                MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Hash table undo put failed: {}",
+                                        e
+                                    ))
+                                })?;
                             } else {
-                                MutableTable::delete(&mut writer, key)
-                                    .map_err(|e| TransactionError::Other(format!("Hash table undo delete failed: {}", e)))?;
+                                MutableTable::delete(&mut writer, key).map_err(|e| {
+                                    TransactionError::Other(format!(
+                                        "Hash table undo delete failed: {}",
+                                        e
+                                    ))
+                                })?;
                             }
-                            Flushable::flush(&mut writer)
-                                .map_err(|e| TransactionError::Other(format!("Hash table undo flush failed: {}", e)))?;
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Hash table undo flush failed: {}",
+                                    e
+                                ))
+                            })?;
                         }
                         _ => {
                             // Other table types don't support undo yet
@@ -389,24 +447,48 @@ impl<FS: FileSystem> Transaction<FS> {
             } => {
                 // Restore a deleted key
                 if let Some(engine) = self.engine_registry.get(*object_id) {
-                    use crate::table::{Flushable, MutableTable, SearchableTable, TableEngineInstance};
-                    
+                    use crate::table::{
+                        Flushable, MutableTable, SearchableTable, TableEngineInstance,
+                    };
+
                     match &engine {
                         TableEngineInstance::PagedBTree(btree) => {
-                            let mut writer = SearchableTable::writer(btree.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| TransactionError::Other(format!("Failed to get BTree writer for undo: {}", e)))?;
-                            MutableTable::put(&mut writer, key, old_value)
-                                .map_err(|e| TransactionError::Other(format!("BTree undo restore failed: {}", e)))?;
-                            Flushable::flush(&mut writer)
-                                .map_err(|e| TransactionError::Other(format!("BTree undo flush failed: {}", e)))?;
+                            let mut writer = SearchableTable::writer(
+                                btree.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get BTree writer for undo: {}",
+                                    e
+                                ))
+                            })?;
+                            MutableTable::put(&mut writer, key, old_value).map_err(|e| {
+                                TransactionError::Other(format!("BTree undo restore failed: {}", e))
+                            })?;
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("BTree undo flush failed: {}", e))
+                            })?;
                         }
                         TableEngineInstance::LsmTree(lsm) => {
-                            let mut writer = SearchableTable::writer(lsm.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| TransactionError::Other(format!("Failed to get LSM writer for undo: {}", e)))?;
-                            MutableTable::put(&mut writer, key, old_value)
-                                .map_err(|e| TransactionError::Other(format!("LSM undo restore failed: {}", e)))?;
-                            Flushable::flush(&mut writer)
-                                .map_err(|e| TransactionError::Other(format!("LSM undo flush failed: {}", e)))?;
+                            let mut writer = SearchableTable::writer(
+                                lsm.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get LSM writer for undo: {}",
+                                    e
+                                ))
+                            })?;
+                            MutableTable::put(&mut writer, key, old_value).map_err(|e| {
+                                TransactionError::Other(format!("LSM undo restore failed: {}", e))
+                            })?;
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("LSM undo flush failed: {}", e))
+                            })?;
                         }
                         _ => {
                             // Other table types
@@ -420,9 +502,9 @@ impl<FS: FileSystem> Transaction<FS> {
                 // the bits remain set in the filter
                 if let Some(engine) = self.engine_registry.get(*object_id) {
                     if let crate::table::TableEngineInstance::PagedBloomFilter(bloom) = &engine {
-                        bloom
-                            .add_tombstone(key.clone(), self.txn_id)
-                            .map_err(|e| TransactionError::Other(format!("Bloom undo tombstone failed: {}", e)))?;
+                        bloom.add_tombstone(key.clone(), self.txn_id).map_err(|e| {
+                            TransactionError::Other(format!("Bloom undo tombstone failed: {}", e))
+                        })?;
                     }
                 }
             }
@@ -437,8 +519,20 @@ impl<FS: FileSystem> Transaction<FS> {
                 if let Some(engine) = self.engine_registry.get(*object_id) {
                     if let crate::table::TableEngineInstance::MemoryGraphTable(graph) = &engine {
                         graph
-                            .remove_edge(source, label, target, edge_id, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Graph undo remove_edge failed: {}", e)))?;
+                            .remove_edge(
+                                source,
+                                label,
+                                target,
+                                edge_id,
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Graph undo remove_edge failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
@@ -453,8 +547,20 @@ impl<FS: FileSystem> Transaction<FS> {
                 if let Some(engine) = self.engine_registry.get(*object_id) {
                     if let crate::table::TableEngineInstance::MemoryGraphTable(graph) = &engine {
                         graph
-                            .add_edge(source, label, target, edge_id, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Graph undo add_edge failed: {}", e)))?;
+                            .add_edge(
+                                source,
+                                label,
+                                target,
+                                edge_id,
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Graph undo add_edge failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
@@ -466,10 +572,16 @@ impl<FS: FileSystem> Transaction<FS> {
             } => {
                 // Add a tombstone to mark this point as rolled back
                 if let Some(engine) = self.engine_registry.get(*object_id) {
-                    if let crate::table::TableEngineInstance::TimeSeriesTable(timeseries) = &engine {
+                    if let crate::table::TableEngineInstance::TimeSeriesTable(timeseries) = &engine
+                    {
                         timeseries
                             .add_tombstone(series_key, *timestamp, self.txn_id)
-                            .map_err(|e| TransactionError::Other(format!("TimeSeries undo tombstone failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "TimeSeries undo tombstone failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
@@ -478,7 +590,9 @@ impl<FS: FileSystem> Transaction<FS> {
                 if let Some(engine) = self.engine_registry.get(*object_id) {
                     if let crate::table::TableEngineInstance::PagedHnswVector(hnsw) = &engine {
                         hnsw.delete_vector(id, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Vector undo delete failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!("Vector undo delete failed: {}", e))
+                            })?;
                     }
                 }
             }
@@ -491,7 +605,9 @@ impl<FS: FileSystem> Transaction<FS> {
                 if let Some(engine) = self.engine_registry.get(*object_id) {
                     if let crate::table::TableEngineInstance::PagedHnswVector(hnsw) = &engine {
                         hnsw.insert_vector(id, vector, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Vector undo insert failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!("Vector undo insert failed: {}", e))
+                            })?;
                     }
                 }
             }
@@ -501,7 +617,12 @@ impl<FS: FileSystem> Transaction<FS> {
                     if let crate::table::TableEngineInstance::PagedRTree(rtree) = &engine {
                         rtree
                             .delete_geometry(id, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("GeoSpatial undo delete failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "GeoSpatial undo delete failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
@@ -536,17 +657,28 @@ impl<FS: FileSystem> Transaction<FS> {
                         };
                         rtree
                             .insert_geometry(id, geometry_ref, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("GeoSpatial undo insert failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "GeoSpatial undo insert failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
             UndoOperation::RemoveDocument { object_id, doc_id } => {
                 // Remove the document that was indexed
                 if let Some(engine) = self.engine_registry.get(*object_id) {
-                    if let crate::table::TableEngineInstance::PagedFullTextIndex(fulltext) = &engine {
+                    if let crate::table::TableEngineInstance::PagedFullTextIndex(fulltext) = &engine
+                    {
                         fulltext
                             .delete_document(doc_id, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Full-text undo delete failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Full-text undo delete failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
@@ -557,7 +689,8 @@ impl<FS: FileSystem> Transaction<FS> {
             } => {
                 // Restore the document that was deleted
                 if let Some(engine) = self.engine_registry.get(*object_id) {
-                    if let crate::table::TableEngineInstance::PagedFullTextIndex(fulltext) = &engine {
+                    if let crate::table::TableEngineInstance::PagedFullTextIndex(fulltext) = &engine
+                    {
                         let text_fields: Vec<TextField<'_>> = fields
                             .iter()
                             .map(|(name, text, boost)| TextField {
@@ -568,7 +701,12 @@ impl<FS: FileSystem> Transaction<FS> {
                             .collect();
                         fulltext
                             .index_document(doc_id, &text_fields, self.txn_id, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Full-text undo index failed: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Full-text undo index failed: {}",
+                                    e
+                                ))
+                            })?;
                     }
                 }
             }
@@ -1763,30 +1901,63 @@ impl<FS: FileSystem> Transaction<FS> {
                 let old_value = match &engine {
                     TableEngineInstance::PagedBTree(btree) => {
                         let reader = SearchableTable::reader(btree.as_ref(), self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Failed to get BTree reader for undo: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get BTree reader for undo: {}",
+                                    e
+                                ))
+                            })?;
                         PointLookup::get(&reader, key, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("BTree get for undo failed: {}", e)))?
+                            .map_err(|e| {
+                                TransactionError::Other(format!("BTree get for undo failed: {}", e))
+                            })?
                             .map(|v| v.0)
                     }
                     TableEngineInstance::LsmTree(lsm) => {
                         let reader = SearchableTable::reader(lsm.as_ref(), self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Failed to get LSM reader for undo: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get LSM reader for undo: {}",
+                                    e
+                                ))
+                            })?;
                         PointLookup::get(&reader, key, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("LSM get for undo failed: {}", e)))?
+                            .map_err(|e| {
+                                TransactionError::Other(format!("LSM get for undo failed: {}", e))
+                            })?
                             .map(|v| v.0)
                     }
                     TableEngineInstance::MemoryBTree(mem) => {
                         let reader = SearchableTable::reader(mem.as_ref(), self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Failed to get Memory BTree reader for undo: {}", e)))?;
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get Memory BTree reader for undo: {}",
+                                    e
+                                ))
+                            })?;
                         PointLookup::get(&reader, key, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Memory BTree get for undo failed: {}", e)))?
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Memory BTree get for undo failed: {}",
+                                    e
+                                ))
+                            })?
                             .map(|v| v.0)
                     }
                     TableEngineInstance::MemoryHashTable(hash) => {
-                        let reader = hash.reader(self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Failed to get Hash table reader for undo: {}", e)))?;
+                        let reader = hash.reader(self.snapshot_lsn).map_err(|e| {
+                            TransactionError::Other(format!(
+                                "Failed to get Hash table reader for undo: {}",
+                                e
+                            ))
+                        })?;
                         PointLookup::get(&reader, key, self.snapshot_lsn)
-                            .map_err(|e| TransactionError::Other(format!("Hash table get for undo failed: {}", e)))?
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Hash table get for undo failed: {}",
+                                    e
+                                ))
+                            })?
                             .map(|v| v.0)
                     }
                     _ => None, // Other table types don't support undo yet
@@ -1903,7 +2074,8 @@ impl<FS: FileSystem> Transaction<FS> {
             let fulltext_ops = self.fulltext_write_set.read().unwrap();
             for (object_id, op) in fulltext_ops.iter() {
                 match op {
-                    FullTextOp::IndexDocument { doc_id, .. } | FullTextOp::UpdateDocument { doc_id, .. } => {
+                    FullTextOp::IndexDocument { doc_id, .. }
+                    | FullTextOp::UpdateDocument { doc_id, .. } => {
                         // For index/update operations, we need to remove the document on undo
                         undo_log.add(UndoOperation::RemoveDocument {
                             object_id: *object_id,
@@ -2008,278 +2180,304 @@ impl<FS: FileSystem> Transaction<FS> {
         let apply_all_changes = || -> TransactionResult<()> {
             // Apply write set to storage engines
             for ((object_id, key), value_opt) in &self.write_set {
-            if let Some(engine) = self.engine_registry.get(*object_id) {
-                match &engine {
-                    TableEngineInstance::AppendLog(appendlog) => {
-                        // AppendLog doesn't use writer pattern, access directly
-                        // Uses interior mutability (RwLock) so we can call methods on &AppendLog
-                        match value_opt {
-                            Some(value) => {
-                                MutableTable::put(&mut appendlog.as_ref(), key, value).map_err(
-                                    |e| {
+                if let Some(engine) = self.engine_registry.get(*object_id) {
+                    match &engine {
+                        TableEngineInstance::AppendLog(appendlog) => {
+                            // AppendLog doesn't use writer pattern, access directly
+                            // Uses interior mutability (RwLock) so we can call methods on &AppendLog
+                            match value_opt {
+                                Some(value) => {
+                                    MutableTable::put(&mut appendlog.as_ref(), key, value)
+                                        .map_err(|e| {
+                                            TransactionError::Other(format!(
+                                                "AppendLog put failed: {}",
+                                                e
+                                            ))
+                                        })?;
+                                }
+                                None => {
+                                    MutableTable::delete(&mut appendlog.as_ref(), key).map_err(
+                                        |e| {
+                                            TransactionError::Other(format!(
+                                                "AppendLog delete failed: {}",
+                                                e
+                                            ))
+                                        },
+                                    )?;
+                                }
+                            }
+
+                            // Flush the AppendLog to ensure data is persisted
+                            Flushable::flush(&mut appendlog.as_ref()).map_err(|e| {
+                                TransactionError::Other(format!("AppendLog flush failed: {}", e))
+                            })?;
+                        }
+                        TableEngineInstance::PagedBTree(btree) => {
+                            // Get a writer for this transaction
+                            let mut writer = SearchableTable::writer(
+                                btree.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
+                                TransactionError::Other(format!(
+                                    "Failed to get BTree writer: {}",
+                                    e
+                                ))
+                            })?;
+
+                            match value_opt {
+                                Some(value) => {
+                                    MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                        TransactionError::Other(format!("BTree put failed: {}", e))
+                                    })?;
+                                }
+                                None => {
+                                    MutableTable::delete(&mut writer, key).map_err(|e| {
                                         TransactionError::Other(format!(
-                                            "AppendLog put failed: {}",
+                                            "BTree delete failed: {}",
                                             e
                                         ))
-                                    },
-                                )?;
+                                    })?;
+                                }
                             }
-                            None => {
-                                MutableTable::delete(&mut appendlog.as_ref(), key).map_err(
-                                    |e| {
-                                        TransactionError::Other(format!(
-                                            "AppendLog delete failed: {}",
-                                            e
-                                        ))
-                                    },
-                                )?;
-                            }
+
+                            // Flush the writer
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("BTree flush failed: {}", e))
+                            })?;
+
+                            // Note: commit_versions() will be called later for all modified tables
                         }
-
-                        // Flush the AppendLog to ensure data is persisted
-                        Flushable::flush(&mut appendlog.as_ref()).map_err(|e| {
-                            TransactionError::Other(format!("AppendLog flush failed: {}", e))
-                        })?;
-                    }
-                    TableEngineInstance::PagedBTree(btree) => {
-                        // Get a writer for this transaction
-                        let mut writer =
-                            SearchableTable::writer(btree.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "Failed to get BTree writer: {}",
-                                        e
-                                    ))
-                                })?;
-
-                        match value_opt {
-                            Some(value) => {
-                                MutableTable::put(&mut writer, key, value).map_err(|e| {
-                                    TransactionError::Other(format!("BTree put failed: {}", e))
-                                })?;
-                            }
-                            None => {
-                                MutableTable::delete(&mut writer, key).map_err(|e| {
-                                    TransactionError::Other(format!("BTree delete failed: {}", e))
-                                })?;
-                            }
-                        }
-
-                        // Flush the writer
-                        Flushable::flush(&mut writer).map_err(|e| {
-                            TransactionError::Other(format!("BTree flush failed: {}", e))
-                        })?;
-
-                        // Note: commit_versions() will be called later for all modified tables
-                    }
-                    TableEngineInstance::LsmTree(lsm) => {
-                        let mut writer =
-                            SearchableTable::writer(lsm.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| {
+                        TableEngineInstance::LsmTree(lsm) => {
+                            let mut writer = SearchableTable::writer(
+                                lsm.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
                                 TransactionError::Other(format!("Failed to get LSM writer: {}", e))
                             })?;
 
-                        match value_opt {
-                            Some(value) => {
-                                MutableTable::put(&mut writer, key, value).map_err(|e| {
-                                    TransactionError::Other(format!("LSM put failed: {}", e))
-                                })?;
+                            match value_opt {
+                                Some(value) => {
+                                    MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                        TransactionError::Other(format!("LSM put failed: {}", e))
+                                    })?;
+                                }
+                                None => {
+                                    MutableTable::delete(&mut writer, key).map_err(|e| {
+                                        TransactionError::Other(format!("LSM delete failed: {}", e))
+                                    })?;
+                                }
                             }
-                            None => {
-                                MutableTable::delete(&mut writer, key).map_err(|e| {
-                                    TransactionError::Other(format!("LSM delete failed: {}", e))
-                                })?;
-                            }
+
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("LSM flush failed: {}", e))
+                            })?;
+
+                            // Note: commit_versions() will be called later for all modified tables
                         }
-
-                        Flushable::flush(&mut writer).map_err(|e| {
-                            TransactionError::Other(format!("LSM flush failed: {}", e))
-                        })?;
-
-                        // Note: commit_versions() will be called later for all modified tables
-                    }
-                    TableEngineInstance::MemoryBTree(mem) => {
-                        let mut writer =
-                            SearchableTable::writer(mem.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| {
+                        TableEngineInstance::MemoryBTree(mem) => {
+                            let mut writer = SearchableTable::writer(
+                                mem.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
                                 TransactionError::Other(format!(
                                     "Failed to get Memory BTree writer: {}",
                                     e
                                 ))
                             })?;
 
-                        match value_opt {
-                            Some(value) => {
-                                MutableTable::put(&mut writer, key, value).map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "Memory BTree put failed: {}",
-                                        e
-                                    ))
-                                })?;
+                            match value_opt {
+                                Some(value) => {
+                                    MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Memory BTree put failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
+                                None => {
+                                    MutableTable::delete(&mut writer, key).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Memory BTree delete failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
                             }
-                            None => {
-                                MutableTable::delete(&mut writer, key).map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "Memory BTree delete failed: {}",
-                                        e
-                                    ))
-                                })?;
-                            }
+
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("Memory BTree flush failed: {}", e))
+                            })?;
+
+                            // Note: commit_versions() will be called later for all modified tables
                         }
-
-                        Flushable::flush(&mut writer).map_err(|e| {
-                            TransactionError::Other(format!("Memory BTree flush failed: {}", e))
-                        })?;
-
-                        // Note: commit_versions() will be called later for all modified tables
-                    }
-                    TableEngineInstance::MemoryART(art) => {
-                        let mut writer =
-                            SearchableTable::writer(art.as_ref(), self.txn_id, self.snapshot_lsn)
-                                .map_err(|e| {
+                        TableEngineInstance::MemoryART(art) => {
+                            let mut writer = SearchableTable::writer(
+                                art.as_ref(),
+                                self.txn_id,
+                                self.snapshot_lsn,
+                            )
+                            .map_err(|e| {
                                 TransactionError::Other(format!(
                                     "Failed to get Memory ART writer: {}",
                                     e
                                 ))
                             })?;
 
-                        match value_opt {
-                            Some(value) => {
-                                MutableTable::put(&mut writer, key, value).map_err(|e| {
-                                    TransactionError::Other(format!("Memory ART put failed: {}", e))
-                                })?;
+                            match value_opt {
+                                Some(value) => {
+                                    MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Memory ART put failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
+                                None => {
+                                    MutableTable::delete(&mut writer, key).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Memory ART delete failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
                             }
-                            None => {
-                                MutableTable::delete(&mut writer, key).map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "Memory ART delete failed: {}",
-                                        e
-                                    ))
-                                })?;
-                            }
-                        }
 
-                        Flushable::flush(&mut writer).map_err(|e| {
-                            TransactionError::Other(format!("Memory ART flush failed: {}", e))
-                        })?;
-
-                        // Note: commit_versions() will be called later for all modified tables
-                    }
-                    TableEngineInstance::MemoryHashTable(hash) => {
-                        let mut writer =
-                            hash.writer(self.txn_id, self.snapshot_lsn).map_err(|e| {
-                                TransactionError::Other(format!(
-                                    "Failed to get Hash table writer: {}",
-                                    e
-                                ))
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("Memory ART flush failed: {}", e))
                             })?;
 
-                        match value_opt {
-                            Some(value) => {
-                                MutableTable::put(&mut writer, key, value).map_err(|e| {
-                                    TransactionError::Other(format!("Hash table put failed: {}", e))
-                                })?;
-                            }
-                            None => {
-                                MutableTable::delete(&mut writer, key).map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "Hash table delete failed: {}",
-                                        e
-                                    ))
-                                })?;
-                            }
+                            // Note: commit_versions() will be called later for all modified tables
                         }
-
-                        Flushable::flush(&mut writer).map_err(|e| {
-                            TransactionError::Other(format!("Hash table flush failed: {}", e))
-                        })?;
-
-                        // Note: commit_versions() will be called later for all modified tables
-                    }
-                    TableEngineInstance::MemoryBlob(blob) => {
-                        // Blob tables don't use writer pattern, access directly
-                        match value_opt {
-                            Some(value) => {
-                                blob.put(key, value).map_err(|e| {
+                        TableEngineInstance::MemoryHashTable(hash) => {
+                            let mut writer =
+                                hash.writer(self.txn_id, self.snapshot_lsn).map_err(|e| {
                                     TransactionError::Other(format!(
-                                        "Memory Blob put failed: {}",
+                                        "Failed to get Hash table writer: {}",
                                         e
                                     ))
                                 })?;
+
+                            match value_opt {
+                                Some(value) => {
+                                    MutableTable::put(&mut writer, key, value).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Hash table put failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
+                                None => {
+                                    MutableTable::delete(&mut writer, key).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Hash table delete failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
                             }
-                            None => {
-                                blob.delete(key).map_err(|e| {
-                                    TransactionError::Other(format!(
-                                        "Memory Blob delete failed: {}",
-                                        e
-                                    ))
-                                })?;
-                            }
+
+                            Flushable::flush(&mut writer).map_err(|e| {
+                                TransactionError::Other(format!("Hash table flush failed: {}", e))
+                            })?;
+
+                            // Note: commit_versions() will be called later for all modified tables
                         }
-                        // No flush needed for blob tables (in-memory, no writer)
-                    }
-                    TableEngineInstance::PagedBloomFilter(_) => {
-                        // Bloom filters don't support transactional put/delete operations
-                        // They should be updated through their specialized ApproximateMembership API
-                        return Err(TransactionError::Other(
+                        TableEngineInstance::MemoryBlob(blob) => {
+                            // Blob tables don't use writer pattern, access directly
+                            match value_opt {
+                                Some(value) => {
+                                    blob.put(key, value).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Memory Blob put failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
+                                None => {
+                                    blob.delete(key).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "Memory Blob delete failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
+                            }
+                            // No flush needed for blob tables (in-memory, no writer)
+                        }
+                        TableEngineInstance::PagedBloomFilter(_) => {
+                            // Bloom filters don't support transactional put/delete operations
+                            // They should be updated through their specialized ApproximateMembership API
+                            return Err(TransactionError::Other(
                             "transactional put/delete is not supported for bloom filter tables; use ApproximateMembership API"
                                 .to_string(),
                         ));
-                    }
-                    TableEngineInstance::PagedHnswVector(_) => {
-                        // HNSW vector tables don't support transactional put/delete operations
-                        // They should be updated through their specialized VectorSearch API
-                        return Err(TransactionError::Other(
+                        }
+                        TableEngineInstance::PagedHnswVector(_) => {
+                            // HNSW vector tables don't support transactional put/delete operations
+                            // They should be updated through their specialized VectorSearch API
+                            return Err(TransactionError::Other(
                             "transactional put/delete is not supported for HNSW vector tables; use VectorSearch API"
                                 .to_string(),
                         ));
-                    }
-                    TableEngineInstance::PagedRTree(_) => {
-                        return Err(TransactionError::Other(
+                        }
+                        TableEngineInstance::PagedRTree(_) => {
+                            return Err(TransactionError::Other(
                             "transactional put/delete is not supported for R-Tree tables; use GeoSpatial API"
                                 .to_string(),
                         ));
-                    }
-                    TableEngineInstance::PagedBlob(blob) => {
-                        // PagedBlob supports transactional put/delete with interior mutability
-                        match value_opt {
-                            Some(value) => {
-                                blob.put_tx(key, value, self.txn_id).map_err(|e| {
-                                    TransactionError::Other(format!("PagedBlob put failed: {}", e))
-                                })?;
-                            }
-                            None => {
-                                blob.delete_tx(key, self.txn_id).map_err(|e| {
-                                    TransactionError::Other(format!("PagedBlob delete failed: {}", e))
-                                })?;
+                        }
+                        TableEngineInstance::PagedBlob(blob) => {
+                            // PagedBlob supports transactional put/delete with interior mutability
+                            match value_opt {
+                                Some(value) => {
+                                    blob.put_tx(key, value, self.txn_id).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "PagedBlob put failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
+                                None => {
+                                    blob.delete_tx(key, self.txn_id).map_err(|e| {
+                                        TransactionError::Other(format!(
+                                            "PagedBlob delete failed: {}",
+                                            e
+                                        ))
+                                    })?;
+                                }
                             }
                         }
-                    }
-                    TableEngineInstance::MemoryGraphTable(_) => {
-                        // Graph tables don't support transactional put/delete operations
-                        // They should be updated through their specialized GraphAdjacency API
-                        return Err(TransactionError::Other(
+                        TableEngineInstance::MemoryGraphTable(_) => {
+                            // Graph tables don't support transactional put/delete operations
+                            // They should be updated through their specialized GraphAdjacency API
+                            return Err(TransactionError::Other(
                             "transactional put/delete is not supported for graph tables; use GraphAdjacency API"
                                 .to_string(),
                         ));
-                    }
-                    TableEngineInstance::TimeSeriesTable(_) => {
-                        // TimeSeries tables don't support transactional put/delete operations
-                        // They should be updated through their specialized TimeSeries API
-                        return Err(TransactionError::Other(
+                        }
+                        TableEngineInstance::TimeSeriesTable(_) => {
+                            // TimeSeries tables don't support transactional put/delete operations
+                            // They should be updated through their specialized TimeSeries API
+                            return Err(TransactionError::Other(
                             "transactional put/delete is not supported for TimeSeries tables; use TimeSeries API"
                                 .to_string(),
                         ));
-                    }
-                    TableEngineInstance::PagedFullTextIndex(_) => {
-                        // Full-text indexes don't support transactional put/delete operations
-                        // They should be updated through their specialized FullTextSearch API
-                        return Err(TransactionError::Other(
+                        }
+                        TableEngineInstance::PagedFullTextIndex(_) => {
+                            // Full-text indexes don't support transactional put/delete operations
+                            // They should be updated through their specialized FullTextSearch API
+                            return Err(TransactionError::Other(
                             "transactional put/delete is not supported for FullText index tables; use FullTextSearch API"
                                 .to_string(),
                         ));
+                        }
                     }
-                }
                 }
                 // If engine not found, skip (table may have been dropped)
             }

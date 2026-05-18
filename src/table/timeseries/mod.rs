@@ -57,7 +57,7 @@ pub use self::compression::{
 };
 pub use self::config::{TimeSeriesCompression, TimeSeriesConfig, TimeSeriesRetentionPolicy};
 
-use crate::pager::{PageId, Pager};
+use crate::pager::{Page, PageId, Pager};
 use crate::snap::Snapshot;
 use crate::table::{
     SpecialtyTableCapabilities, SpecialtyTableStats, Table, TableCapabilities, TableEngineKind,
@@ -71,6 +71,108 @@ use crate::wal::LogSequenceNumber;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
+
+// =============================================================================
+// Metadata Structures
+// =============================================================================
+
+/// Metadata stored in the root page
+#[repr(C)]
+struct TimeSeriesMetadata {
+    /// Magic number for validation ("TSRS")
+    magic: u32,
+    /// Version number
+    version: u32,
+    /// Bucket size in seconds
+    bucket_size: u64,
+    /// Compression type (as u8)
+    compression: u8,
+    /// Enable downsampling flag
+    enable_downsampling: u8,
+    /// Downsampling interval in seconds
+    downsampling_interval: u64,
+    /// Max points per bucket
+    max_points_per_bucket: u64,
+    /// Use memory index flag
+    use_memory_index: u8,
+    /// Total number of data points
+    total_points: u64,
+    /// Total size in bytes
+    total_size: u64,
+    /// Number of series
+    num_series: u32,
+    /// Reserved for future use
+    _reserved: [u8; 32],
+}
+
+const TIMESERIES_MAGIC: u32 = 0x5453_5253; // "TSRS"
+const TIMESERIES_VERSION: u32 = 1;
+
+impl TimeSeriesMetadata {
+    fn from_config(
+        config: &TimeSeriesConfig,
+        total_points: u64,
+        total_size: u64,
+        num_series: usize,
+    ) -> Self {
+        Self {
+            magic: TIMESERIES_MAGIC,
+            version: TIMESERIES_VERSION,
+            bucket_size: config.bucket_size,
+            compression: compression_to_u8(config.compression),
+            enable_downsampling: config.enable_downsampling as u8,
+            downsampling_interval: config.downsampling_interval,
+            max_points_per_bucket: config.max_points_per_bucket as u64,
+            use_memory_index: config.use_memory_index as u8,
+            total_points,
+            total_size,
+            num_series: num_series as u32,
+            _reserved: [0; 32],
+        }
+    }
+
+    fn to_config(&self) -> TimeSeriesConfig {
+        TimeSeriesConfig {
+            bucket_size: self.bucket_size,
+            compression: compression_from_u8(self.compression),
+            retention_policy: TimeSeriesRetentionPolicy::None, // Not persisted yet
+            enable_downsampling: self.enable_downsampling != 0,
+            downsampling_interval: self.downsampling_interval,
+            max_points_per_bucket: self.max_points_per_bucket as usize,
+            use_memory_index: self.use_memory_index != 0,
+        }
+    }
+}
+
+fn compression_to_u8(compression: TimeSeriesCompression) -> u8 {
+    match compression {
+        TimeSeriesCompression::None => 0,
+        TimeSeriesCompression::DeltaOfDelta => 1,
+        TimeSeriesCompression::Gorilla => 2,
+        TimeSeriesCompression::Delta => 3,
+        TimeSeriesCompression::Rle => 4,
+    }
+}
+
+fn compression_from_u8(value: u8) -> TimeSeriesCompression {
+    match value {
+        0 => TimeSeriesCompression::None,
+        1 => TimeSeriesCompression::DeltaOfDelta,
+        2 => TimeSeriesCompression::Gorilla,
+        3 => TimeSeriesCompression::Delta,
+        4 => TimeSeriesCompression::Rle,
+        _ => TimeSeriesCompression::DeltaOfDelta, // Default fallback
+    }
+}
+
+/// Series bucket mapping entry for persistence
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SeriesBucketEntry {
+    /// Series key
+    series_key: Vec<u8>,
+    /// Bucket ID to page ID mappings
+    bucket_pages: Vec<(u64, PageId)>,
+}
 
 // =============================================================================
 // TimeSeriesTable Implementation
@@ -133,14 +235,19 @@ impl<FS: FileSystem> TimeSeriesTable<FS> {
             total_size: 0,
         };
 
-        Ok(Self {
+        let table = Self {
             table_id,
             name,
             config,
             pager,
             root_page_id,
             state: RwLock::new(state),
-        })
+        };
+
+        // Write initial metadata to root page
+        table.write_metadata()?;
+
+        Ok(table)
     }
 
     /// Open an existing TimeSeries table.
@@ -149,13 +256,74 @@ impl<FS: FileSystem> TimeSeriesTable<FS> {
         name: String,
         pager: Arc<Pager<FS>>,
         root_page_id: PageId,
-        config: TimeSeriesConfig,
+        _config: TimeSeriesConfig,
     ) -> TableResult<Self> {
-        // TODO: Load metadata from root page
+        // Read metadata from root page
+        let page = pager.read_page(root_page_id).map_err(|e| {
+            crate::table::TableError::Other(format!("Failed to read root page: {}", e))
+        })?;
+
+        // Validate and parse metadata
+        if page.data().len() < std::mem::size_of::<TimeSeriesMetadata>() {
+            return Err(crate::table::TableError::corruption(
+                "timeseries_metadata",
+                "insufficient_data",
+                "Root page too small for metadata",
+            ));
+        }
+
+        let metadata = unsafe { &*(page.data().as_ptr() as *const TimeSeriesMetadata) };
+
+        // Validate magic number
+        if metadata.magic != TIMESERIES_MAGIC {
+            return Err(crate::table::TableError::corruption(
+                "timeseries_metadata",
+                "invalid_magic",
+                "Invalid TimeSeries magic number",
+            ));
+        }
+
+        // Validate version
+        if metadata.version != TIMESERIES_VERSION {
+            return Err(crate::table::TableError::InvalidFormatVersion(
+                metadata.version,
+            ));
+        }
+
+        // Restore configuration from metadata
+        let config = metadata.to_config();
+
+        // Deserialize series bucket mappings
+        let metadata_size = std::mem::size_of::<TimeSeriesMetadata>();
+        let series_data = &page.data()[metadata_size..];
+
+        let series_entries: Vec<SeriesBucketEntry> = if !series_data.is_empty() {
+            postcard::from_bytes(series_data).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        // Restore series bucket managers with lazy loading
+        let mut series = BTreeMap::new();
+        for entry in series_entries {
+            let mut manager = BucketManager::new(
+                config.bucket_size,
+                pager.clone(),
+                100, // max buckets in memory
+            );
+
+            // Restore bucket page mappings for lazy loading
+            for (bucket_id, page_id) in entry.bucket_pages {
+                manager.register_bucket_page(BucketId(bucket_id), page_id);
+            }
+
+            series.insert(entry.series_key, manager);
+        }
+
         let state = TimeSeriesState {
-            series: BTreeMap::new(),
-            total_points: 0,
-            total_size: 0,
+            series,
+            total_points: metadata.total_points,
+            total_size: metadata.total_size,
         };
 
         Ok(Self {
@@ -171,6 +339,82 @@ impl<FS: FileSystem> TimeSeriesTable<FS> {
     /// Get the root page ID.
     pub fn root_page_id(&self) -> PageId {
         self.root_page_id
+    }
+
+    /// Write metadata to the root page.
+    fn write_metadata(&self) -> TableResult<()> {
+        let state = self.state.read().unwrap();
+
+        // Create metadata structure
+        let metadata = TimeSeriesMetadata::from_config(
+            &self.config,
+            state.total_points,
+            state.total_size,
+            state.series.len(),
+        );
+
+        // Collect series bucket mappings
+        let series_entries: Vec<SeriesBucketEntry> = state
+            .series
+            .iter()
+            .map(|(series_key, manager)| SeriesBucketEntry {
+                series_key: series_key.clone(),
+                bucket_pages: manager.get_bucket_page_mappings(),
+            })
+            .collect();
+
+        // Serialize series entries
+        let series_data = postcard::to_allocvec(&series_entries).map_err(|e| {
+            crate::table::TableError::Other(format!("Failed to serialize series data: {}", e))
+        })?;
+
+        // Create page data
+        let metadata_size = std::mem::size_of::<TimeSeriesMetadata>();
+        let total_size = metadata_size + series_data.len();
+
+        let mut page_data = vec![0u8; total_size];
+
+        // Copy metadata
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                &metadata as *const TimeSeriesMetadata as *const u8,
+                page_data.as_mut_ptr(),
+                metadata_size,
+            );
+        }
+
+        // Copy series data
+        page_data[metadata_size..].copy_from_slice(&series_data);
+
+        // Write to root page
+        let page_size = self.pager.page_size().data_size();
+        let mut page = Page::new(
+            self.root_page_id,
+            crate::pager::PageType::LsmMeta,
+            page_size,
+        );
+
+        // Ensure we don't exceed page size
+        if page_data.len() > page_size {
+            return Err(crate::table::TableError::Other(format!(
+                "Metadata size {} exceeds page size {}",
+                page_data.len(),
+                page_size
+            )));
+        }
+
+        page.data_mut().extend_from_slice(&page_data);
+
+        self.pager.write_page(&page).map_err(|e| {
+            crate::table::TableError::Other(format!("Failed to write root page: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Flush metadata to disk (called periodically or on close).
+    pub fn flush_metadata(&self) -> TableResult<()> {
+        self.write_metadata()
     }
 
     /// Get or create a bucket manager for a series.

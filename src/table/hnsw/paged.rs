@@ -417,7 +417,6 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         self.root_page_id
     }
 
-
     /// Write metadata to root page
     fn write_metadata(
         pager: &Arc<Pager<FS>>,

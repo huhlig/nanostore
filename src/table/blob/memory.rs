@@ -26,7 +26,9 @@
 //! and optional size limits.
 
 use crate::snap::Snapshot;
-use crate::table::{Table, TableCapabilities, TableEngineKind, TableError, TableResult, TableStatistics};
+use crate::table::{
+    Table, TableCapabilities, TableEngineKind, TableError, TableResult, TableStatistics,
+};
 use crate::txn::{TransactionId, VersionChain};
 use crate::types::{TableId, ValueBuf};
 use crate::wal::LogSequenceNumber;
@@ -132,8 +134,10 @@ impl MemoryBlob {
             while let Some(version) = current {
                 if version.commit_lsn.is_some() {
                     // Deserialize metadata
-                    let metadata: BlobMetadata = postcard::from_bytes(&version.value)
-                        .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
+                    let metadata: BlobMetadata =
+                        postcard::from_bytes(&version.value).map_err(|e| {
+                            TableError::Other(format!("Failed to deserialize metadata: {}", e))
+                        })?;
                     return Ok(Some(ValueBuf(metadata.data)));
                 }
                 current = version.prev_version.as_deref();
@@ -148,8 +152,9 @@ impl MemoryBlob {
         if let Some(chain) = store.get(key) {
             if let Some(value) = chain.find_visible_version(snapshot) {
                 // Deserialize metadata
-                let metadata: BlobMetadata = postcard::from_bytes(value)
-                    .map_err(|e| TableError::Other(format!("Failed to deserialize metadata: {}", e)))?;
+                let metadata: BlobMetadata = postcard::from_bytes(value).map_err(|e| {
+                    TableError::Other(format!("Failed to deserialize metadata: {}", e))
+                })?;
                 return Ok(Some(ValueBuf(metadata.data)));
             }
         }
@@ -256,7 +261,11 @@ impl MemoryBlob {
     }
 
     /// Commit all uncommitted versions for a transaction.
-    pub fn commit_versions(&self, _tx_id: TransactionId, commit_lsn: LogSequenceNumber) -> TableResult<()> {
+    pub fn commit_versions(
+        &self,
+        _tx_id: TransactionId,
+        commit_lsn: LogSequenceNumber,
+    ) -> TableResult<()> {
         let mut store = self.metadata.write().unwrap();
         for chain in store.values_mut() {
             Self::commit_all_uncommitted(chain, commit_lsn);

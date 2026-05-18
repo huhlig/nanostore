@@ -240,7 +240,7 @@ impl<FS: FileSystem> TableEngineInstance<FS> {
         match self {
             Self::AppendLog(engine) => Some(engine.root_page_id()),
             Self::PagedBTree(engine) => Some(engine.get_root_page_id()),
-            Self::LsmTree(_) => None,    // LSM has manifest, not single root
+            Self::LsmTree(_) => None, // LSM has manifest, not single root
             Self::PagedBloomFilter(engine) => Some(engine.root_page_id()),
             Self::PagedHnswVector(engine) => Some(engine.root_page_id()),
             Self::PagedRTree(engine) => Some(engine.root_page_id()),
@@ -466,11 +466,12 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
             }
             TableEngineKind::Blob => {
                 // Create PagedBlob
-                let blob = PagedBlob::new(table_id, name, self.pager.clone())
-                    .map_err(|e| RegistryError::EngineCreationFailed {
+                let blob = PagedBlob::new(table_id, name, self.pager.clone()).map_err(|e| {
+                    RegistryError::EngineCreationFailed {
                         engine: options.engine,
                         details: format!("Failed to create PagedBlob: {}", e),
-                    })?;
+                    }
+                })?;
                 let root_page_id = blob.root_page_id();
                 Ok((
                     TableEngineInstance::PagedBlob(Arc::new(blob)),
