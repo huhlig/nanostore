@@ -1082,6 +1082,33 @@ impl<FS: FileSystem> Table for PagedHnswVector<FS> {
     }
 }
 
+impl<FS: FileSystem> PagedHnswVector<FS> {
+    /// Count nodes reachable from a starting node (for connectivity verification).
+    fn count_reachable_nodes(&self, start: NodeId) -> usize {
+        let mut visited = HashSet::new();
+        let mut to_visit = vec![start];
+
+        while let Some(node_id) = to_visit.pop() {
+            if !visited.insert(node_id) {
+                continue;
+            }
+
+            if let Ok(node) = self.load_node(node_id) {
+                // Add all neighbors from all layers
+                for layer_neighbors in &node.neighbors {
+                    for &neighbor_id in layer_neighbors {
+                        if !visited.contains(&neighbor_id) {
+                            to_visit.push(neighbor_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        visited.len()
+    }
+}
+
 impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
     fn table_id(&self) -> TableId {
         self.table_id
@@ -1337,12 +1364,147 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
     }
 
     fn verify(&self) -> TableResult<VerificationReport> {
-        // TODO: Implement verification
-        Ok(VerificationReport {
-            checked_items: *self.num_vectors.read().unwrap() as u64,
+        let mut report = VerificationReport {
+            checked_items: 0,
             errors: Vec::new(),
             warnings: Vec::new(),
-        })
+        };
+
+        let config = self.config.read().unwrap();
+        let id_to_node = self.id_to_node.read().unwrap();
+        let entry_point = self.entry_point.read().unwrap();
+        let max_layer = *self.max_layer.read().unwrap();
+
+        // Verify entry point exists if we have vectors
+        if !id_to_node.is_empty() {
+            if entry_point.is_none() {
+                report.errors.push(crate::table::ConsistencyError {
+                    error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                    location: "hnsw_entry_point".to_string(),
+                    description: "Entry point is None but graph has nodes".to_string(),
+                    severity: crate::table::Severity::Error,
+                });
+            }
+        }
+
+        // Verify each node in the graph
+        for (vector_id, &node_id) in id_to_node.iter() {
+            report.checked_items += 1;
+
+            // Try to load the node
+            let node = match self.load_node(node_id) {
+                Ok(n) => n,
+                Err(e) => {
+                    report.errors.push(crate::table::ConsistencyError {
+                        error_type: crate::table::ConsistencyErrorType::InvalidPointer,
+                        location: format!("hnsw_node_{}", node_id.as_u32()),
+                        description: format!(
+                            "Failed to load node {} for vector {:?}: {}",
+                            node_id.as_u32(),
+                            vector_id,
+                            e
+                        ),
+                        severity: crate::table::Severity::Critical,
+                    });
+                    continue;
+                }
+            };
+
+            // Verify vector dimensions
+            if node.vector.len() != config.dimensions {
+                report.errors.push(crate::table::ConsistencyError {
+                    error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                    location: format!("hnsw_node_{}", node_id.as_u32()),
+                    description: format!(
+                        "Vector dimension mismatch: expected {}, got {}",
+                        config.dimensions,
+                        node.vector.len()
+                    ),
+                    severity: crate::table::Severity::Error,
+                });
+            }
+
+            // Verify layer is within bounds
+            if node.layer > max_layer {
+                report.errors.push(crate::table::ConsistencyError {
+                    error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                    location: format!("hnsw_node_{}", node_id.as_u32()),
+                    description: format!(
+                        "Node layer {} exceeds max_layer {}",
+                        node.layer, max_layer
+                    ),
+                    severity: crate::table::Severity::Error,
+                });
+            }
+
+            // Verify neighbors structure
+            if node.neighbors.len() != node.layer + 1 {
+                report.errors.push(crate::table::ConsistencyError {
+                    error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                    location: format!("hnsw_node_{}", node_id.as_u32()),
+                    description: format!(
+                        "Neighbors array size {} doesn't match layer+1 {}",
+                        node.neighbors.len(),
+                        node.layer + 1
+                    ),
+                    severity: crate::table::Severity::Error,
+                });
+            }
+
+            // Verify max_connections constraint for each layer
+            for (layer_idx, layer_neighbors) in node.neighbors.iter().enumerate() {
+                let max_conn = if layer_idx == 0 {
+                    config.max_connections_layer0
+                } else {
+                    config.max_connections
+                };
+
+                if layer_neighbors.len() > max_conn {
+                    report.warnings.push(crate::table::ConsistencyWarning {
+                        location: format!("hnsw_node_{}_layer_{}", node_id.as_u32(), layer_idx),
+                        description: format!(
+                            "Node has {} neighbors at layer {}, exceeds max_connections {}",
+                            layer_neighbors.len(),
+                            layer_idx,
+                            max_conn
+                        ),
+                    });
+                }
+
+                // Verify all neighbor nodes exist
+                for &neighbor_id in layer_neighbors {
+                    if let Err(e) = self.load_node(neighbor_id) {
+                        report.errors.push(crate::table::ConsistencyError {
+                            error_type: crate::table::ConsistencyErrorType::InvalidPointer,
+                            location: format!("hnsw_node_{}_layer_{}", node_id.as_u32(), layer_idx),
+                            description: format!(
+                                "Invalid neighbor pointer to node {}: {}",
+                                neighbor_id.as_u32(),
+                                e
+                            ),
+                            severity: crate::table::Severity::Error,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Warn if graph is disconnected (entry point can't reach all nodes)
+        if !id_to_node.is_empty() && entry_point.is_some() {
+            let reachable = self.count_reachable_nodes(entry_point.unwrap());
+            if reachable < id_to_node.len() {
+                report.warnings.push(crate::table::ConsistencyWarning {
+                    location: "hnsw_graph".to_string(),
+                    description: format!(
+                        "Graph may be disconnected: {} nodes exist but only {} reachable from entry point",
+                        id_to_node.len(),
+                        reachable
+                    ),
+                });
+            }
+        }
+
+        Ok(report)
     }
 }
 

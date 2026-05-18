@@ -1524,6 +1524,165 @@ impl<FS: FileSystem> Table for PagedRTree<FS> {
     }
 }
 
+impl<FS: FileSystem> PagedRTree<FS> {
+    /// Verify a node and its children recursively.
+    fn verify_node_recursive(
+        &self,
+        page_id: PageId,
+        node: &RTreeNode,
+        parent_mbr: Option<&Mbr>,
+        report: &mut VerificationReport,
+    ) -> TableResult<()> {
+        // Calculate this node's MBR
+        let node_mbr = node.calculate_mbr(self.config.dimensions);
+
+        // Verify MBR is valid
+        if !node_mbr.is_valid() {
+            report.errors.push(crate::table::ConsistencyError {
+                error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                location: format!("rtree_node_{}", page_id),
+                description: "Node has invalid MBR (min > max)".to_string(),
+                severity: crate::table::Severity::Error,
+            });
+        }
+
+        // Verify parent containment
+        if let Some(parent) = parent_mbr {
+            if !parent.contains(&node_mbr) {
+                report.errors.push(crate::table::ConsistencyError {
+                    error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                    location: format!("rtree_node_{}", page_id),
+                    description: "Node MBR not contained by parent MBR".to_string(),
+                    severity: crate::table::Severity::Error,
+                });
+            }
+        }
+
+        match node {
+            RTreeNode::Internal { entries, level, .. } => {
+                if entries.is_empty() {
+                    report.warnings.push(crate::table::ConsistencyWarning {
+                        location: format!("rtree_node_{}", page_id),
+                        description: "Internal node has no entries".to_string(),
+                    });
+                }
+
+                if entries.len() > self.config.max_entries_per_node {
+                    report.errors.push(crate::table::ConsistencyError {
+                        error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                        location: format!("rtree_node_{}", page_id),
+                        description: format!(
+                            "Internal node has {} entries, exceeds max {}",
+                            entries.len(),
+                            self.config.max_entries_per_node
+                        ),
+                        severity: crate::table::Severity::Error,
+                    });
+                }
+
+                for (idx, entry) in entries.iter().enumerate() {
+                    if !entry.mbr.is_valid() {
+                        report.errors.push(crate::table::ConsistencyError {
+                            error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                            location: format!("rtree_node_{}_entry_{}", page_id, idx),
+                            description: "Entry has invalid MBR".to_string(),
+                            severity: crate::table::Severity::Error,
+                        });
+                    }
+
+                    if entry.mbr.dimensions != self.config.dimensions {
+                        report.errors.push(crate::table::ConsistencyError {
+                            error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                            location: format!("rtree_node_{}_entry_{}", page_id, idx),
+                            description: format!(
+                                "Entry MBR dimension mismatch: expected {}, got {}",
+                                self.config.dimensions, entry.mbr.dimensions
+                            ),
+                            severity: crate::table::Severity::Error,
+                        });
+                    }
+
+                    match Self::read_node(&self.pager, entry.child_page_id) {
+                        Ok(child_node) => {
+                            if child_node.level() != level - 1 {
+                                report.errors.push(crate::table::ConsistencyError {
+                                    error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                                    location: format!("rtree_node_{}", entry.child_page_id),
+                                    description: format!(
+                                        "Child node level {} doesn't match expected {}",
+                                        child_node.level(),
+                                        level - 1
+                                    ),
+                                    severity: crate::table::Severity::Error,
+                                });
+                            }
+
+                            self.verify_node_recursive(
+                                entry.child_page_id,
+                                &child_node,
+                                Some(&entry.mbr),
+                                report,
+                            )?;
+                        }
+                        Err(e) => {
+                            report.errors.push(crate::table::ConsistencyError {
+                                error_type: crate::table::ConsistencyErrorType::InvalidPointer,
+                                location: format!("rtree_node_{}_entry_{}", page_id, idx),
+                                description: format!(
+                                    "Failed to read child node {}: {}",
+                                    entry.child_page_id, e
+                                ),
+                                severity: crate::table::Severity::Critical,
+                            });
+                        }
+                    }
+                }
+            }
+            RTreeNode::Leaf { entries, .. } => {
+                if entries.len() > self.config.max_entries_per_node {
+                    report.errors.push(crate::table::ConsistencyError {
+                        error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                        location: format!("rtree_node_{}", page_id),
+                        description: format!(
+                            "Leaf node has {} entries, exceeds max {}",
+                            entries.len(),
+                            self.config.max_entries_per_node
+                        ),
+                        severity: crate::table::Severity::Error,
+                    });
+                }
+
+                for (idx, entry) in entries.iter().enumerate() {
+                    report.checked_items += 1;
+
+                    if !entry.mbr.is_valid() {
+                        report.errors.push(crate::table::ConsistencyError {
+                            error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                            location: format!("rtree_node_{}_entry_{}", page_id, idx),
+                            description: "Leaf entry has invalid MBR".to_string(),
+                            severity: crate::table::Severity::Error,
+                        });
+                    }
+
+                    if entry.mbr.dimensions != self.config.dimensions {
+                        report.errors.push(crate::table::ConsistencyError {
+                            error_type: crate::table::ConsistencyErrorType::CorruptedIndex,
+                            location: format!("rtree_node_{}_entry_{}", page_id, idx),
+                            description: format!(
+                                "Leaf entry MBR dimension mismatch: expected {}, got {}",
+                                self.config.dimensions, entry.mbr.dimensions
+                            ),
+                            severity: crate::table::Severity::Error,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 // Implement GeoSpatial trait
 impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
     fn table_id(&self) -> TableId {
@@ -1613,12 +1772,42 @@ impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
     }
 
     fn verify(&self) -> TableResult<VerificationReport> {
-        // TODO: Implement verification
-        Ok(VerificationReport {
+        let mut report = VerificationReport {
             checked_items: 0,
             errors: Vec::new(),
             warnings: Vec::new(),
-        })
+        };
+
+        let root_page_id = self.root_page_id();
+
+        // Verify the tree structure recursively starting from root
+        match Self::read_node(&self.pager, root_page_id) {
+            Ok(root_node) => {
+                self.verify_node_recursive(root_page_id, &root_node, None, &mut report)?;
+            }
+            Err(e) => {
+                report.errors.push(crate::table::ConsistencyError {
+                    error_type: crate::table::ConsistencyErrorType::CorruptedPage,
+                    location: format!("rtree_root_{}", root_page_id),
+                    description: format!("Failed to read root node: {}", e),
+                    severity: crate::table::Severity::Critical,
+                });
+            }
+        }
+
+        // Verify object count matches actual count
+        let actual_count = *self.object_count.read().unwrap();
+        if report.checked_items != actual_count as u64 {
+            report.warnings.push(crate::table::ConsistencyWarning {
+                location: "rtree_metadata".to_string(),
+                description: format!(
+                    "Object count mismatch: metadata says {}, found {} entries",
+                    actual_count, report.checked_items
+                ),
+            });
+        }
+
+        Ok(report)
     }
 }
 
