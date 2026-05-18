@@ -39,7 +39,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// - Bytes 56-63: Transaction counter (u64)
 /// - Bytes 64-71: Last checkpoint LSN (u64)
 /// - Bytes 72-79: Root B-Tree page ID (u64)
-/// - Bytes 80-87: Reserved (u64)
+/// - Bytes 80-87: B-Tree row count (u64)
 /// - Bytes 88-95: Reserved (u64)
 /// - Bytes 96-127: Reserved (32 bytes)
 #[derive(Debug)]
@@ -64,6 +64,8 @@ pub struct Superblock {
     pub last_checkpoint_lsn: u64,
     /// Root B-Tree page ID (0 if empty database)
     pub root_btree_page: PageId,
+    /// B-Tree row count (total number of rows)
+    pub btree_row_count: u64,
 }
 
 impl Clone for Superblock {
@@ -80,6 +82,7 @@ impl Clone for Superblock {
             transaction_counter: self.transaction_counter,
             last_checkpoint_lsn: self.last_checkpoint_lsn,
             root_btree_page: self.root_btree_page,
+            btree_row_count: self.btree_row_count,
         }
     }
 }
@@ -107,6 +110,7 @@ impl Superblock {
             transaction_counter: 0,
             last_checkpoint_lsn: 0,
             root_btree_page: PageId::from(0),
+            btree_row_count: 0,
         }
     }
 
@@ -129,6 +133,7 @@ impl Superblock {
         bytes.extend_from_slice(&self.transaction_counter.to_le_bytes());
         bytes.extend_from_slice(&self.last_checkpoint_lsn.to_le_bytes());
         bytes.extend_from_slice(&self.root_btree_page.to_bytes());
+        bytes.extend_from_slice(&self.btree_row_count.to_le_bytes());
 
         // Add reserved bytes
         bytes.resize(Self::SIZE, 0);
@@ -174,6 +179,7 @@ impl Superblock {
         let transaction_counter = u64::from_le_bytes(bytes[56..64].try_into().unwrap());
         let last_checkpoint_lsn = u64::from_le_bytes(bytes[64..72].try_into().unwrap());
         let root_btree_page = PageId::from(u64::from_le_bytes(bytes[72..80].try_into().unwrap()));
+        let btree_row_count = u64::from_le_bytes(bytes[80..88].try_into().unwrap());
 
         Ok(Self {
             magic,
@@ -186,6 +192,7 @@ impl Superblock {
             transaction_counter,
             last_checkpoint_lsn,
             root_btree_page,
+            btree_row_count,
         })
     }
 

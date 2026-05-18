@@ -666,6 +666,22 @@ impl<FS: FileSystem> Pager<FS> {
         self.superblock.read().root_btree_page
     }
 
+    /// Persist the B-Tree row count to the superblock.
+    pub fn set_btree_row_count(&self, row_count: u64) -> PagerResult<()> {
+        let superblock_snapshot = {
+            let mut superblock = self.superblock.write();
+            superblock.btree_row_count = row_count;
+            superblock.clone()
+        };
+
+        self.write_superblock(&superblock_snapshot)
+    }
+
+    /// Read the persisted B-Tree row count from the superblock.
+    pub fn btree_row_count(&self) -> u64 {
+        self.superblock.read().btree_row_count
+    }
+
     // =========================================================================
     // Overflow Page Chain Methods
     // =========================================================================

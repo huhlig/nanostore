@@ -373,6 +373,8 @@ pub struct PagedBTree<FS: FileSystem> {
     pager: Arc<Pager<FS>>,
     /// Root page ID wrapped in Arc<RwLock> to allow atomic updates during root splits
     root_page_id: Arc<RwLock<PageId>>,
+    /// Row count wrapped in Arc<RwLock> for atomic updates
+    row_count: Arc<RwLock<u64>>,
 }
 
 impl<FS: FileSystem> PagedBTree<FS> {
@@ -391,22 +393,26 @@ impl<FS: FileSystem> PagedBTree<FS> {
         page.data_mut().extend_from_slice(&root_node.to_bytes());
         pager.write_page(&page)?;
         pager.set_root_btree_page(root_page_id)?;
+        pager.set_btree_row_count(0)?;
 
         Ok(Self {
             id,
             name,
             pager,
             root_page_id: Arc::new(RwLock::new(root_page_id)),
+            row_count: Arc::new(RwLock::new(0)),
         })
     }
 
     /// Open an existing paged B-Tree table.
     pub fn open(id: TableId, name: String, pager: Arc<Pager<FS>>, root_page_id: PageId) -> Self {
+        let row_count = pager.btree_row_count();
         Self {
             id,
             name,
             pager,
             root_page_id: Arc::new(RwLock::new(root_page_id)),
+            row_count: Arc::new(RwLock::new(row_count)),
         }
     }
 
@@ -421,6 +427,39 @@ impl<FS: FileSystem> PagedBTree<FS> {
             .set_root_btree_page(new_root)
             .map_err(crate::table::TableError::from)?;
         *self.root_page_id.write().unwrap() = new_root;
+        Ok(())
+    }
+
+    /// Get the current row count.
+    fn get_row_count(&self) -> u64 {
+        *self.row_count.read().unwrap()
+    }
+
+    /// Increment the row count and persist it.
+    fn increment_row_count(&self) -> TableResult<()> {
+        let new_count = {
+            let mut count = self.row_count.write().unwrap();
+            *count += 1;
+            *count
+        };
+        self.pager
+            .set_btree_row_count(new_count)
+            .map_err(crate::table::TableError::from)?;
+        Ok(())
+    }
+
+    /// Decrement the row count and persist it.
+    fn decrement_row_count(&self) -> TableResult<()> {
+        let new_count = {
+            let mut count = self.row_count.write().unwrap();
+            if *count > 0 {
+                *count -= 1;
+            }
+            *count
+        };
+        self.pager
+            .set_btree_row_count(new_count)
+            .map_err(crate::table::TableError::from)?;
         Ok(())
     }
 
@@ -938,6 +977,12 @@ impl<FS: FileSystem> PagedBTree<FS> {
         let (leaf_page_id, pos, path) = self.search_with_path(&key)?;
         let mut node = self.read_node(leaf_page_id)?;
 
+        let is_new_key = if let BTreeNode::Leaf { ref entries, .. } = node {
+            !(pos < entries.len() && entries[pos].key == key)
+        } else {
+            false
+        };
+
         if let BTreeNode::Leaf {
             ref mut entries, ..
         } = node
@@ -975,6 +1020,11 @@ impl<FS: FileSystem> PagedBTree<FS> {
             if node.is_full() {
                 self.split_and_propagate(leaf_page_id, &node, path)?;
             }
+        }
+
+        // Increment row count if this is a new key
+        if is_new_key {
+            self.increment_row_count()?;
         }
 
         Ok(())
@@ -1191,6 +1241,9 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
                 // Write updated node
                 self.write_node(leaf_page_id, &node)?;
+
+                // Decrement row count
+                self.decrement_row_count()?;
 
                 // Check if node needs rebalancing
                 if !node.has_minimum_keys() && leaf_page_id != self.get_root_page_id() {
@@ -1409,8 +1462,7 @@ impl<'a, FS: FileSystem> TableReader for PagedBTreeReader<'a, FS> {
     }
 
     fn approximate_len(&self) -> TableResult<Option<u64>> {
-        // TODO: Implement proper row count
-        Ok(None)
+        Ok(Some(self.table.get_row_count()))
     }
 }
 
