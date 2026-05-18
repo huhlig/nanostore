@@ -412,6 +412,11 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             rng_state: RwLock::new(12345),
         })
     }
+    /// Get the root page ID.
+    pub fn root_page_id(&self) -> PageId {
+        self.root_page_id
+    }
+
 
     /// Write metadata to root page
     fn write_metadata(

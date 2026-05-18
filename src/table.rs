@@ -236,14 +236,13 @@ impl<FS: FileSystem> TableEngineInstance<FS> {
     }
 
     /// Get the root page ID for persistent engines.
-    /// Note: This is a placeholder - proper root page tracking needs to be added
     pub fn root_page_id(&self) -> Option<PageId> {
         match self {
             Self::AppendLog(engine) => Some(engine.root_page_id()),
-            Self::PagedBTree(_) => None, // TODO: Make get_root_page_id public or add accessor
+            Self::PagedBTree(engine) => Some(engine.get_root_page_id()),
             Self::LsmTree(_) => None,    // LSM has manifest, not single root
             Self::PagedBloomFilter(engine) => Some(engine.root_page_id()),
-            Self::PagedHnswVector(_) => None, // TODO: Add root_page_id accessor
+            Self::PagedHnswVector(engine) => Some(engine.root_page_id()),
             Self::PagedRTree(engine) => Some(engine.root_page_id()),
             Self::TimeSeriesTable(engine) => Some(engine.root_page_id()),
             Self::PagedFullTextIndex(engine) => Some(engine.root_page_id()),
