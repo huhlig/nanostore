@@ -1025,6 +1025,90 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         Ok(())
     }
+
+    /// Remove a node from all neighbor lists and reconnect affected neighbors.
+    fn repair_graph_after_deletion(&self, deleted_node_id: NodeId) -> TableResult<()> {
+        let deleted_node = self.load_node(deleted_node_id)?;
+
+        for layer in 0..deleted_node.neighbors.len() {
+            let layer_neighbors = deleted_node.neighbors[layer].clone();
+
+            for &neighbor_id in &layer_neighbors {
+                let mut neighbor = self.load_node(neighbor_id)?;
+                if layer < neighbor.neighbors.len() {
+                    neighbor.neighbors[layer].retain(|&id| id != deleted_node_id);
+                    self.update_node(neighbor_id, &neighbor)?;
+                }
+            }
+
+            if layer_neighbors.len() > 1 {
+                for &neighbor_id in &layer_neighbors {
+                    let mut candidates = Vec::new();
+
+                    for &candidate_id in &layer_neighbors {
+                        if candidate_id == neighbor_id {
+                            continue;
+                        }
+
+                        let candidate_node = self.load_node(candidate_id)?;
+                        let distance = self.distance(
+                            &self.load_node(neighbor_id)?.vector,
+                            &candidate_node.vector,
+                        );
+                        candidates.push(Candidate {
+                            node_id: candidate_id,
+                            distance,
+                        });
+                    }
+
+                    candidates.sort_by(|a, b| {
+                        a.distance
+                            .partial_cmp(&b.distance)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+
+                    let max_connections = if layer == 0 {
+                        self.config.read().unwrap().max_connections_layer0
+                    } else {
+                        self.config.read().unwrap().max_connections
+                    };
+
+                    let selected = self.select_neighbors(candidates, max_connections, layer, true);
+                    self.connect_nodes(neighbor_id, selected, layer)?;
+                    self.prune_connections(neighbor_id, layer)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Select a replacement entry point after node deletion.
+    fn select_replacement_entry_point(
+        &self,
+        deleted_node_id: NodeId,
+    ) -> TableResult<(Option<NodeId>, usize)> {
+        let id_to_node = self.id_to_node.read().unwrap();
+
+        if id_to_node.is_empty() {
+            return Ok((None, 0));
+        }
+
+        let mut best: Option<(NodeId, usize)> = None;
+        for &node_id in id_to_node.values() {
+            if node_id == deleted_node_id {
+                continue;
+            }
+
+            let node = self.load_node(node_id)?;
+            match best {
+                Some((_, best_layer)) if node.layer <= best_layer => {}
+                _ => best = Some((node_id, node.layer)),
+            }
+        }
+
+        Ok(best.map_or((None, 0), |(node_id, layer)| (Some(node_id), layer)))
+    }
 }
 
 impl<FS: FileSystem> Table for PagedHnswVector<FS> {
@@ -1266,22 +1350,24 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
     ) -> TableResult<()> {
         let id_buf = KeyBuf(id.to_vec());
 
-        // Find node
-        let _node_id = self
+        let node_id = self
             .id_to_node
             .write()
             .unwrap()
             .remove(&id_buf)
             .ok_or_else(|| TableError::key_not_found(format!("Vector with ID {:?}", id_buf)))?;
 
-        // TODO: Implement graph repair after deletion
-        // This involves:
-        // 1. Loading the node to get its neighbors
-        // 2. Removing all connections to this node from neighbors
-        // 3. Reconnecting neighbors to maintain graph connectivity
-        // 4. Updating entry point if this was the entry point
+        self.repair_graph_after_deletion(node_id)?;
+
+        let was_entry_point = self.entry_point.read().unwrap().map(|ep| ep == node_id).unwrap_or(false);
+        if was_entry_point {
+            let (replacement, replacement_layer) = self.select_replacement_entry_point(node_id)?;
+            *self.entry_point.write().unwrap() = replacement;
+            *self.max_layer.write().unwrap() = replacement_layer;
+        }
 
         *self.num_vectors.write().unwrap() -= 1;
+        self.persist_mapping()?;
 
         Ok(())
     }
