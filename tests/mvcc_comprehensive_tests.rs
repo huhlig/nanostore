@@ -536,4 +536,432 @@ fn test_cross_table_snapshot_isolation() {
     db.release_snapshot(snapshot.id).unwrap();
 }
 
+/// Test snapshot isolation with ART engine
+#[test]
+fn test_snapshot_isolation_art() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_art", table_options(TableEngineKind::Art))
+        .unwrap();
+
+    // Transaction 1: Write initial value
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"value1").unwrap();
+    tx1.commit().unwrap();
+
+    // Create snapshot after first commit
+    let snapshot1 = db.create_snapshot("snap1").unwrap();
+
+    // Transaction 2: Update value
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.put(table_id, b"key1", b"value2").unwrap();
+    tx2.commit().unwrap();
+
+    // Read from snapshot - should see old value
+    let tx_snap = db.begin_read_at(snapshot1.lsn).unwrap();
+    let value = tx_snap.get(table_id, b"key1").unwrap();
+    assert_eq!(value.as_ref().map(|v| v.0.as_slice()), Some(&b"value1"[..]));
+
+    // Read from current - should see new value
+    let tx_current = db.begin_read().unwrap();
+    let value = tx_current.get(table_id, b"key1").unwrap();
+    assert_eq!(value.as_ref().map(|v| v.0.as_slice()), Some(&b"value2"[..]));
+
+    // Clean up
+    db.release_snapshot(snapshot1.id).unwrap();
+}
+
+/// Test snapshot isolation with LSM engine
+#[test]
+fn test_snapshot_isolation_lsm() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_lsm", table_options(TableEngineKind::LsmTree))
+        .unwrap();
+
+    // Transaction 1: Write initial value
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"value1").unwrap();
+    tx1.commit().unwrap();
+
+    // Create snapshot after first commit
+    let snapshot1 = db.create_snapshot("snap1").unwrap();
+
+    // Transaction 2: Update value
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.put(table_id, b"key1", b"value2").unwrap();
+    tx2.commit().unwrap();
+
+    // Read from snapshot - should see old value
+    let tx_snap = db.begin_read_at(snapshot1.lsn).unwrap();
+    let value = tx_snap.get(table_id, b"key1").unwrap();
+    assert_eq!(value.as_ref().map(|v| v.0.as_slice()), Some(&b"value1"[..]));
+
+    // Read from current - should see new value
+    let tx_current = db.begin_read().unwrap();
+    let value = tx_current.get(table_id, b"key1").unwrap();
+    assert_eq!(value.as_ref().map(|v| v.0.as_slice()), Some(&b"value2"[..]));
+
+    // Clean up
+    db.release_snapshot(snapshot1.id).unwrap();
+}
+
+// =============================================================================
+// Phase 5: Read-Your-Writes Tests
+// =============================================================================
+
+/// Test that transactions can read their own uncommitted writes
+#[test]
+fn test_read_your_writes_basic() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_ryw", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Start transaction and write
+    let mut tx = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx.put(table_id, b"key1", b"my_value").unwrap();
+
+    // Should be able to read own write before commit
+    let value = tx.get(table_id, b"key1").unwrap();
+    assert_eq!(
+        value.as_ref().map(|v| v.0.as_slice()),
+        Some(&b"my_value"[..]),
+        "Transaction should see its own uncommitted write"
+    );
+
+    // Commit
+    tx.commit().unwrap();
+
+    // Verify committed value is visible to new transactions
+    let tx_read = db.begin_read().unwrap();
+    let value = tx_read.get(table_id, b"key1").unwrap();
+    assert_eq!(value.as_ref().map(|v| v.0.as_slice()), Some(&b"my_value"[..]));
+}
+
+/// Test read-your-writes with multiple operations
+#[test]
+fn test_read_your_writes_multiple_operations() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_ryw_multi", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    let mut tx = db.begin_write(Durability::SyncOnCommit).unwrap();
+
+    // Write multiple keys
+    tx.put(table_id, b"key1", b"value1").unwrap();
+    tx.put(table_id, b"key2", b"value2").unwrap();
+    tx.put(table_id, b"key3", b"value3").unwrap();
+
+    // Read all keys - should see all writes
+    let v1 = tx.get(table_id, b"key1").unwrap();
+    let v2 = tx.get(table_id, b"key2").unwrap();
+    let v3 = tx.get(table_id, b"key3").unwrap();
+
+    assert_eq!(v1.as_ref().map(|v| v.0.as_slice()), Some(&b"value1"[..]));
+    assert_eq!(v2.as_ref().map(|v| v.0.as_slice()), Some(&b"value2"[..]));
+    assert_eq!(v3.as_ref().map(|v| v.0.as_slice()), Some(&b"value3"[..]));
+
+    // Update a key
+    tx.put(table_id, b"key2", b"updated2").unwrap();
+
+    // Should see updated value
+    let v2_updated = tx.get(table_id, b"key2").unwrap();
+    assert_eq!(
+        v2_updated.as_ref().map(|v| v.0.as_slice()),
+        Some(&b"updated2"[..])
+    );
+
+    tx.commit().unwrap();
+}
+
+/// Test read-your-writes with deletes
+#[test]
+fn test_read_your_writes_with_deletes() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_ryw_delete", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Write initial value
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"value1").unwrap();
+    tx1.commit().unwrap();
+
+    // Delete in new transaction
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.delete(table_id, b"key1").unwrap();
+
+    // Should see deletion (None) in same transaction
+    let value = tx2.get(table_id, b"key1").unwrap();
+    assert!(value.is_none(), "Transaction should see its own delete");
+
+    tx2.commit().unwrap();
+
+    // Verify deletion is visible to new transactions
+    let tx_read = db.begin_read().unwrap();
+    let value = tx_read.get(table_id, b"key1").unwrap();
+    assert!(value.is_none());
+}
+
+// =============================================================================
+// Phase 6: Historical Reads Tests
+// =============================================================================
+
+/// Test reading from multiple historical snapshots
+#[test]
+fn test_historical_reads_multiple_snapshots() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_historical", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Version 1
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"version1").unwrap();
+    tx1.commit().unwrap();
+    let snap1 = db.create_snapshot("v1").unwrap();
+
+    // Version 2
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.put(table_id, b"key1", b"version2").unwrap();
+    tx2.commit().unwrap();
+    let snap2 = db.create_snapshot("v2").unwrap();
+
+    // Version 3
+    let mut tx3 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx3.put(table_id, b"key1", b"version3").unwrap();
+    tx3.commit().unwrap();
+    let snap3 = db.create_snapshot("v3").unwrap();
+
+    // Read from each snapshot
+    let tx_v1 = db.begin_read_at(snap1.lsn).unwrap();
+    let v1 = tx_v1.get(table_id, b"key1").unwrap();
+    assert_eq!(v1.as_ref().map(|v| v.0.as_slice()), Some(&b"version1"[..]));
+
+    let tx_v2 = db.begin_read_at(snap2.lsn).unwrap();
+    let v2 = tx_v2.get(table_id, b"key1").unwrap();
+    assert_eq!(v2.as_ref().map(|v| v.0.as_slice()), Some(&b"version2"[..]));
+
+    let tx_v3 = db.begin_read_at(snap3.lsn).unwrap();
+    let v3 = tx_v3.get(table_id, b"key1").unwrap();
+    assert_eq!(v3.as_ref().map(|v| v.0.as_slice()), Some(&b"version3"[..]));
+
+    // Current should see version 3
+    let tx_current = db.begin_read().unwrap();
+    let v_current = tx_current.get(table_id, b"key1").unwrap();
+    assert_eq!(
+        v_current.as_ref().map(|v| v.0.as_slice()),
+        Some(&b"version3"[..])
+    );
+
+    // Clean up
+    db.release_snapshot(snap1.id).unwrap();
+    db.release_snapshot(snap2.id).unwrap();
+    db.release_snapshot(snap3.id).unwrap();
+}
+
+/// Test historical reads with multiple keys
+#[test]
+fn test_historical_reads_multiple_keys() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_hist_keys", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Initial state: key1=v1, key2=v2
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"v1").unwrap();
+    tx1.put(table_id, b"key2", b"v2").unwrap();
+    tx1.commit().unwrap();
+    let snap1 = db.create_snapshot("state1").unwrap();
+
+    // Update key1 only
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.put(table_id, b"key1", b"v1_updated").unwrap();
+    tx2.commit().unwrap();
+    let snap2 = db.create_snapshot("state2").unwrap();
+
+    // Update key2 only
+    let mut tx3 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx3.put(table_id, b"key2", b"v2_updated").unwrap();
+    tx3.commit().unwrap();
+
+    // Snapshot 1: both keys original
+    let tx_s1 = db.begin_read_at(snap1.lsn).unwrap();
+    assert_eq!(
+        tx_s1.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"v1"[..])
+    );
+    assert_eq!(
+        tx_s1.get(table_id, b"key2").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"v2"[..])
+    );
+
+    // Snapshot 2: key1 updated, key2 original
+    let tx_s2 = db.begin_read_at(snap2.lsn).unwrap();
+    assert_eq!(
+        tx_s2.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"v1_updated"[..])
+    );
+    assert_eq!(
+        tx_s2.get(table_id, b"key2").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"v2"[..])
+    );
+
+    // Current: both keys updated
+    let tx_current = db.begin_read().unwrap();
+    assert_eq!(
+        tx_current.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"v1_updated"[..])
+    );
+    assert_eq!(
+        tx_current.get(table_id, b"key2").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"v2_updated"[..])
+    );
+
+    // Clean up
+    db.release_snapshot(snap1.id).unwrap();
+    db.release_snapshot(snap2.id).unwrap();
+}
+
+
+// =============================================================================
+// Phase 7: Comprehensive Rollback Tests
+// =============================================================================
+
+/// Test rollback with single write
+#[test]
+fn test_rollback_single_write() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_rollback", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Write and rollback
+    let mut tx = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx.put(table_id, b"key1", b"should_not_exist").unwrap();
+    tx.rollback().unwrap();
+
+    // Value should not be visible
+    let tx_read = db.begin_read().unwrap();
+    let value = tx_read.get(table_id, b"key1").unwrap();
+    assert!(value.is_none(), "Rolled back write should not be visible");
+}
+
+/// Test rollback with multiple writes
+#[test]
+fn test_rollback_multiple_writes() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_rollback_multi", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Write multiple keys and rollback
+    let mut tx = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx.put(table_id, b"key1", b"value1").unwrap();
+    tx.put(table_id, b"key2", b"value2").unwrap();
+    tx.put(table_id, b"key3", b"value3").unwrap();
+    tx.rollback().unwrap();
+
+    // None of the values should be visible
+    let tx_read = db.begin_read().unwrap();
+    assert!(tx_read.get(table_id, b"key1").unwrap().is_none());
+    assert!(tx_read.get(table_id, b"key2").unwrap().is_none());
+    assert!(tx_read.get(table_id, b"key3").unwrap().is_none());
+}
+
+/// Test rollback with updates
+#[test]
+fn test_rollback_updates() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_rollback_update", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Write initial value
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"original").unwrap();
+    tx1.commit().unwrap();
+
+    // Update and rollback
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.put(table_id, b"key1", b"updated").unwrap();
+    tx2.rollback().unwrap();
+
+    // Should still see original value
+    let tx_read = db.begin_read().unwrap();
+    let value = tx_read.get(table_id, b"key1").unwrap();
+    assert_eq!(
+        value.as_ref().map(|v| v.0.as_slice()),
+        Some(&b"original"[..]),
+        "Rolled back update should not be visible"
+    );
+}
+
+/// Test rollback with deletes
+#[test]
+fn test_rollback_deletes() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_rollback_delete", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Write initial value
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"exists").unwrap();
+    tx1.commit().unwrap();
+
+    // Delete and rollback
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.delete(table_id, b"key1").unwrap();
+    tx2.rollback().unwrap();
+
+    // Value should still exist
+    let tx_read = db.begin_read().unwrap();
+    let value = tx_read.get(table_id, b"key1").unwrap();
+    assert_eq!(
+        value.as_ref().map(|v| v.0.as_slice()),
+        Some(&b"exists"[..]),
+        "Rolled back delete should not affect value"
+    );
+}
+
+/// Test rollback doesn't affect other transactions
+#[test]
+fn test_rollback_isolation() {
+    let db = create_test_db();
+    let table_id = db
+        .create_table("test_rollback_isolation", table_options(TableEngineKind::Memory))
+        .unwrap();
+
+    // Transaction 1: Write and commit
+    let mut tx1 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx1.put(table_id, b"key1", b"tx1_value").unwrap();
+    tx1.commit().unwrap();
+
+    // Transaction 2: Write and rollback
+    let mut tx2 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx2.put(table_id, b"key2", b"tx2_value").unwrap();
+    tx2.rollback().unwrap();
+
+    // Transaction 3: Write and commit
+    let mut tx3 = db.begin_write(Durability::SyncOnCommit).unwrap();
+    tx3.put(table_id, b"key3", b"tx3_value").unwrap();
+    tx3.commit().unwrap();
+
+    // Verify: tx1 and tx3 visible, tx2 not visible
+    let tx_read = db.begin_read().unwrap();
+    assert_eq!(
+        tx_read.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"tx1_value"[..])
+    );
+    assert!(tx_read.get(table_id, b"key2").unwrap().is_none());
+    assert_eq!(
+        tx_read.get(table_id, b"key3").unwrap().as_ref().map(|v| v.0.as_slice()),
+        Some(&b"tx3_value"[..])
+    );
+}
+
 // Made with Bob
