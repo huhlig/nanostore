@@ -246,8 +246,11 @@ struct HnswMetadata {
     /// Number of vectors
     num_vectors: u64,
 
+    /// First page of id_to_node mapping (0 if none)
+    mapping_page_id: u64,
+
     /// Reserved for future use
-    _reserved: [u8; 64],
+    _reserved: [u8; 56],
 }
 
 const HNSW_MAGIC: u32 = 0x484E5357; // "HNSW"
@@ -322,7 +325,8 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             entry_point: 0,
             max_layer: 0,
             num_vectors: 0,
-            _reserved: [0; 64],
+            mapping_page_id: 0,
+            _reserved: [0; 56],
         };
 
         // Write metadata to root page
@@ -396,8 +400,21 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             Some(NodeId(metadata.entry_point))
         };
 
-        // TODO: Load id_to_node mapping from pages
-        let id_to_node = HashMap::new();
+        // Load id_to_node mapping from pages
+        let temp_self = Self {
+            table_id,
+            name: name.clone(),
+            pager: pager.clone(),
+            root_page_id,
+            config: RwLock::new(config.clone()),
+            entry_point: RwLock::new(entry_point),
+            max_layer: RwLock::new(metadata.max_layer as usize),
+            num_vectors: RwLock::new(metadata.num_vectors as usize),
+            id_to_node: RwLock::new(HashMap::new()),
+            rng_state: RwLock::new(12345),
+        };
+
+        let id_to_node = temp_self.deserialize_mapping(PageId::from(metadata.mapping_page_id))?;
 
         Ok(Self {
             table_id,
@@ -741,6 +758,211 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             version_chain,
         })
     }
+    /// Serialize id_to_node mapping to pages
+    fn serialize_mapping(
+        &self,
+        mapping: &HashMap<KeyBuf, NodeId>,
+    ) -> TableResult<PageId> {
+        if mapping.is_empty() {
+            return Ok(PageId::from(0u64));
+        }
+
+        let mut data = Vec::new();
+        
+        // Write number of entries
+        data.extend_from_slice(&(mapping.len() as u32).to_le_bytes());
+        
+        // Write each entry: key_len + key_bytes + node_id
+        for (key, node_id) in mapping {
+            let key_bytes = key.as_ref();
+            data.extend_from_slice(&(key_bytes.len() as u32).to_le_bytes());
+            data.extend_from_slice(key_bytes);
+            data.extend_from_slice(&node_id.0.to_le_bytes());
+        }
+
+        // Allocate page(s) and write data
+        let page_size = self.pager.page_size().to_u32() as usize;
+        let data_size = page_size - 8; // Reserve 8 bytes for next_page_id
+        
+        let mut first_page_id = PageId::from(0u64);
+        let mut prev_page_id = None;
+        let mut offset = 0;
+
+        while offset < data.len() {
+            let page_id = self
+                .pager
+                .allocate_page(PageType::VectorIndex)
+                .map_err(|e| TableError::Other(format!("Failed to allocate mapping page: {}", e)))?;
+
+            if first_page_id.as_u64() == 0 {
+                first_page_id = page_id;
+            }
+
+            let chunk_size = std::cmp::min(data_size, data.len() - offset);
+            let mut page = Page::new(page_id, PageType::VectorIndex, page_size);
+            
+            // Write data chunk
+            page.data_mut().extend_from_slice(&data[offset..offset + chunk_size]);
+            
+            // Write next_page_id (0 if last page)
+            let next_page_id = if offset + chunk_size < data.len() {
+                u64::MAX // Placeholder, will be updated
+            } else {
+                0u64
+            };
+            page.data_mut().extend_from_slice(&next_page_id.to_le_bytes());
+
+            self.pager
+                .write_page(&page)
+                .map_err(|e| TableError::Other(format!("Failed to write mapping page: {}", e)))?;
+
+            // Update previous page's next_page_id
+            if let Some(prev_id) = prev_page_id {
+                let mut prev_page = self
+                    .pager
+                    .read_page(prev_id)
+                    .map_err(|e| TableError::Other(format!("Failed to read previous mapping page: {}", e)))?;
+                
+                let next_offset = prev_page.data().len() - 8;
+                prev_page.data_mut()[next_offset..].copy_from_slice(&page_id.as_u64().to_le_bytes());
+                
+                self.pager
+                    .write_page(&prev_page)
+                    .map_err(|e| TableError::Other(format!("Failed to update previous mapping page: {}", e)))?;
+            }
+
+            prev_page_id = Some(page_id);
+            offset += chunk_size;
+        }
+
+        Ok(first_page_id)
+    }
+
+    /// Deserialize id_to_node mapping from pages
+    fn deserialize_mapping(
+        &self,
+        first_page_id: PageId,
+    ) -> TableResult<HashMap<KeyBuf, NodeId>> {
+        if first_page_id.as_u64() == 0 {
+            return Ok(HashMap::new());
+        }
+
+        let mut data = Vec::new();
+        let mut current_page_id = first_page_id;
+
+        // Read all pages in the chain
+        loop {
+            let page = self
+                .pager
+                .read_page(current_page_id)
+                .map_err(|e| TableError::Other(format!("Failed to read mapping page: {}", e)))?;
+
+            let page_data = page.data();
+            if page_data.len() < 8 {
+                return Err(TableError::corruption(
+                    "HNSW mapping page",
+                    "page too small",
+                    format!("page size: {}", page_data.len()),
+                ));
+            }
+
+            // Read next_page_id from last 8 bytes
+            let next_offset = page_data.len() - 8;
+            let next_page_id = u64::from_le_bytes(
+                page_data[next_offset..next_offset + 8]
+                    .try_into()
+                    .map_err(|e| TableError::Other(format!("Failed to read next page id: {}", e)))?,
+            );
+
+            // Append data (excluding next_page_id)
+            data.extend_from_slice(&page_data[..next_offset]);
+
+            if next_page_id == 0 {
+                break;
+            }
+            current_page_id = PageId::from(next_page_id);
+        }
+
+        // Deserialize mapping
+        let mut mapping = HashMap::new();
+        let mut pos = 0;
+
+        // Read number of entries
+        if data.len() < 4 {
+            return Err(TableError::corruption(
+                "HNSW mapping",
+                "insufficient data",
+                format!("data size: {}", data.len()),
+            ));
+        }
+
+        let num_entries = u32::from_le_bytes(
+            data[pos..pos + 4]
+                .try_into()
+                .map_err(|e| TableError::Other(format!("Failed to read entry count: {}", e)))?,
+        ) as usize;
+        pos += 4;
+
+        // Read each entry
+        for _ in 0..num_entries {
+            if pos + 4 > data.len() {
+                return Err(TableError::corruption(
+                    "HNSW mapping",
+                    "truncated key length",
+                    format!("position: {}, data size: {}", pos, data.len()),
+                ));
+            }
+
+            let key_len = u32::from_le_bytes(
+                data[pos..pos + 4]
+                    .try_into()
+                    .map_err(|e| TableError::Other(format!("Failed to read key length: {}", e)))?,
+            ) as usize;
+            pos += 4;
+
+            if pos + key_len + 4 > data.len() {
+                return Err(TableError::corruption(
+                    "HNSW mapping",
+                    "truncated entry data",
+                    format!("position: {}, key_len: {}, data size: {}", pos, key_len, data.len()),
+                ));
+            }
+
+            let key = KeyBuf(data[pos..pos + key_len].to_vec());
+            pos += key_len;
+
+
+            let node_id = NodeId(u32::from_le_bytes(
+                data[pos..pos + 4]
+                    .try_into()
+                    .map_err(|e| TableError::Other(format!("Failed to read node id: {}", e)))?,
+            ));
+            pos += 4;
+
+            mapping.insert(key, node_id);
+        }
+
+        Ok(mapping)
+    }
+    /// Persist the id_to_node mapping to disk and update metadata
+    fn persist_mapping(&self) -> TableResult<()> {
+        let mapping = self.id_to_node.read().unwrap();
+        let mapping_page_id = self.serialize_mapping(&mapping)?;
+        drop(mapping);
+
+        // Update metadata with new mapping page
+        let mut metadata = Self::read_metadata(&self.pager, self.root_page_id)?;
+        metadata.mapping_page_id = mapping_page_id.as_u64();
+        metadata.num_vectors = *self.num_vectors.read().unwrap() as u64;
+        metadata.entry_point = self.entry_point.read().unwrap().map(|n| n.0).unwrap_or(0);
+        metadata.max_layer = *self.max_layer.read().unwrap() as u32;
+        
+        Self::write_metadata(&self.pager, self.root_page_id, &metadata)?;
+        
+        Ok(())
+    }
+
+
 
     /// Select M neighbors from candidates using heuristic
     fn select_neighbors(
@@ -1214,6 +1436,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         // Update mapping
         self.id_to_node.write().unwrap().insert(id_buf, node_id);
         *self.num_vectors.write().unwrap() += 1;
+
+        // Persist mapping to disk
+        self.persist_mapping()?;
 
         Ok(())
     }
