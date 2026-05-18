@@ -726,16 +726,28 @@ impl<FS: FileSystem> Pager<FS> {
         let page = self.read_page(from_page_id)?;
 
         // Parse the overflow header
-        let _header = OverflowPageHeader::from_bytes(page.data())?;
+        let mut header = OverflowPageHeader::from_bytes(page.data())?;
 
-        // Update next_page_id
-        // TODO: Use _header to update the page data before writing
+        // Update next_page_id to link to the new page
+        header.next_page_id = to_page_id.as_u64() as u32;
 
         // Extract the data (skip header)
         let data = &page.data()[OverflowPageHeader::SIZE..];
 
-        // Write updated page
-        self.write_overflow_page(from_page_id, data, Some(to_page_id))?;
+        // Create a new page with the updated header
+        let mut new_page = Page::new(
+            from_page_id,
+            PageType::Overflow,
+            self.config.page_size.data_size(),
+        );
+        new_page.header.compression = self.config.compression;
+        new_page.header.encryption = self.config.encryption;
+
+        // Write updated header and original data to page
+        new_page.data_mut().extend_from_slice(&header.to_bytes());
+        new_page.data_mut().extend_from_slice(data);
+
+        self.write_page(&new_page)?;
 
         Ok(())
     }
