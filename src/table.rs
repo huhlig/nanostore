@@ -25,6 +25,7 @@ pub mod graph;
 pub mod hash;
 pub mod hnsw;
 pub mod lsm;
+pub mod metrics;
 pub mod rtree;
 pub mod timeseries;
 mod traits;

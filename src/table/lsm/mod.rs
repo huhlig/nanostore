@@ -85,7 +85,6 @@ use crate::txn::TransactionId;
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
-use metrics::{counter, histogram};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tracing::{debug, instrument};
@@ -278,8 +277,8 @@ impl<FS: FileSystem> LsmTree<FS> {
             }
         }
 
-        histogram!("lsm.get_duration").record(start.elapsed().as_secs_f64());
-        counter!("lsm.sstable_read").increment(1);
+        crate::table::metrics::record_get_duration("lsm", start);
+        crate::table::metrics::lsm::record_sstable_read();
         Ok(None)
     }
 
@@ -332,8 +331,8 @@ impl<FS: FileSystem> LsmTree<FS> {
         };
 
         if result.is_ok() {
-            counter!("lsm.memtable_write").increment(1);
-            histogram!("lsm.write_duration").record(start.elapsed().as_secs_f64());
+            crate::table::metrics::lsm::record_memtable_write();
+            crate::table::metrics::record_put_duration("lsm", start);
         }
 
         result
@@ -381,8 +380,8 @@ impl<FS: FileSystem> LsmTree<FS> {
             std::mem::replace(&mut *active, Memtable::new(self.config.memtable.max_size));
         immutable.push(old_memtable);
 
-        counter!("lsm.memtable_flush").increment(1);
-        histogram!("lsm.flush_duration").record(start.elapsed().as_secs_f64());
+        crate::table::metrics::lsm::record_memtable_flush();
+        crate::table::metrics::lsm::record_flush_duration(start);
         // Note: memtable size tracking would require adding a size() method to Memtable
 
         // Background flush: The compaction manager's background thread will automatically
@@ -424,7 +423,7 @@ impl<FS: FileSystem> LsmTree<FS> {
         // Now flush all immutable memtables
         self.flush_immutable_memtables()?;
 
-        histogram!("lsm.memtable_flush_duration").record(start.elapsed().as_secs_f64());
+        crate::table::metrics::lsm::record_flush_duration(start);
         Ok(())
     }
 

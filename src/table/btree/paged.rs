@@ -40,7 +40,6 @@ use crate::txn::{TransactionId, VersionChain};
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
-use metrics::{counter, histogram};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tracing::{debug, instrument};
@@ -524,8 +523,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
         let result = BTreeNode::from_bytes(page.data());
 
         if result.is_ok() {
-            counter!("btree.node_read").increment(1);
-            histogram!("btree.read_duration").record(start.elapsed().as_secs_f64());
+            crate::table::metrics::btree::record_node_read();
+            crate::table::metrics::btree::record_node_read_duration(start);
         }
 
         result
@@ -546,8 +545,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
         page.data_mut().extend_from_slice(&node.to_bytes());
         self.pager.write_page(&page)?;
 
-        counter!("btree.node_write").increment(1);
-        histogram!("btree.write_duration").record(start.elapsed().as_secs_f64());
+        crate::table::metrics::btree::record_node_write();
+        crate::table::metrics::btree::record_node_write_duration(start);
         Ok(())
     }
 
@@ -559,7 +558,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
         let (leaf_page_id, pos, _path) = self.search_with_path(key)?;
 
-        histogram!("btree.search_duration").record(start.elapsed().as_secs_f64());
+        crate::table::metrics::btree::record_search_duration(start);
         Ok((leaf_page_id, pos))
     }
 
@@ -653,8 +652,12 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
     /// Split a full node into two nodes.
     /// Returns the new right sibling page ID and the median key that should be promoted to parent.
+    #[instrument(skip(self, node), fields(page_id = %page_id))]
     fn split_node(&self, page_id: PageId, node: &BTreeNode) -> TableResult<(PageId, Vec<u8>)> {
         let mid = node.key_count() / 2;
+
+        // Record split metric
+        crate::table::metrics::btree::record_split();
 
         match node {
             BTreeNode::Internal {
@@ -689,6 +692,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 self.write_node(page_id, &left_node)?;
                 self.write_node(right_page_id, &right_node)?;
 
+                debug!("Split internal node");
                 Ok((right_page_id, median_key))
             }
             BTreeNode::Leaf { entries, next_leaf } => {
@@ -718,6 +722,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 self.write_node(page_id, &left_node)?;
                 self.write_node(right_page_id, &right_node)?;
 
+                debug!("Split leaf node");
                 Ok((right_page_id, median_key))
             }
         }
@@ -726,6 +731,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
     /// Merge two adjacent nodes (left and right).
     /// The right node is merged into the left node, and the right node is freed.
     /// Returns true if merge was successful.
+    #[instrument(skip(self, separator_key), fields(left_page_id = %left_page_id, right_page_id = %right_page_id))]
     fn merge_nodes(
         &self,
         left_page_id: PageId,
@@ -777,6 +783,10 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 self.write_node(left_page_id, &merged_node)?;
                 self.pager.free_page(right_page_id)?;
 
+                // Record merge metric
+                crate::table::metrics::btree::record_merge();
+                debug!("Merged internal nodes");
+
                 Ok(true)
             }
             (
@@ -808,6 +818,10 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Write merged node and free right node
                 self.write_node(left_page_id, &merged_node)?;
                 self.pager.free_page(right_page_id)?;
+
+                // Record merge metric
+                crate::table::metrics::btree::record_merge();
+                debug!("Merged leaf nodes");
 
                 Ok(true)
             }
@@ -1659,7 +1673,10 @@ impl<FS: FileSystem> Table for PagedBTree<FS> {
         // Collect statistics by traversing the tree
         let stats = self.collect_tree_statistics()?;
 
-        histogram!("btree.stats_collection_duration").record(start.elapsed().as_secs_f64());
+        // Update tree structure metrics
+        crate::table::metrics::btree::set_tree_height(stats.tree_depth);
+        crate::table::metrics::btree::set_internal_nodes(stats.internal_node_count);
+        crate::table::metrics::btree::set_leaf_nodes(stats.leaf_node_count);
 
         Ok(TableStatistics {
             row_count: Some(stats.row_count),
@@ -2526,7 +2543,7 @@ impl<FS: FileSystem> DenseOrdered for PagedBTree<FS> {
                 // Remove the entry
                 entries.remove(pos);
                 self.write_node(leaf_page_id, &leaf_node)?;
-                counter!("btree.index_delete").increment(1);
+                crate::table::metrics::record_delete("btree");
             }
         }
 
