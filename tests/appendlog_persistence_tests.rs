@@ -96,7 +96,12 @@ fn test_appendlog_table_reopens_with_flushed_segment_rows() {
     let table_id;
 
     {
-        let db = Database::new(&fs, "appendlog-flush-persist.wal", "appendlog-flush-persist.db").unwrap();
+        let db = Database::new(
+            &fs,
+            "appendlog-flush-persist.wal",
+            "appendlog-flush-persist.db",
+        )
+        .unwrap();
         let mut options = appendlog_table_options();
         options.appendlog_config = Some(AppendLogConfig::default().with_write_buffer_size(1));
         table_id = db.create_table("events", options).unwrap();
@@ -108,8 +113,12 @@ fn test_appendlog_table_reopens_with_flushed_segment_rows() {
     }
 
     {
-        let reopened =
-            Database::open(&fs, "appendlog-flush-persist.wal", "appendlog-flush-persist.db").unwrap();
+        let reopened = Database::open(
+            &fs,
+            "appendlog-flush-persist.wal",
+            "appendlog-flush-persist.db",
+        )
+        .unwrap();
         let reopened_id = reopened.open_table("events").unwrap().unwrap();
         assert_eq!(reopened_id, table_id);
 

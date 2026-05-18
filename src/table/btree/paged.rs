@@ -1326,7 +1326,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                     "PagedBTree::rebalance_leaf_after_delete",
                     "parent_not_internal",
                     format!("Parent {:?} was not an internal node", parent_page_id),
-                ))
+                ));
             }
         };
 
@@ -1547,16 +1547,16 @@ impl<FS: FileSystem> PagedBTree<FS> {
         let mut stats = TreeStatistics::new();
         let root_page_id = self.get_root_page_id();
         let page_size = self.pager.page_size().to_u32() as u64;
-        
+
         // Traverse the tree depth-first to collect statistics
         self.collect_node_statistics(root_page_id, 0, &mut stats, page_size)?;
-        
+
         // Ensure min sizes are valid (handle empty tree case)
         if stats.row_count == 0 {
             stats.key_min_size = 0;
             stats.value_min_size = 0;
         }
-        
+
         Ok(stats)
     }
 
@@ -1569,40 +1569,46 @@ impl<FS: FileSystem> PagedBTree<FS> {
         page_size: u64,
     ) -> TableResult<()> {
         let node = self.read_node(page_id)?;
-        
+
         // Update tree depth
         if depth > stats.tree_depth {
             stats.tree_depth = depth;
         }
-        
+
         // Add page size to total
         stats.total_size_bytes += page_size;
-        
+
         match node {
-            BTreeNode::Internal { entries, rightmost_child } => {
+            BTreeNode::Internal {
+                entries,
+                rightmost_child,
+            } => {
                 stats.internal_node_count += 1;
-                
+
                 // Recursively process all children
                 for entry in &entries {
                     self.collect_node_statistics(entry.child_page_id, depth + 1, stats, page_size)?;
                 }
                 self.collect_node_statistics(rightmost_child, depth + 1, stats, page_size)?;
             }
-            BTreeNode::Leaf { entries, next_leaf: _ } => {
+            BTreeNode::Leaf {
+                entries,
+                next_leaf: _,
+            } => {
                 stats.leaf_node_count += 1;
-                
+
                 // Process each entry in the leaf
                 for entry in &entries {
                     // Count non-tombstone entries (tombstones have empty values)
                     if !entry.chain.value.is_empty() {
                         stats.row_count += 1;
-                        
+
                         // Track key statistics
                         let key_size = entry.key.len();
                         stats.key_min_size = stats.key_min_size.min(key_size);
                         stats.key_max_size = stats.key_max_size.max(key_size);
                         stats.key_total_size += key_size as u64;
-                        
+
                         // Track value statistics
                         let value_size = entry.chain.value.len();
                         stats.value_min_size = stats.value_min_size.min(value_size);
@@ -1612,7 +1618,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -1647,15 +1653,14 @@ impl<FS: FileSystem> Table for PagedBTree<FS> {
         }
     }
 
-
     fn stats(&self) -> TableResult<TableStatistics> {
         let start = Instant::now();
-        
+
         // Collect statistics by traversing the tree
         let stats = self.collect_tree_statistics()?;
-        
+
         histogram!("btree.stats_collection_duration").record(start.elapsed().as_secs_f64());
-        
+
         Ok(TableStatistics {
             row_count: Some(stats.row_count),
             total_size_bytes: Some(stats.total_size_bytes),
@@ -1671,7 +1676,7 @@ impl<FS: FileSystem> Table for PagedBTree<FS> {
                 avg_size: stats.value_avg_size(),
                 null_count: Some(0), // B-Tree doesn't store nulls
             }),
-            histogram: None, // TODO: Implement histogram buckets if needed
+            histogram: None,        // TODO: Implement histogram buckets if needed
             last_updated_lsn: None, // TODO: Track last update LSN if needed
         })
     }
@@ -2706,28 +2711,31 @@ mod tests {
         assert_eq!(deserialized.node_type(), NodeType::Leaf);
         assert_eq!(deserialized.key_count(), 1);
 
-    #[test]
-    fn test_statistics_collection() {
-        use crate::pager::PagerConfig;
-        use crate::vfs::MemoryFileSystem;
-        
-        // Create an empty BTree
-        let fs = MemoryFileSystem::new();
-        let config = PagerConfig::default();
-        let pager = Arc::new(Pager::create(&fs, "test.db", config).unwrap());
-        let btree = PagedBTree::new(TableId::from(1), "test_table".to_string(), pager).unwrap();
-        
-        // Collect statistics on empty tree - should not panic
-        let stats = Table::stats(&btree).unwrap();
-        
-        // Verify empty tree statistics
-        assert_eq!(stats.row_count, Some(0), "Empty tree should have 0 rows");
-        assert!(stats.total_size_bytes.is_some(), "Total size should be set");
-        assert!(stats.total_size_bytes.unwrap() > 0, "Total size should include at least root page");
-        
-        // Key and value stats should be present even for empty tree
-        assert!(stats.key_stats.is_some(), "Key stats should be set");
-        assert!(stats.value_stats.is_some(), "Value stats should be set");
-    }
+        #[test]
+        fn test_statistics_collection() {
+            use crate::pager::PagerConfig;
+            use crate::vfs::MemoryFileSystem;
+
+            // Create an empty BTree
+            let fs = MemoryFileSystem::new();
+            let config = PagerConfig::default();
+            let pager = Arc::new(Pager::create(&fs, "test.db", config).unwrap());
+            let btree = PagedBTree::new(TableId::from(1), "test_table".to_string(), pager).unwrap();
+
+            // Collect statistics on empty tree - should not panic
+            let stats = Table::stats(&btree).unwrap();
+
+            // Verify empty tree statistics
+            assert_eq!(stats.row_count, Some(0), "Empty tree should have 0 rows");
+            assert!(stats.total_size_bytes.is_some(), "Total size should be set");
+            assert!(
+                stats.total_size_bytes.unwrap() > 0,
+                "Total size should include at least root page"
+            );
+
+            // Key and value stats should be present even for empty tree
+            assert!(stats.key_stats.is_some(), "Key stats should be set");
+            assert!(stats.value_stats.is_some(), "Value stats should be set");
+        }
     }
 }

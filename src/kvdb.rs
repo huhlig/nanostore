@@ -45,9 +45,105 @@ use crate::types::{TableId, ValueBuf};
 use crate::vfs::FileSystem;
 use crate::wal::{LogSequenceNumber, WalWriter, WalWriterConfig};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+/// Configuration for automatic vacuum operations.
+#[derive(Debug, Clone)]
+pub struct VacuumConfig {
+    /// Enable automatic background vacuum
+    pub enabled: bool,
+    /// Interval between vacuum runs (default: 5 minutes)
+    pub interval: Duration,
+}
+
+impl Default for VacuumConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval: Duration::from_secs(300), // 5 minutes
+        }
+    }
+}
+
+/// Metrics for a single vacuum operation.
+#[derive(Debug, Clone, Default)]
+pub struct VacuumMetrics {
+    /// Timestamp when vacuum started
+    pub started_at: Option<Instant>,
+    /// Timestamp when vacuum completed
+    pub completed_at: Option<Instant>,
+    /// Total versions removed across all tables
+    pub total_versions_removed: usize,
+    /// Per-table breakdown of versions removed
+    pub versions_removed_per_table: HashMap<TableId, usize>,
+    /// Duration of the vacuum operation
+    pub duration: Option<Duration>,
+}
+
+impl VacuumMetrics {
+    /// Create a new metrics instance with start time
+    pub fn new() -> Self {
+        Self {
+            started_at: Some(Instant::now()),
+            completed_at: None,
+            total_versions_removed: 0,
+            versions_removed_per_table: HashMap::new(),
+            duration: None,
+        }
+    }
+
+    /// Mark the vacuum as complete and calculate duration
+    pub fn complete(&mut self) {
+        self.completed_at = Some(Instant::now());
+        if let (Some(start), Some(end)) = (self.started_at, self.completed_at) {
+            self.duration = Some(end.duration_since(start));
+        }
+    }
+
+    /// Add versions removed for a table
+    pub fn add_table_result(&mut self, table_id: TableId, versions_removed: usize) {
+        self.total_versions_removed += versions_removed;
+        self.versions_removed_per_table
+            .insert(table_id, versions_removed);
+    }
+}
+
+/// Aggregated vacuum statistics over time.
+#[derive(Debug, Clone, Default)]
+pub struct VacuumStats {
+    /// Total number of vacuum runs
+    pub total_runs: usize,
+    /// Total versions removed across all runs
+    pub total_versions_removed: usize,
+    /// Average versions removed per run
+    pub avg_versions_per_run: f64,
+    /// Average duration per run
+    pub avg_duration: Option<Duration>,
+    /// Last vacuum metrics
+    pub last_vacuum: Option<VacuumMetrics>,
+}
+
+impl VacuumStats {
+    /// Update stats with a new vacuum run
+    pub fn record_vacuum(&mut self, metrics: VacuumMetrics) {
+        self.total_runs += 1;
+        self.total_versions_removed += metrics.total_versions_removed;
+        self.avg_versions_per_run = self.total_versions_removed as f64 / self.total_runs as f64;
+
+        // Update average duration
+        if let Some(duration) = metrics.duration {
+            let total_duration = self
+                .avg_duration
+                .map(|avg| avg * (self.total_runs - 1) as u32 + duration)
+                .unwrap_or(duration);
+            self.avg_duration = Some(total_duration / self.total_runs as u32);
+        }
+
+        self.last_vacuum = Some(metrics);
+    }
+}
 
 /// Top-level embedded database.
 ///
@@ -86,6 +182,19 @@ pub struct Database<FS: FileSystem> {
 
     /// Table engine registry for managing storage engine instances
     engine_registry: Arc<TableEngineRegistry<FS>>,
+
+    // Vacuum management
+    /// Configuration for automatic vacuum
+    vacuum_config: Arc<RwLock<VacuumConfig>>,
+
+    /// Aggregated vacuum statistics
+    vacuum_stats: Arc<RwLock<VacuumStats>>,
+
+    /// Flag to signal vacuum thread shutdown
+    vacuum_shutdown: Arc<AtomicBool>,
+
+    /// Handle to the background vacuum thread
+    vacuum_thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 
 impl<FS: FileSystem> Database<FS> {
@@ -103,6 +212,10 @@ impl<FS: FileSystem> Database<FS> {
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
 
+        let vacuum_config = Arc::new(RwLock::new(VacuumConfig::default()));
+        let vacuum_stats = Arc::new(RwLock::new(VacuumStats::default()));
+        let vacuum_shutdown = Arc::new(AtomicBool::new(false));
+
         let db = Self {
             conflict_detector: Arc::new(Mutex::new(ConflictDetector::new())),
             next_txn_id: Arc::new(AtomicU64::new(1)),
@@ -112,11 +225,18 @@ impl<FS: FileSystem> Database<FS> {
             table_catalog: Arc::new(RwLock::new(HashMap::new())),
             wal: Arc::new(wal),
             pager,
-            engine_registry,
+            engine_registry: engine_registry.clone(),
+            vacuum_config: vacuum_config.clone(),
+            vacuum_stats: vacuum_stats.clone(),
+            vacuum_shutdown: vacuum_shutdown.clone(),
+            vacuum_thread: Arc::new(Mutex::new(None)),
         };
 
         // Initialize empty catalog page
         db.persist_catalog()?;
+
+        // Start background vacuum thread
+        db.start_vacuum_thread();
 
         Ok(db)
     }
@@ -137,6 +257,10 @@ impl<FS: FileSystem> Database<FS> {
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
 
+        let vacuum_config = Arc::new(RwLock::new(VacuumConfig::default()));
+        let vacuum_stats = Arc::new(RwLock::new(VacuumStats::default()));
+        let vacuum_shutdown = Arc::new(AtomicBool::new(false));
+
         let db = Self {
             conflict_detector: Arc::new(Mutex::new(ConflictDetector::new())),
             next_txn_id: Arc::new(AtomicU64::new(1)),
@@ -146,11 +270,18 @@ impl<FS: FileSystem> Database<FS> {
             table_catalog: Arc::new(RwLock::new(HashMap::new())),
             wal: Arc::new(wal),
             pager,
-            engine_registry,
+            engine_registry: engine_registry.clone(),
+            vacuum_config: vacuum_config.clone(),
+            vacuum_stats: vacuum_stats.clone(),
+            vacuum_shutdown: vacuum_shutdown.clone(),
+            vacuum_thread: Arc::new(Mutex::new(None)),
         };
 
         // Recover catalog from disk
         db.recover_catalog()?;
+
+        // Start background vacuum thread
+        db.start_vacuum_thread();
 
         Ok(db)
     }
@@ -751,6 +882,176 @@ impl<FS: FileSystem> Database<FS> {
         Ok(results)
     }
 
+    /// Vacuum all tables with metrics collection.
+    ///
+    /// This is an internal method that collects detailed metrics during vacuum.
+    /// Used by both manual triggers and the background vacuum thread.
+    fn vacuum_all_with_metrics(&self) -> Result<VacuumMetrics, DatabaseError> {
+        let mut metrics = VacuumMetrics::new();
+
+        // Get all tables
+        let tables = self.list_tables()?;
+
+        for table_info in tables {
+            // Try to vacuum each table, but don't fail if a table doesn't support it
+            match self.vacuum_table(table_info.id) {
+                Ok(removed) => {
+                    if removed > 0 {
+                        metrics.add_table_result(table_info.id, removed);
+                    }
+                }
+                Err(_) => {
+                    // Skip tables that don't support vacuuming
+                    continue;
+                }
+            }
+        }
+
+        metrics.complete();
+        Ok(metrics)
+    }
+
+    /// Manually trigger a vacuum operation with metrics collection.
+    ///
+    /// This performs an immediate vacuum of all tables and returns detailed metrics.
+    /// Unlike the automatic background vacuum, this is synchronous and returns results.
+    ///
+    /// # Returns
+    ///
+    /// Returns metrics about the vacuum operation including versions removed and duration.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Manually trigger vacuum
+    /// let metrics = db.trigger_vacuum()?;
+    /// println!("Removed {} versions in {:?}",
+    ///          metrics.total_versions_removed,
+    ///          metrics.duration);
+    /// ```
+    pub fn trigger_vacuum(&self) -> Result<VacuumMetrics, DatabaseError> {
+        let metrics = self.vacuum_all_with_metrics()?;
+
+        // Update stats
+        let mut stats = self.vacuum_stats.write().unwrap();
+        stats.record_vacuum(metrics.clone());
+
+        Ok(metrics)
+    }
+
+    /// Get current vacuum statistics.
+    ///
+    /// Returns aggregated statistics about all vacuum operations performed.
+    pub fn vacuum_stats(&self) -> VacuumStats {
+        self.vacuum_stats.read().unwrap().clone()
+    }
+
+    /// Get current vacuum configuration.
+    pub fn vacuum_config(&self) -> VacuumConfig {
+        self.vacuum_config.read().unwrap().clone()
+    }
+
+    /// Update vacuum configuration.
+    ///
+    /// Changes take effect on the next vacuum cycle. If vacuum is disabled,
+    /// the background thread will stop after the current cycle completes.
+    pub fn set_vacuum_config(&self, config: VacuumConfig) {
+        *self.vacuum_config.write().unwrap() = config;
+    }
+
+    /// Start the background vacuum thread.
+    ///
+    /// This is called automatically by `new()` and `open()`.
+    fn start_vacuum_thread(&self) {
+        let config = self.vacuum_config.clone();
+        let stats = self.vacuum_stats.clone();
+        let shutdown = self.vacuum_shutdown.clone();
+        let engine_registry = self.engine_registry.clone();
+        let snapshots = self.snapshots.clone();
+        let current_lsn = self.current_lsn.clone();
+        let table_catalog = self.table_catalog.clone();
+
+        let handle = std::thread::spawn(move || {
+            loop {
+                // Check if we should shutdown
+                if shutdown.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                // Get current config
+                let cfg = config.read().unwrap().clone();
+
+                // Sleep for the configured interval
+                std::thread::sleep(cfg.interval);
+
+                // Check again after sleep
+                if shutdown.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                // Skip if vacuum is disabled
+                if !cfg.enabled {
+                    continue;
+                }
+
+                // Perform vacuum with metrics
+                let mut metrics = VacuumMetrics::new();
+
+                // Get minimum visible LSN
+                let min_visible_lsn = {
+                    let snapshots_guard = snapshots.read().unwrap();
+                    snapshots_guard
+                        .values()
+                        .map(|snapshot| snapshot.lsn)
+                        .min()
+                        .unwrap_or_else(|| *current_lsn.read().unwrap())
+                };
+
+                // Get all tables
+                let tables: Vec<TableInfo> = {
+                    let catalog = table_catalog.read().unwrap();
+                    catalog.values().cloned().collect()
+                };
+
+                // Vacuum each table
+                for table_info in tables {
+                    match engine_registry.vacuum_table(table_info.id, min_visible_lsn) {
+                        Ok(removed) => {
+                            if removed > 0 {
+                                metrics.add_table_result(table_info.id, removed);
+                            }
+                        }
+                        Err(_) => {
+                            // Skip tables that don't support vacuuming
+                            continue;
+                        }
+                    }
+                }
+
+                metrics.complete();
+
+                // Update stats
+                let mut stats_guard = stats.write().unwrap();
+                stats_guard.record_vacuum(metrics);
+            }
+        });
+
+        *self.vacuum_thread.lock().unwrap() = Some(handle);
+    }
+
+    /// Stop the background vacuum thread.
+    ///
+    /// This is called automatically by `close()` and `Drop`.
+    fn stop_vacuum_thread(&self) {
+        // Signal shutdown
+        self.vacuum_shutdown.store(true, Ordering::Relaxed);
+
+        // Wait for thread to finish
+        if let Some(handle) = self.vacuum_thread.lock().unwrap().take() {
+            let _ = handle.join();
+        }
+    }
+
     /// Get the consistency guarantees provided by this database.
     ///
     /// This documents the ACID properties, isolation levels, and crash
@@ -954,6 +1255,9 @@ impl<FS: FileSystem> Database<FS> {
         // flush memtables when the engine registry is dropped.
         // We just need to ensure WAL and pager are flushed.
 
+        // Step 0: Stop vacuum thread
+        self.stop_vacuum_thread();
+
         // Step 1: Flush WAL buffer
         self.wal.flush().map_err(|e| {
             DatabaseError::wal_failed(format!("Failed to flush WAL during close: {}", e))
@@ -983,6 +1287,9 @@ impl<FS: FileSystem> Drop for Database<FS> {
     ///
     /// Note: Errors during drop are logged but not propagated since Drop cannot return errors.
     fn drop(&mut self) {
+        // Step 0: Stop vacuum thread
+        self.stop_vacuum_thread();
+
         // Step 1: Flush WAL buffer
         if let Err(e) = self.wal.flush() {
             eprintln!(

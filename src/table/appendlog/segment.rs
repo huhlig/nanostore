@@ -209,10 +209,13 @@ impl Segment {
         }
 
         let buffer = self.write_buffer.read().unwrap();
-        let in_memory_offset = offset
-            .checked_sub(flushed_len as u64)
-            .ok_or_else(|| TableError::corruption("appendlog-segment", "offset-underflow", "offset before flushed prefix"))?
-            as usize;
+        let in_memory_offset = offset.checked_sub(flushed_len as u64).ok_or_else(|| {
+            TableError::corruption(
+                "appendlog-segment",
+                "offset-underflow",
+                "offset before flushed prefix",
+            )
+        })? as usize;
 
         Self::decode_value_at(&buffer, in_memory_offset)
     }
@@ -296,7 +299,9 @@ impl Segment {
     }
 
     fn page_payload_size(&self) -> usize {
-        self.pager.data_size().saturating_sub(Self::PAGE_HEADER_SIZE)
+        self.pager
+            .data_size()
+            .saturating_sub(Self::PAGE_HEADER_SIZE)
     }
 
     fn write_bytes_to_pages(&self, bytes: &[u8]) -> TableResult<Vec<PageId>> {
@@ -319,7 +324,8 @@ impl Segment {
                 0u64
             };
 
-            page.data.extend_from_slice(&(chunk.len() as u64).to_le_bytes());
+            page.data
+                .extend_from_slice(&(chunk.len() as u64).to_le_bytes());
             page.data.extend_from_slice(&next_page.to_le_bytes());
             page.data.extend_from_slice(chunk);
             self.pager.write_page(&page)?;
@@ -329,7 +335,11 @@ impl Segment {
         Ok(written_pages)
     }
 
-    fn read_at_from_flushed(&self, offset: u64, flushed_len: usize) -> TableResult<Option<ValueBuf>> {
+    fn read_at_from_flushed(
+        &self,
+        offset: u64,
+        flushed_len: usize,
+    ) -> TableResult<Option<ValueBuf>> {
         let mut flushed_bytes = Vec::with_capacity(flushed_len);
         let page_ids = self.flushed_pages.read().unwrap().clone();
 
@@ -353,7 +363,9 @@ impl Segment {
                 ));
             }
 
-            flushed_bytes.extend_from_slice(&page.data[Self::PAGE_HEADER_SIZE..Self::PAGE_HEADER_SIZE + chunk_len]);
+            flushed_bytes.extend_from_slice(
+                &page.data[Self::PAGE_HEADER_SIZE..Self::PAGE_HEADER_SIZE + chunk_len],
+            );
         }
 
         Self::decode_value_at(&flushed_bytes, offset as usize)
