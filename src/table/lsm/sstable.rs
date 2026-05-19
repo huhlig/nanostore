@@ -46,7 +46,7 @@
 use crate::pager::{Page, PageId, PageType, Pager};
 use crate::table::TableResult;
 use crate::table::lsm::{BloomFilter, BloomFilterBuilder, SStableConfig};
-use crate::txn::VersionChain;
+use crate::txn::{VersionChain, VersionValue};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
 use sha2::{Digest, Sha256};
@@ -1324,8 +1324,19 @@ impl<FS: FileSystem> SStableReader<FS> {
             if let Some(commit_lsn) = version.commit_lsn {
                 // Check if this version is visible at the snapshot LSN
                 if commit_lsn <= snapshot_lsn {
-                    // Found a visible version
-                    return Ok(Some(version.value.clone()));
+                    // Found a visible version - extract inline value
+                    match &version.value {
+                        VersionValue::Inline(data) => {
+                            return Ok(Some(data.clone()));
+                        }
+                        VersionValue::External(_) => {
+                            // External values should not be in SSTables at this level
+                            return Err(crate::table::TableError::invalid_operation_state(
+                                "SSTableReader::get",
+                                "Found external VersionValue in SSTable",
+                            ));
+                        }
+                    }
                 }
             }
             // Move to the previous (older) version
@@ -1818,7 +1829,12 @@ mod tests {
 
         // Get existing key
         let chain = block.get(b"key1").unwrap();
-        assert_eq!(chain.value, b"value1");
+        match &chain.value {
+            VersionValue::Inline(data) => {
+                assert_eq!(data.as_slice(), b"value1");
+            }
+            _ => panic!("Expected inline value"),
+        }
 
         // Get non-existing key
         assert!(block.get(b"key3").is_none());
@@ -1851,7 +1867,12 @@ mod tests {
         for i in 0..5 {
             let key = format!("key{}", i);
             let chain = restored.get(key.as_bytes()).unwrap();
-            assert_eq!(chain.value, format!("value{}", i).into_bytes());
+            match &chain.value {
+                VersionValue::Inline(data) => {
+                    assert_eq!(data, &format!("value{}", i).into_bytes());
+                }
+                _ => panic!("Expected inline value"),
+            }
         }
     }
 
@@ -1884,7 +1905,12 @@ mod tests {
             let key = format!("key{:03}", i);
             let chain = restored.get(key.as_bytes()).unwrap();
             let expected_value = format!("value{}", i).repeat(10);
-            assert_eq!(chain.value, expected_value.into_bytes());
+            match &chain.value {
+                VersionValue::Inline(data) => {
+                    assert_eq!(data, &expected_value.into_bytes());
+                }
+                _ => panic!("Expected inline value"),
+            }
         }
     }
 
@@ -1933,11 +1959,21 @@ mod tests {
 
         // Verify version chain is preserved
         let restored_chain = restored.get(b"key1").unwrap();
-        assert_eq!(restored_chain.value, b"value2");
+        match &restored_chain.value {
+            VersionValue::Inline(data) => {
+                assert_eq!(data.as_slice(), b"value2");
+            }
+            _ => panic!("Expected inline value"),
+        }
         assert!(restored_chain.prev_version.is_some());
 
         let prev = restored_chain.prev_version.as_ref().unwrap();
-        assert_eq!(prev.value, b"value1");
+        match &prev.value {
+            VersionValue::Inline(data) => {
+                assert_eq!(data.as_slice(), b"value1");
+            }
+            _ => panic!("Expected inline value"),
+        }
         assert_eq!(prev.commit_lsn, Some(LogSequenceNumber::from(10)));
     }
 

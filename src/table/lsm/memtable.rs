@@ -33,7 +33,7 @@
 //! 3. **Flushed**: Converted to SSTable on disk
 
 use crate::table::error::{TableError, TableResult};
-use crate::txn::{TransactionId, VersionChain};
+use crate::txn::{TransactionId, VersionChain, VersionValue};
 use crate::wal::LogSequenceNumber;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -108,9 +108,21 @@ impl Memtable {
         let memory_delta = if let Some(existing_chain) = data.get(&key) {
             // Prepend to existing chain
             let old_size = Self::estimate_chain_size(existing_chain);
+            // Extract the value from VersionValue for prepending
+            let value_to_prepend = match &new_chain.value {
+                VersionValue::Inline(data) => data.clone(),
+                VersionValue::External(_) => {
+                    // For external values, we can't prepend directly
+                    // This should be handled at a higher level
+                    return Err(TableError::invalid_operation_state(
+                        "Memtable::insert",
+                        "Cannot prepend external VersionValue in memtable",
+                    ));
+                }
+            };
             new_chain = existing_chain
                 .clone()
-                .prepend(new_chain.value, new_chain.created_by);
+                .prepend(value_to_prepend, new_chain.created_by);
             if let Some(lsn) = commit_lsn {
                 new_chain.commit(lsn);
             }
@@ -199,7 +211,19 @@ impl Memtable {
                     if version.value.is_empty() {
                         return Ok(None);
                     }
-                    return Ok(Some(version.value.clone()));
+                    // Extract inline value from VersionValue
+                    match &version.value {
+                        VersionValue::Inline(data) => {
+                            return Ok(Some(data.clone()));
+                        }
+                        VersionValue::External(_) => {
+                            // External values should not be in memtable
+                            return Err(TableError::invalid_operation_state(
+                                "Memtable::get",
+                                "Found external VersionValue in memtable",
+                            ));
+                        }
+                    }
                 }
 
                 current = version.prev_version.as_deref();
@@ -242,7 +266,19 @@ impl Memtable {
                     // Found visible version
                     // Skip tombstones
                     if !version.value.is_empty() {
-                        results.push((key.clone(), version.value.clone()));
+                        // Extract inline value from VersionValue
+                        match &version.value {
+                            VersionValue::Inline(data) => {
+                                results.push((key.clone(), data.clone()));
+                            }
+                            VersionValue::External(_) => {
+                                // External values should not be in memtable
+                                return Err(TableError::invalid_operation_state(
+                                    "Memtable::scan",
+                                    "Found external VersionValue in memtable",
+                                ));
+                            }
+                        }
                     }
                     break;
                 }
@@ -328,7 +364,8 @@ impl Memtable {
 
         for chain in data.values_mut() {
             let old_size = Self::estimate_chain_size(chain);
-            let removed = chain.vacuum(min_visible_lsn);
+            // vacuum() now returns (usize, Vec<ValueRef>)
+            let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
             let new_size = Self::estimate_chain_size(chain);
 
             total_removed += removed;
@@ -343,11 +380,27 @@ impl Memtable {
 
     /// Estimate the memory size of a version chain.
     fn estimate_chain_size(chain: &VersionChain) -> usize {
-        let mut size = std::mem::size_of::<VersionChain>() + chain.value.len();
+        let mut size = std::mem::size_of::<VersionChain>();
+        
+        // Add size of the value in the chain
+        size += match &chain.value {
+            VersionValue::Inline(data) => data.len(),
+            VersionValue::External(value_ref) => {
+                // For external values, just count the ValueRef size
+                std::mem::size_of_val(value_ref)
+            }
+        };
+        
         let mut current = chain.prev_version.as_deref();
 
         while let Some(version) = current {
-            size += std::mem::size_of::<VersionChain>() + version.value.len();
+            size += std::mem::size_of::<VersionChain>();
+            size += match &version.value {
+                VersionValue::Inline(data) => data.len(),
+                VersionValue::External(value_ref) => {
+                    std::mem::size_of_val(value_ref)
+                }
+            };
             current = version.prev_version.as_deref();
         }
 

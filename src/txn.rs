@@ -24,4 +24,4 @@ pub use self::conflict::{ConflictDetector, ConflictType};
 pub use self::cursor::Cursor;
 pub use self::error::{CursorError, CursorResult, TransactionError, TransactionResult};
 pub use self::transaction::{CommitInfo, Transaction, TransactionId};
-pub use self::version::VersionChain;
+pub use self::version::{VersionChain, VersionValue};

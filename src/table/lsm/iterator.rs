@@ -36,7 +36,7 @@
 
 use crate::table::error::TableResult;
 use crate::table::lsm::{DataBlock, Memtable, SStableReader};
-use crate::txn::VersionChain;
+use crate::txn::{VersionChain, VersionValue};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
 use std::cmp::Ordering;
@@ -783,8 +783,21 @@ impl MergeIterator {
                     // Found visible version
                     // Check if it's a tombstone (empty value)
                     if !version.value.is_empty() {
-                        self.current = Some((entry.key.clone(), version.value.clone()));
-                        return Ok(());
+                        // Extract inline value from VersionValue
+                        match &version.value {
+                            VersionValue::Inline(data) => {
+                                self.current = Some((entry.key.clone(), data.clone()));
+                                return Ok(());
+                            }
+                            VersionValue::External(_) => {
+                                // External values should not be in LSM iterators at this level
+                                // They should be resolved before reaching here
+                                return Err(crate::table::TableError::invalid_operation_state(
+                                    "MergeIterator::advance",
+                                    "Found external VersionValue in LSM iterator",
+                                ));
+                            }
+                        }
                     } else {
                         // Tombstone - skip this key
                         break;
