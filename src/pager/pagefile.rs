@@ -313,7 +313,8 @@ impl<FS: FileSystem> Pager<FS> {
             file.write_to_offset(page_size as u64, &superblock_bytes)?;
         }
 
-        histogram!("nanostore.pager.allocate.duration_seconds").record(start.elapsed().as_secs_f64());
+        histogram!("nanostore.pager.allocate.duration_seconds")
+            .record(start.elapsed().as_secs_f64());
         debug!("Page allocated successfully");
         Ok(page_id)
     }
@@ -454,7 +455,8 @@ impl<FS: FileSystem> Pager<FS> {
             tracing::Span::current().record("cache_hit", true);
             debug!("Cache hit");
             counter!("nanostore.pager.page.read").increment(1);
-            histogram!("nanostore.pager.read.duration_seconds").record(start.elapsed().as_secs_f64());
+            histogram!("nanostore.pager.read.duration_seconds")
+                .record(start.elapsed().as_secs_f64());
             return Ok(page);
         }
 
@@ -505,7 +507,8 @@ impl<FS: FileSystem> Pager<FS> {
             let page_size = self.config.page_size.to_u32() as u64;
             counter!("nanostore.pager.page.read").increment(1);
             counter!("nanostore.pager.bytes.read").increment(page_size);
-            histogram!("nanostore.pager.read.duration_seconds").record(start.elapsed().as_secs_f64());
+            histogram!("nanostore.pager.read.duration_seconds")
+                .record(start.elapsed().as_secs_f64());
             debug!("Page read successfully");
         }
 
@@ -542,7 +545,8 @@ impl<FS: FileSystem> Pager<FS> {
             cache.put(page.clone(), false);
             counter!("nanostore.pager.page.write").increment(1);
             counter!("nanostore.pager.bytes.written").increment(page_size);
-            histogram!("nanostore.pager.write.duration_seconds").record(start.elapsed().as_secs_f64());
+            histogram!("nanostore.pager.write.duration_seconds")
+                .record(start.elapsed().as_secs_f64());
             debug!("Page written successfully");
             return Ok(());
         }
@@ -553,7 +557,8 @@ impl<FS: FileSystem> Pager<FS> {
         if result.is_ok() {
             counter!("nanostore.pager.page.write").increment(1);
             counter!("nanostore.pager.bytes.written").increment(page_size);
-            histogram!("nanostore.pager.write.duration_seconds").record(start.elapsed().as_secs_f64());
+            histogram!("nanostore.pager.write.duration_seconds")
+                .record(start.elapsed().as_secs_f64());
             debug!("Page written successfully");
         }
 
@@ -596,7 +601,8 @@ impl<FS: FileSystem> Pager<FS> {
                 cache.mark_clean(page_id);
             }
 
-            histogram!("nanostore.pager.flush.duration_seconds").record(start.elapsed().as_secs_f64());
+            histogram!("nanostore.pager.flush.duration_seconds")
+                .record(start.elapsed().as_secs_f64());
             debug!(
                 flushed_count = dirty_count,
                 duration_ms = start.elapsed().as_millis(),

@@ -17,7 +17,9 @@
 //! Integration tests for R-Tree geospatial indexing.
 
 use nanostore::pager::{PageSize, Pager, PagerConfig};
-use nanostore::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy};
+use nanostore::table::{
+    GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy,
+};
 use nanostore::txn::TransactionId;
 use nanostore::types::TableId;
 use nanostore::vfs::MemoryFileSystem;

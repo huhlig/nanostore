@@ -644,7 +644,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 if value.is_empty() {
                     return Ok(None);
                 }
-                
+
                 // Check if this is an encoded ValueRef (external value)
                 if value.len() >= 1 && (value[0] == 0x01 || value[0] == 0x02) {
                     // Try to decode as ValueRef
@@ -652,18 +652,34 @@ impl<FS: FileSystem> PagedBTree<FS> {
                         if value_ref.requires_overflow() {
                             // Read from overflow pages
                             match value_ref {
-                                ValueRef::SinglePage { page_id, offset, length } => {
-                                    let page = self.pager.read_page(PageId::from(page_id as u64))?;
-                                    let data = &page.data()[offset as usize..offset as usize + length as usize];
+                                ValueRef::SinglePage {
+                                    page_id,
+                                    offset,
+                                    length,
+                                } => {
+                                    let page =
+                                        self.pager.read_page(PageId::from(page_id as u64))?;
+                                    let data = &page.data()
+                                        [offset as usize..offset as usize + length as usize];
                                     return Ok(Some(ValueBuf(data.to_vec())));
                                 }
-                                ValueRef::OverflowChain { first_page_id, total_length, .. } => {
-                                    let data = self.pager.read_overflow_chain(PageId::from(first_page_id as u64))?;
+                                ValueRef::OverflowChain {
+                                    first_page_id,
+                                    total_length,
+                                    ..
+                                } => {
+                                    let data = self
+                                        .pager
+                                        .read_overflow_chain(PageId::from(first_page_id as u64))?;
                                     if data.len() != total_length as usize {
                                         return Err(TableError::corruption(
                                             "get_internal",
                                             "overflow_chain_length_mismatch",
-                                            format!("Expected {} bytes, got {}", total_length, data.len()),
+                                            format!(
+                                                "Expected {} bytes, got {}",
+                                                total_length,
+                                                data.len()
+                                            ),
                                         ));
                                     }
                                     return Ok(Some(ValueBuf(data)));
@@ -675,7 +691,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                         }
                     }
                 }
-                
+
                 // Return inline value
                 return Ok(Some(ValueBuf(value.to_vec())));
             }
@@ -1802,16 +1818,20 @@ impl<'a, FS: FileSystem> SinglePageStream<'a, FS> {
             return Ok(());
         }
 
-        let page = self.pager.read_page(self.page_id)
+        let page = self
+            .pager
+            .read_page(self.page_id)
             .map_err(TableError::Pager)?;
-        
+
         if self.offset + self.length > page.data().len() {
             return Err(TableError::corruption(
                 format!("SinglePage at page {}", self.page_id.as_u64()),
                 "value_overflow",
                 format!(
                     "Value extends beyond page boundary: offset={}, length={}, page_size={}",
-                    self.offset, self.length, page.data().len()
+                    self.offset,
+                    self.length,
+                    page.data().len()
                 ),
             ));
         }
@@ -1829,7 +1849,7 @@ impl<'a, FS: FileSystem> crate::table::ValueStream for SinglePageStream<'a, FS> 
 
         let buffer = self.buffer.as_ref().unwrap();
         let remaining = buffer.len() - self.position;
-        
+
         if remaining == 0 {
             return Ok(0);
         }
@@ -1860,25 +1880,30 @@ impl<'a, FS: FileSystem> PointLookup for PagedBTreeReader<'a, FS> {
 
         // Get the value using existing get_internal
         let value_opt = self.table.get_internal(key, snapshot_lsn)?;
-        
+
         match value_opt {
             None => Ok(None),
             Some(value_buf) => {
                 let value = &value_buf.0;
-                
+
                 // Check if this is an encoded ValueRef
                 // ValueRef encoding: 0x01 = SinglePage, 0x02 = OverflowChain, 0x00 = Inline
                 if value.len() >= 1 && (value[0] == 0x01 || value[0] == 0x02) {
                     // Decode ValueRef
-                    let value_ref = ValueRef::decode(value)
-                        .map_err(|e| TableError::corruption(
+                    let value_ref = ValueRef::decode(value).map_err(|e| {
+                        TableError::corruption(
                             "ValueRef decode",
                             "invalid_encoding",
-                            format!("Failed to decode ValueRef: {:?}", e)
-                        ))?;
-                    
+                            format!("Failed to decode ValueRef: {:?}", e),
+                        )
+                    })?;
+
                     match value_ref {
-                        ValueRef::SinglePage { page_id, offset, length } => {
+                        ValueRef::SinglePage {
+                            page_id,
+                            offset,
+                            length,
+                        } => {
                             // Return stream for single page
                             Ok(Some(Box::new(SinglePageStream::new(
                                 &self.table.pager,
@@ -1887,7 +1912,11 @@ impl<'a, FS: FileSystem> PointLookup for PagedBTreeReader<'a, FS> {
                                 length as usize,
                             ))))
                         }
-                        ValueRef::OverflowChain { first_page_id, total_length, .. } => {
+                        ValueRef::OverflowChain {
+                            first_page_id,
+                            total_length,
+                            ..
+                        } => {
                             // Return stream for overflow chain
                             Ok(Some(Box::new(OverflowChainStream::new(
                                 &self.table.pager,
@@ -1943,19 +1972,11 @@ impl<'a, FS: FileSystem> TableReader for PagedBTreeReader<'a, FS> {
 #[derive(Debug, Clone)]
 enum PendingChange {
     /// Insert/update with inline value
-    Inline {
-        key: Vec<u8>,
-        value: Vec<u8>,
-    },
+    Inline { key: Vec<u8>, value: Vec<u8> },
     /// Insert/update with external value (already written to overflow pages)
-    External {
-        key: Vec<u8>,
-        value_ref: ValueRef,
-    },
+    External { key: Vec<u8>, value_ref: ValueRef },
     /// Delete operation
-    Delete {
-        key: Vec<u8>,
-    },
+    Delete { key: Vec<u8> },
 }
 
 /// Context for streaming a value to overflow pages.
@@ -2073,7 +2094,6 @@ impl<'a> crate::table::ValueStream for CompositeStream<'a> {
     }
 }
 
-
 /// Write view of the paged B-Tree for a specific transaction.
 pub struct PagedBTreeWriter<'a, FS: FileSystem> {
     table: &'a PagedBTree<FS>,
@@ -2100,33 +2120,31 @@ impl<'a, FS: FileSystem> MutableTable for PagedBTreeWriter<'a, FS> {
     ) -> TableResult<u64> {
         let size_hint = stream.size_hint();
         let max_inline = self.max_inline_size().unwrap_or(4096);
-        
+
         // Strategy 1: Known small value - buffer inline
         if let Some(size) = size_hint {
             if size <= max_inline as u64 {
                 return self.put_stream_inline(key, stream, size);
             }
         }
-        
+
         // Strategy 2: Known large value - stream directly
         if let Some(size) = size_hint {
             if size > max_inline as u64 {
                 return self.put_stream_external(key, stream, Some(size));
             }
         }
-        
+
         // Strategy 3: Unknown size - start inline, switch if needed
         self.put_stream_adaptive(key, stream, max_inline)
     }
-
 
     fn delete(&mut self, key: &[u8]) -> TableResult<bool> {
         // Check if key exists
         let exists = self.table.get_internal(key, self.snapshot_lsn)?.is_some();
         if exists {
-            self.pending_changes.push(PendingChange::Delete {
-                key: key.to_vec(),
-            });
+            self.pending_changes
+                .push(PendingChange::Delete { key: key.to_vec() });
         }
         Ok(exists)
     }
@@ -2143,9 +2161,8 @@ impl<'a, FS: FileSystem> MutableTable for PagedBTreeWriter<'a, FS> {
             }
 
             if let Some(key) = cursor.key() {
-                self.pending_changes.push(PendingChange::Delete {
-                    key: key.to_vec(),
-                });
+                self.pending_changes
+                    .push(PendingChange::Delete { key: key.to_vec() });
                 deleted_count += 1;
             }
 
@@ -2222,14 +2239,15 @@ impl<'a, FS: FileSystem> Flushable for PagedBTreeWriter<'a, FS> {
                     // Check if we're replacing an external value
                     if let Some(old_value) = self.table.get_internal(&key, self.snapshot_lsn)? {
                         if Self::is_external_value(old_value.as_ref()) {
-                            let value_ref = ValueRef::decode(old_value.as_ref())
-                                .map_err(|e| TableError::InvalidValueRef {
-                                    details: format!("Failed to decode ValueRef: {:?}", e)
-                                })?;
+                            let value_ref = ValueRef::decode(old_value.as_ref()).map_err(|e| {
+                                TableError::InvalidValueRef {
+                                    details: format!("Failed to decode ValueRef: {:?}", e),
+                                }
+                            })?;
                             self.free_value_ref(&value_ref)?;
                         }
                     }
-                    
+
                     // Insert or update with inline value (versions left uncommitted)
                     self.table.insert_internal(
                         key,
@@ -2242,14 +2260,15 @@ impl<'a, FS: FileSystem> Flushable for PagedBTreeWriter<'a, FS> {
                     // Check if we're replacing an external value
                     if let Some(old_value) = self.table.get_internal(&key, self.snapshot_lsn)? {
                         if Self::is_external_value(old_value.as_ref()) {
-                            let old_ref = ValueRef::decode(old_value.as_ref())
-                                .map_err(|e| TableError::InvalidValueRef {
-                                    details: format!("Failed to decode ValueRef: {:?}", e)
-                                })?;
+                            let old_ref = ValueRef::decode(old_value.as_ref()).map_err(|e| {
+                                TableError::InvalidValueRef {
+                                    details: format!("Failed to decode ValueRef: {:?}", e),
+                                }
+                            })?;
                             self.free_value_ref(&old_ref)?;
                         }
                     }
-                    
+
                     // Insert or update with external value (overflow pages already allocated)
                     // The value_ref points to the overflow chain that was written during put_stream
                     // Serialize the ValueRef and store it as the value
@@ -2265,14 +2284,15 @@ impl<'a, FS: FileSystem> Flushable for PagedBTreeWriter<'a, FS> {
                     // Check if we're deleting an external value
                     if let Some(old_value) = self.table.get_internal(&key, self.snapshot_lsn)? {
                         if Self::is_external_value(old_value.as_ref()) {
-                            let value_ref = ValueRef::decode(old_value.as_ref())
-                                .map_err(|e| TableError::InvalidValueRef {
-                                    details: format!("Failed to decode ValueRef: {:?}", e)
-                                })?;
+                            let value_ref = ValueRef::decode(old_value.as_ref()).map_err(|e| {
+                                TableError::InvalidValueRef {
+                                    details: format!("Failed to decode ValueRef: {:?}", e),
+                                }
+                            })?;
                             self.free_value_ref(&value_ref)?;
                         }
                     }
-                    
+
                     // Delete (versions left uncommitted)
                     self.table
                         .delete_internal(&key, self.tx_id, LogSequenceNumber::from(0))?;
@@ -2303,8 +2323,8 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
     /// with inline values that happen to start with 0x01 or 0x02.
     fn is_external_value(value: &[u8]) -> bool {
         match value.first() {
-            Some(&0x01) => value.len() == 11,  // SinglePage
-            Some(&0x02) => value.len() == 17,  // OverflowChain
+            Some(&0x01) => value.len() == 11, // SinglePage
+            Some(&0x02) => value.len() == 17, // OverflowChain
             _ => false,
         }
     }
@@ -2325,7 +2345,9 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
             }
             ValueRef::OverflowChain { first_page_id, .. } => {
                 // Free entire overflow chain
-                self.table.pager.free_overflow_chain(PageId::from(*first_page_id as u64))?;
+                self.table
+                    .pager
+                    .free_overflow_chain(PageId::from(*first_page_id as u64))?;
                 Ok(())
             }
         }
@@ -2340,7 +2362,7 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
     ) -> TableResult<u64> {
         let mut buffer = Vec::with_capacity(expected_size as usize);
         let mut temp_buf = vec![0u8; 8192];
-        
+
         loop {
             let n = stream.read(&mut temp_buf)?;
             if n == 0 {
@@ -2348,13 +2370,13 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
             }
             buffer.extend_from_slice(&temp_buf[..n]);
         }
-        
+
         let total_size = buffer.len();
         self.pending_changes.push(PendingChange::Inline {
             key: key.to_vec(),
             value: buffer,
         });
-        
+
         Ok((key.len() + total_size + 16) as u64)
     }
 
@@ -2366,19 +2388,19 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
         _size_hint: Option<u64>,
     ) -> TableResult<u64> {
         use crate::pager::OverflowPageHeader;
-        
+
         // Calculate page data capacity
         let page_size = self.table.pager.page_size().data_size();
         let usable_size = page_size - OverflowPageHeader::SIZE;
-        
+
         // Initialize streaming context
         let mut ctx = StreamingContext::new();
-        
+
         let mut temp_buf = vec![0u8; 8192];
         let mut page_buffer = Vec::with_capacity(usable_size);
         let mut first_page_id: Option<PageId> = None;
         let mut prev_page_id: Option<PageId> = None;
-        
+
         // Stream data chunk by chunk
         loop {
             let n = match stream.read(&mut temp_buf) {
@@ -2391,12 +2413,18 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
                     return Err(e);
                 }
             };
-            
+
             if n == 0 {
                 // Flush final partial page if any
                 if !page_buffer.is_empty() {
-                    match self.write_overflow_chunk(&mut ctx, &page_buffer, None, &mut first_page_id, &mut prev_page_id) {
-                        Ok(_) => {},
+                    match self.write_overflow_chunk(
+                        &mut ctx,
+                        &page_buffer,
+                        None,
+                        &mut first_page_id,
+                        &mut prev_page_id,
+                    ) {
+                        Ok(_) => {}
                         Err(e) => {
                             for page_id in ctx.allocated_pages.iter() {
                                 let _ = self.table.pager.free_page(*page_id);
@@ -2407,20 +2435,26 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
                 }
                 break;
             }
-            
+
             let mut offset = 0;
-            
+
             while offset < n {
                 let remaining_in_page = usable_size - page_buffer.len();
                 let to_copy = (n - offset).min(remaining_in_page);
-                
+
                 page_buffer.extend_from_slice(&temp_buf[offset..offset + to_copy]);
                 offset += to_copy;
-                
+
                 // Page full? Write it
                 if page_buffer.len() >= usable_size {
-                    match self.write_overflow_chunk(&mut ctx, &page_buffer, None, &mut first_page_id, &mut prev_page_id) {
-                        Ok(_) => {},
+                    match self.write_overflow_chunk(
+                        &mut ctx,
+                        &page_buffer,
+                        None,
+                        &mut first_page_id,
+                        &mut prev_page_id,
+                    ) {
+                        Ok(_) => {}
                         Err(e) => {
                             for page_id in ctx.allocated_pages.iter() {
                                 let _ = self.table.pager.free_page(*page_id);
@@ -2432,10 +2466,10 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
                 }
             }
         }
-        
+
         // Get committed pages and total length
         let (pages, total_len) = ctx.commit();
-        
+
         if pages.is_empty() {
             // Empty stream - store as inline empty value
             self.pending_changes.push(PendingChange::Inline {
@@ -2444,7 +2478,7 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
             });
             return Ok((key.len() + 16) as u64);
         }
-        
+
         // Create ValueRef based on page count
         let value_ref = if pages.len() == 1 {
             ValueRef::SinglePage {
@@ -2459,13 +2493,13 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
                 page_count: pages.len() as u32,
             }
         };
-        
+
         // Store in pending changes
         self.pending_changes.push(PendingChange::External {
             key: key.to_vec(),
             value_ref,
         });
-        
+
         Ok((key.len() + total_len as usize + 16) as u64)
     }
 
@@ -2479,26 +2513,33 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
         prev_page_id: &mut Option<PageId>,
     ) -> TableResult<()> {
         // Allocate new page
-        let page_id = self.table.pager.allocate_page(PageType::Overflow)
+        let page_id = self
+            .table
+            .pager
+            .allocate_page(PageType::Overflow)
             .map_err(TableError::Pager)?;
         ctx.add_page(page_id, data.len());
-        
+
         if first_page_id.is_none() {
             *first_page_id = Some(page_id);
         }
-        
+
         // Link previous page to this one if exists
         if let Some(prev_id) = *prev_page_id {
-            self.table.pager.link_overflow_pages(prev_id, page_id)
+            self.table
+                .pager
+                .link_overflow_pages(prev_id, page_id)
                 .map_err(TableError::Pager)?;
         }
-        
+
         // Write data to page
-        self.table.pager.write_overflow_page(page_id, data, next_page_id)
+        self.table
+            .pager
+            .write_overflow_page(page_id, data, next_page_id)
             .map_err(TableError::Pager)?;
-        
+
         *prev_page_id = Some(page_id);
-        
+
         Ok(())
     }
 
@@ -2511,7 +2552,7 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
     ) -> TableResult<u64> {
         let mut buffer = Vec::with_capacity(max_inline);
         let mut temp_buf = vec![0u8; 8192];
-        
+
         // Try to buffer inline first
         loop {
             let n = stream.read(&mut temp_buf)?;
@@ -2524,7 +2565,7 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
                 });
                 return Ok((key.len() + total_size + 16) as u64);
             }
-            
+
             // Check if adding this chunk would exceed threshold
             if buffer.len() + n > max_inline {
                 // Switch to external streaming
@@ -2532,7 +2573,7 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
                 let mut composite = CompositeStream::new(buffer, temp_buf[..n].to_vec(), stream);
                 return self.put_stream_external(key, &mut composite, None);
             }
-            
+
             buffer.extend_from_slice(&temp_buf[..n]);
         }
     }

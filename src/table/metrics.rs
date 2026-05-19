@@ -160,13 +160,15 @@ pub mod btree {
     /// Record node read latency.
     #[inline]
     pub fn record_node_read_duration(start: Instant) {
-        histogram!("nanostore.table.btree.node_read_duration").record(start.elapsed().as_secs_f64());
+        histogram!("nanostore.table.btree.node_read_duration")
+            .record(start.elapsed().as_secs_f64());
     }
 
     /// Record node write latency.
     #[inline]
     pub fn record_node_write_duration(start: Instant) {
-        histogram!("nanostore.table.btree.node_write_duration").record(start.elapsed().as_secs_f64());
+        histogram!("nanostore.table.btree.node_write_duration")
+            .record(start.elapsed().as_secs_f64());
     }
 
     /// Record search operation latency.
@@ -438,7 +440,8 @@ pub mod timeseries {
     /// Record append operation latency.
     #[inline]
     pub fn record_append_duration(start: Instant) {
-        histogram!("nanostore.table.timeseries.append_duration").record(start.elapsed().as_secs_f64());
+        histogram!("nanostore.table.timeseries.append_duration")
+            .record(start.elapsed().as_secs_f64());
     }
 
     /// Record aggregation query latency.

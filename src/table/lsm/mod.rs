@@ -81,7 +81,7 @@ use crate::table::{
     DenseOrdered, Flushable, MutableTable, OrderedScan, PointLookup, Severity,
     SpecialtyTableCapabilities, SpecialtyTableCursor, SpecialtyTableStats, Table,
     TableCapabilities, TableCursor, TableEngineKind, TableReader, TableStatistics, TableWriter,
-    VerificationReport, ValueStream, WriteBatch,
+    ValueStream, VerificationReport, WriteBatch,
 };
 use crate::txn::TransactionId;
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
@@ -1055,7 +1055,10 @@ impl<'a, FS: FileSystem> SpecialtyTableCursor for LsmSpecialtyCursor<'a, FS> {
 }
 
 impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
-    type Cursor<'a> = LsmSpecialtyCursor<'a, FS> where FS: 'a;
+    type Cursor<'a>
+        = LsmSpecialtyCursor<'a, FS>
+    where
+        FS: 'a;
 
     fn table_id(&self) -> TableId {
         self.table_id
@@ -1117,18 +1120,18 @@ impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
 
     fn stats(&self) -> TableResult<SpecialtyTableStats> {
         let table_stats = <LsmTree<FS> as Table>::stats(self)?;
-        
+
         // Estimate entry count from memtable and SSTables
         let memtable_entries = {
             let memtable = self.active_memtable.read().unwrap();
             memtable.len() as u64
         };
-        
+
         let immutable_entries: u64 = {
             let immutable = self.immutable_memtables.read().unwrap();
             immutable.iter().map(|m| m.len() as u64).sum()
         };
-        
+
         // Get SSTable entry counts from manifest
         let version = self.manifest.current();
         let mut sstable_entries = 0u64;
@@ -1136,9 +1139,9 @@ impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
             let files = version.level_files(level as u32);
             sstable_entries += files.iter().map(|f| f.num_entries).sum::<u64>();
         }
-        
+
         let total_entries = memtable_entries + immutable_entries + sstable_entries;
-        
+
         Ok(SpecialtyTableStats {
             entry_count: Some(total_entries),
             size_bytes: table_stats.total_size_bytes,
@@ -1181,11 +1184,11 @@ impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
 
         // Verify manifest and SSTables
         let version = self.manifest.current();
-        
+
         // Check level invariants
         for level in 0..version.num_levels() {
             let files = version.level_files(level as u32);
-            
+
             if level > 0 {
                 // L1+ files should not overlap
                 for i in 0..files.len().saturating_sub(1) {
@@ -1195,7 +1198,9 @@ impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
                             location: format!("level_{}_files", level),
                             description: format!(
                                 "Level {} files {} and {} overlap: max_key >= next min_key",
-                                level, i, i + 1
+                                level,
+                                i,
+                                i + 1
                             ),
                             severity: Severity::Error,
                         });
@@ -1203,21 +1208,18 @@ impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
                     report.checked_items += 1;
                 }
             }
-            
+
             // Verify each file's metadata
             for (i, file) in files.iter().enumerate() {
                 if file.min_key > file.max_key {
                     report.errors.push(ConsistencyError {
                         error_type: ConsistencyErrorType::CorruptedIndex,
                         location: format!("level_{}_file_{}", level, i),
-                        description: format!(
-                            "Level {} file {}: min_key > max_key",
-                            level, i
-                        ),
+                        description: format!("Level {} file {}: min_key > max_key", level, i),
                         severity: Severity::Error,
                     });
                 }
-                
+
                 if file.num_entries == 0 {
                     report.warnings.push(ConsistencyWarning {
                         location: format!("level_{}_file_{}", level, i),

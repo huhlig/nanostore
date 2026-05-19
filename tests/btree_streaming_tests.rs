@@ -31,7 +31,9 @@
 
 use nanostore::pager::{Pager, PagerConfig};
 use nanostore::table::btree::PagedBTree;
-use nanostore::table::{Flushable, MutableTable, PointLookup, SearchableTable, TableError, ValueStream};
+use nanostore::table::{
+    Flushable, MutableTable, PointLookup, SearchableTable, TableError, ValueStream,
+};
 use nanostore::txn::TransactionId;
 use nanostore::types::{TableId, ValueRef, ValueRefDecodeError};
 use nanostore::vfs::MemoryFileSystem;
@@ -581,10 +583,12 @@ fn test_delete_external_value() {
 
     // Verify it exists
     let reader = table.reader(LogSequenceNumber::from(100)).unwrap();
-    assert!(reader
-        .get(b"delete_key", LogSequenceNumber::from(100))
-        .unwrap()
-        .is_some());
+    assert!(
+        reader
+            .get(b"delete_key", LogSequenceNumber::from(100))
+            .unwrap()
+            .is_some()
+    );
 
     // Delete it
     let tx2 = TransactionId::from(2);
@@ -597,10 +601,12 @@ fn test_delete_external_value() {
 
     // Verify it's gone
     let reader2 = table.reader(LogSequenceNumber::from(200)).unwrap();
-    assert!(reader2
-        .get(b"delete_key", LogSequenceNumber::from(200))
-        .unwrap()
-        .is_none());
+    assert!(
+        reader2
+            .get(b"delete_key", LogSequenceNumber::from(200))
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -612,9 +618,7 @@ fn test_update_same_key_multiple_times() {
         let tx = TransactionId::from(i + 1);
         let data = vec![(i * 23) as u8; 30000 + (i as usize) * 10000];
         let mut stream = VecValueStream::new(data.clone());
-        let mut writer = table
-            .writer(tx, LogSequenceNumber::from(i * 100))
-            .unwrap();
+        let mut writer = table.writer(tx, LogSequenceNumber::from(i * 100)).unwrap();
         writer.put_stream(b"multi_update", &mut stream).unwrap();
         writer.flush().unwrap();
         writer
@@ -854,7 +858,10 @@ fn test_valueref_decode_errors() {
 
     // Test unknown type byte
     let result = ValueRef::decode(&[0xFF]);
-    assert!(matches!(result, Err(ValueRefDecodeError::UnknownType(0xFF))));
+    assert!(matches!(
+        result,
+        Err(ValueRefDecodeError::UnknownType(0xFF))
+    ));
 }
 
 // =============================================================================
@@ -951,9 +958,7 @@ fn test_stream_size_hints() {
     let mut stream_no_hint = UnknownSizeStream::new(data_no_hint.clone());
     assert_eq!(stream_no_hint.size_hint(), None);
 
-    writer
-        .put_stream(b"no_hint", &mut stream_no_hint)
-        .unwrap();
+    writer.put_stream(b"no_hint", &mut stream_no_hint).unwrap();
     writer.flush().unwrap();
     writer
         .commit_versions(LogSequenceNumber::from(100))

@@ -379,7 +379,9 @@ impl<FS: FileSystem> PagedBlob<FS> {
                     if commit_lsn < min_visible_lsn {
                         // This version will be removed, collect its pages
                         if let Some(metadata_bytes) = version.value.as_inline() {
-                            if let Ok(metadata) = postcard::from_bytes::<BlobMetadata>(metadata_bytes) {
+                            if let Ok(metadata) =
+                                postcard::from_bytes::<BlobMetadata>(metadata_bytes)
+                            {
                                 if metadata.first_page_id.as_u64() != 0 {
                                     pages_to_free.push(metadata.first_page_id);
                                 }

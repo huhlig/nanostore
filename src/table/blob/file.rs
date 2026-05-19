@@ -253,7 +253,9 @@ impl<FS: FileSystem> FileBlob<FS> {
                     if commit_lsn < min_visible_lsn {
                         // This version will be removed, collect its file path
                         if let Some(metadata_bytes) = version.value.as_inline() {
-                            if let Ok(metadata) = postcard::from_bytes::<BlobMetadata>(metadata_bytes) {
+                            if let Ok(metadata) =
+                                postcard::from_bytes::<BlobMetadata>(metadata_bytes)
+                            {
                                 if !metadata.file_path.as_os_str().is_empty() {
                                     files_to_delete.push(metadata.file_path.clone());
                                 }

@@ -18,7 +18,9 @@
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use nanostore::pager::{PageSize, Pager, PagerConfig};
-use nanostore::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy};
+use nanostore::table::{
+    GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy,
+};
 use nanostore::txn::TransactionId;
 use nanostore::types::TableId;
 use nanostore::vfs::MemoryFileSystem;

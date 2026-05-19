@@ -21,7 +21,9 @@
 //! completing the node storage implementation (load_node/store_node methods).
 
 use nanostore::pager::{Pager, PagerConfig};
-use nanostore::table::{HnswConfig, PagedHnswVector, VectorMetric, VectorSearch, VectorSearchOptions};
+use nanostore::table::{
+    HnswConfig, PagedHnswVector, VectorMetric, VectorSearch, VectorSearchOptions,
+};
 use nanostore::txn::TransactionId;
 use nanostore::vfs::MemoryFileSystem;
 use nanostore::wal::LogSequenceNumber;
