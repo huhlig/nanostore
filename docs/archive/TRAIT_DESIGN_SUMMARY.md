@@ -5,7 +5,7 @@
 
 ## Overview
 
-This document provides a high-level summary of the comprehensive analysis and design work completed for implementing table and index structures in NanoKV. The work synthesizes existing infrastructure, evaluates current traits, and provides detailed implementation designs.
+This document provides a high-level summary of the comprehensive analysis and design work completed for implementing table and index structures in Nanostore. The work synthesizes existing infrastructure, evaluates current traits, and provides detailed implementation designs.
 
 ## Document Structure
 

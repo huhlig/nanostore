@@ -7,7 +7,7 @@
 
 ## Context
 
-NanoKV needs a concurrency control mechanism that allows:
+Nanostore needs a concurrency control mechanism that allows:
 - Multiple concurrent readers without blocking
 - Writers that don't block readers
 - Consistent snapshot views for transactions

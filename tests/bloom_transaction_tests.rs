@@ -21,12 +21,12 @@
 //! write-set visibility, commit/rollback semantics, and error handling
 //! for unsupported generic KV operations on bloom filters.
 
-use nanokv::kvdb::Database;
-use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
-use nanokv::txn::TransactionId;
-use nanokv::types::{Durability, KeyEncoding};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::kvdb::Database;
+use nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
+use nanostore::txn::TransactionId;
+use nanostore::types::{Durability, KeyEncoding};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 
 fn bloom_table_options() -> TableOptions {
     TableOptions {
@@ -293,7 +293,7 @@ fn test_bloom_range_delete_returns_error() {
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
-    use nanokv::types::{Bound, ScanBounds};
+    use nanostore::types::{Bound, ScanBounds};
     let result = txn.range_delete(
         bloom_id,
         ScanBounds::Range {

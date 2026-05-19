@@ -19,9 +19,9 @@
 //! These tests verify blob storage using the BlobTable trait with the
 //! MemoryBlob implementation.
 
-use nanokv::table::blob::MemoryBlob;
-use nanokv::table::{BlobTable, Table};
-use nanokv::types::{ObjectId, ValueBuf};
+use nanostore::table::blob::MemoryBlob;
+use nanostore::table::{BlobTable, Table};
+use nanostore::types::{ObjectId, ValueBuf};
 
 /// Test blob table creation
 #[test]
@@ -203,7 +203,7 @@ fn test_large_blob() {
 /// Test ValueRef type usage
 #[test]
 fn test_value_ref_type() {
-    use nanokv::types::ValueRef;
+    use nanostore::types::ValueRef;
     
     // ValueRef is used for externally stored values
     let value_ref = ValueRef::new(42, 1024, 0x12345678);
@@ -216,10 +216,10 @@ fn test_value_ref_type() {
 /// Test blob table error handling
 #[test]
 fn test_blob_error_handling() {
-    use nanokv::table::TableError;
+    use nanostore::table::TableError;
     
     // Test creating value ref errors
-    let value_ref = nanokv::types::ValueRef::new(1, 100, 0xABCD);
+    let value_ref = nanostore::types::ValueRef::new(1, 100, 0xABCD);
     
     let error = TableError::value_ref_not_found(value_ref);
     assert!(error.to_string().contains("not found"));

@@ -52,9 +52,9 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use nanokv::table::graph::{MemoryGraphTable, GraphConfig};
-//! use nanokv::table::GraphAdjacency;
-//! use nanokv::types::TableId;
+//! use nanostore::table::graph::{MemoryGraphTable, GraphConfig};
+//! use nanostore::table::GraphAdjacency;
+//! use nanostore::types::TableId;
 //!
 //! // Create a directed graph
 //! let config = GraphConfig::new().with_directed(true);

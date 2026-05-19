@@ -1,6 +1,6 @@
 # Specialty Table Transaction Integration
 
-This document describes the transaction integration pattern for specialty tables in NanoKV. Specialty tables are table engines that provide domain-specific query capabilities beyond standard key-value operations, including:
+This document describes the transaction integration pattern for specialty tables in Nanostore. Specialty tables are table engines that provide domain-specific query capabilities beyond standard key-value operations, including:
 
 - **ApproximateMembership** (Bloom filters) - Probabilistic membership testing
 - **FullTextSearch** - Full-text indexing and search
@@ -65,8 +65,8 @@ txn.clear_table_context();
 ### Bloom Filters (ApproximateMembership)
 
 ```rust
-use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
-use nanokv::types::Durability;
+use Nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
+use Nanostore::types::Durability;
 
 // Create a bloom filter table
 let bloom_id = db.create_table("bloom", TableOptions {
@@ -94,7 +94,7 @@ assert!(exists);
 ### Full-Text Search
 
 ```rust
-use nanokv::table::{FullTextSearch, TextField, TextQuery};
+use Nanostore::table::{FullTextSearch, TextField, TextQuery};
 
 let fulltext_id = db.create_table("search", TableOptions {
     engine: TableEngineKind::FullText,
@@ -127,7 +127,7 @@ let results = read_txn.with_fulltext(fulltext_id, |fulltext| {
 ### Vector Search (HNSW)
 
 ```rust
-use nanokv::table::{VectorSearch, VectorSearchOptions, VectorMetric};
+use Nanostore::table::{VectorSearch, VectorSearchOptions, VectorMetric};
 
 let vector_id = db.create_table("embeddings", TableOptions {
     engine: TableEngineKind::Hnsw,
@@ -158,7 +158,7 @@ let results = read_txn.with_vector(vector_id, |vector| {
 ### Geospatial (R-Tree)
 
 ```rust
-use nanokv::table::{GeoSpatial, GeoPoint, GeometryRef};
+use Nanostore::table::{GeoSpatial, GeoPoint, GeometryRef};
 
 let geo_id = db.create_table("locations", TableOptions {
     engine: TableEngineKind::RTree,
@@ -184,7 +184,7 @@ let hits = read_txn.with_geospatial(geo_id, |geo| {
 ### Time Series
 
 ```rust
-use nanokv::table::TimeSeries;
+use Nanostore::table::TimeSeries;
 
 let ts_id = db.create_table("metrics", TableOptions {
     engine: TableEngineKind::TimeSeries,
@@ -209,7 +209,7 @@ read_txn.clear_table_context();
 ### Graph Adjacency
 
 ```rust
-use nanokv::table::GraphAdjacency;
+use Nanostore::table::GraphAdjacency;
 
 let graph_id = db.create_table("social", TableOptions {
     engine: TableEngineKind::Graph,

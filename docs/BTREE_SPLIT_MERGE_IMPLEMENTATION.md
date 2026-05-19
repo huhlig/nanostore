@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the implementation of B-Tree node split and merge operations for the paged B-Tree table engine in NanoKV.
+This document describes the implementation of B-Tree node split and merge operations for the paged B-Tree table engine in Nanostore.
 
 ## Implementation Date
 
@@ -122,7 +122,7 @@ This document describes the implementation of B-Tree node split and merge operat
 - Persist root pointer in superblock/metadata
 - Update all read operations to use current root
 
-**Tracking**: Issue nanokv-??? (to be created)
+**Tracking**: Issue Nanostore-??? (to be created)
 
 ### 2. Parent Pointer Traversal
 

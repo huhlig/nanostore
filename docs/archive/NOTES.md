@@ -1,6 +1,6 @@
 # Architecture
 
-NanoKV is designed as a paged single file multi-table key value database.
+Nanostore is designed as a paged single file multi-table key value database.
 
 VFS -> Pager -> Table -> API
 

@@ -1,4 +1,4 @@
-# Pager Race Condition Fix - Issue nanokv-49y
+# Pager Race Condition Fix - Issue Nanostore-49y
 
 ## Problem Summary
 
@@ -146,7 +146,7 @@ With this fix:
 ## Related Issues
 
 This fix resolves:
-- Issue nanokv-49y: "Pager: Race condition in page allocation causes duplicate page IDs"
+- Issue Nanostore-49y: "Pager: Race condition in page allocation causes duplicate page IDs"
 
 ## Future Considerations
 

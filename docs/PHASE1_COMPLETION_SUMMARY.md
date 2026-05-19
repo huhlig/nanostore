@@ -1,6 +1,6 @@
 # Phase 1 Completion Summary: PageTable Integration
 
-## Issue: nanokv-5p9
+## Issue: Nanostore-5p9
 **Title:** Pager: Integrate PageTable into Pager for fine-grained locking  
 **Status:** COMPLETED ✅  
 **Completion Date:** 2026-05-09
@@ -161,7 +161,7 @@ With 64 shards:
 ### 3. Cache Lock Contention
 **Issue:** Cache still uses single RwLock
 
-**Solution:** Phase 2 will implement sharded cache (see issue nanokv-rte)
+**Solution:** Phase 2 will implement sharded cache (see issue Nanostore-rte)
 
 ## Next Steps
 
@@ -169,15 +169,15 @@ With 64 shards:
 1. ✅ Update issue status to completed
 2. ✅ Document findings
 3. ⏳ Commit and push changes
-4. ⏳ Close issue nanokv-5p9
+4. ⏳ Close issue Nanostore-5p9
 
 ### Phase 2 (Future Work)
-1. **Lock-free free list** (issue nanokv-89z)
+1. **Lock-free free list** (issue Nanostore-89z)
    - Replace Vec with crossbeam SegQueue
    - Use AtomicU64 for counters
    - Target: 5-7x throughput improvement
 
-2. **Sharded cache** (issue nanokv-rte)
+2. **Sharded cache** (issue Nanostore-rte)
    - Split cache into 16-32 shards
    - Each shard has own RwLock and LRU
    - Reduce cache lock contention
@@ -210,7 +210,7 @@ The PageTable integration provides a solid foundation for concurrent page access
 - Tests: `tests/pager_concurrency_tests.rs`
 
 **Related Issues:**
-- nanokv-z34: Parent issue (Pager concurrency improvements)
-- nanokv-5p9: This issue (Phase 1 integration) - COMPLETED
-- nanokv-89z: Phase 2 - Lock-free free list (future)
-- nanokv-rte: Phase 2 - Sharded cache (future)
+- Nanostore-z34: Parent issue (Pager concurrency improvements)
+- Nanostore-5p9: This issue (Phase 1 integration) - COMPLETED
+- Nanostore-89z: Phase 2 - Lock-free free list (future)
+- Nanostore-rte: Phase 2 - Sharded cache (future)

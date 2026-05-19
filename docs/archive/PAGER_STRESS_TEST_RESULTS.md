@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the results of large-scale stress tests for the NanoKV pager system, validating performance and scalability with 100K+ pages.
+This document summarizes the results of large-scale stress tests for the Nanostore pager system, validating performance and scalability with 100K+ pages.
 
 ## Test Environment
 
@@ -274,4 +274,4 @@ For production deployments with large page files:
 
 **Last Updated**: 2026-05-08  
 **Test Suite Version**: 1.0  
-**NanoKV Version**: 0.0.1
+**Nanostore Version**: 0.0.1

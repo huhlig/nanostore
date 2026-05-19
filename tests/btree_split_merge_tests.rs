@@ -16,13 +16,13 @@
 
 //! Tests for B-Tree node split and merge operations.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::btree::PagedBTree;
-use nanokv::table::{Flushable, MutableTable, PointLookup, SearchableTable};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::btree::PagedBTree;
+use nanostore::table::{Flushable, MutableTable, PointLookup, SearchableTable};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 #[test]

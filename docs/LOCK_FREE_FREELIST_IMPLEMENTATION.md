@@ -1,7 +1,7 @@
 # Lock-Free Free List Implementation
 
 **Date:** 2026-05-09  
-**Issue:** nanokv-89z  
+**Issue:** Nanostore-89z  
 **Status:** ✅ Complete
 
 ## Overview
@@ -172,8 +172,8 @@ Added `test_lock_free_free_list_extreme_contention`:
 
 ## Related Issues
 
-- **nanokv-z34**: Parent issue for pager concurrency improvements
-- **nanokv-5p9**: Phase 1 - Page table implementation (completed)
+- **Nanostore-z34**: Parent issue for pager concurrency improvements
+- **Nanostore-5p9**: Phase 1 - Page table implementation (completed)
 - **Future**: Phase 3 - Additional optimizations
 
 ## Conclusion

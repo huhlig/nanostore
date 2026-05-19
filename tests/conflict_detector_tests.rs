@@ -16,8 +16,8 @@
 
 //! Tests for MVCC conflict detection
 
-use nanokv::txn::{ConflictDetector, TransactionError, TransactionId};
-use nanokv::types::TableId;
+use nanostore::txn::{ConflictDetector, TransactionError, TransactionId};
+use nanostore::types::TableId;
 use std::collections::HashSet;
 
 #[test]

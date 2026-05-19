@@ -1,4 +1,4 @@
-# NanoKV Architecture
+# Nanostore Architecture
 
 **Version**: 1.0  
 **Date**: 2026-05-10  
@@ -23,7 +23,7 @@
 
 ## Overview
 
-NanoKV is a lightweight, embeddable key-value database designed for single-file storage with ACID transaction support. It provides a layered architecture with pluggable storage engines, MVCC-based concurrency control, and comprehensive durability guarantees through write-ahead logging.
+Nanostore is a lightweight, embeddable key-value database designed for single-file storage with ACID transaction support. It provides a layered architecture with pluggable storage engines, MVCC-based concurrency control, and comprehensive durability guarantees through write-ahead logging.
 
 ### Key Features
 
@@ -640,7 +640,7 @@ Transaction C → Transaction A  (C waits for A) ← Cycle detected!
 ```
 ┌─────────────────────────────────────────┐
 │ Page 0: File Header                     │
-│  - Magic number: "NANOKV\0\0"          │
+│  - Magic number: "Nanostore\0\0"          │
 │  - Version: 1                           │
 │  - Page size: 4096/8192/16384/...      │
 │  - Compression: None/LZ4/Zstd          │
@@ -794,7 +794,7 @@ See [ADR Index](./adrs/README.md) for detailed Architecture Decision Records.
 
 ## Specialty Table Integration
 
-NanoKV supports specialty table engines that provide domain-specific query capabilities beyond standard key-value operations. These are integrated into the transaction layer using a trait-based design.
+Nanostore supports specialty table engines that provide domain-specific query capabilities beyond standard key-value operations. These are integrated into the transaction layer using a trait-based design.
 
 ### Specialty Table Types
 

@@ -1,6 +1,6 @@
 # Streaming API Implementation Progress
 
-## Issue: nanokv-2k4 - Unify BlobTable with MutableTable and add streaming value support
+## Issue: Nanostore-2k4 - Unify BlobTable with MutableTable and add streaming value support
 
 ### Objective
 Unify the BlobTable trait hierarchy with the standard MutableTable trait and add streaming support for large values to avoid loading entire values into memory.

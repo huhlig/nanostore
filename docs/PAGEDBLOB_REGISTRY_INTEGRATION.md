@@ -177,5 +177,5 @@ The refactoring compiles successfully with no errors. All existing PagedBlob fun
 
 ## Related Issues
 
-- Resolves: nanokv-k1t (Refactor PagedBlob to work with table registry system)
+- Resolves: Nanostore-k1t (Refactor PagedBlob to work with table registry system)
 - Related: Table engine standardization efforts

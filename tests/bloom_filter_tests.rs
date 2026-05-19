@@ -16,13 +16,13 @@
 
 //! Comprehensive integration tests for PagedBloomFilter
 
-use nanokv::pager::{PageSize, Pager, PagerConfig};
-use nanokv::table::ApproximateMembership;
-use nanokv::table::bloom::PagedBloomFilter;
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{PageSize, Pager, PagerConfig};
+use nanostore::table::ApproximateMembership;
+use nanostore::table::bloom::PagedBloomFilter;
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 fn create_test_pager() -> Arc<Pager<MemoryFileSystem>> {
@@ -349,7 +349,7 @@ fn test_table_trait_implementation() {
     .unwrap();
 
     // Test Table trait methods
-    use nanokv::table::Table;
+    use nanostore::table::Table;
     assert_eq!(Table::table_id(&filter), TableId::from(42));
     assert_eq!(Table::name(&filter), "trait_test");
 
@@ -389,7 +389,7 @@ fn test_approximate_membership_trait() {
     let fpr = filter.false_positive_rate();
     assert!(fpr > 0.0);
 
-    use nanokv::table::ApproximateMembership;
+    use nanostore::table::ApproximateMembership;
     let caps = ApproximateMembership::capabilities(&filter);
     assert!(!caps.exact);
     assert!(caps.approximate);
@@ -517,7 +517,7 @@ fn test_statistics() {
         filter.insert(&i.to_le_bytes(), tx_id, commit_lsn).unwrap();
     }
 
-    use nanokv::table::ApproximateMembership;
+    use nanostore::table::ApproximateMembership;
     let stats = ApproximateMembership::stats(&filter).unwrap();
     assert_eq!(stats.entry_count, Some(50));
     assert_eq!(stats.distinct_keys, Some(50));

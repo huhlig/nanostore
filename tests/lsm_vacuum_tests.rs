@@ -28,9 +28,9 @@
 //! - Vacuum of tombstones in SSTables
 //! - Vacuum coordination with level-based compaction
 
-use nanokv::kvdb::Database;
-use nanokv::table::{TableEngineKind, TableOptions};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::kvdb::Database;
+use nanostore::table::{TableEngineKind, TableOptions};
+use nanostore::vfs::MemoryFileSystem;
 
 /// Helper to create a database with vacuum disabled for manual control
 fn create_test_db() -> Database<MemoryFileSystem> {

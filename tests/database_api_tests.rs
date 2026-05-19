@@ -22,10 +22,10 @@
 //! - Table handle wrapper
 //! - Error handling
 
-use nanokv::kvdb::{Database, DatabaseErrorKind};
-use nanokv::table::{TableEngineKind, TableOptions};
-use nanokv::types::{KeyEncoding, TableId};
-use nanokv::vfs::{FileSystem, MemoryFileSystem};
+use nanostore::kvdb::{Database, DatabaseErrorKind};
+use nanostore::table::{TableEngineKind, TableOptions};
+use nanostore::types::{KeyEncoding, TableId};
+use nanostore::vfs::{FileSystem, MemoryFileSystem};
 
 /// Helper to create a test database
 fn create_test_db() -> Database<MemoryFileSystem> {

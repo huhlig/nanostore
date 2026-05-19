@@ -1,16 +1,16 @@
 [package]
-name = "nanokv"
+name = "nanostore"
 version = "0.0.1"
 edition = "2024"
 publish = false
-keywords = ["mud"]
+keywords = ["database", "embedded", "storage", "mvcc", "acid"]
 readme = "README.md"
 license = "APACHE2 or MIT"
-description = "Tiny Single Table Key Value Library"
+description = "Lightweight embeddable single-file database with ACID transactions and multiple storage engines"
 authors = ["Hans W. Uhlig <huhlig@gmail.com>"]
-documentation = "https://huhlig.github.io/nanokv"
-homepage = "https://huhlig.github.io/nanokv"
-repository = "https://github.com/huhlig/nanokv"
+documentation = "https://huhlig.github.io/nanostore"
+homepage = "https://huhlig.github.io/nanostore"
+repository = "https://github.com/huhlig/nanostore"
 
 [dependencies]
 async-trait = { version = "0.1" }
@@ -47,7 +47,7 @@ criterion = { version = "0.8" }
 
 
 [[bin]]
-name = "nanokv"
+name = "nanostore"
 path = "src/bin.rs"
 
 [[bench]]

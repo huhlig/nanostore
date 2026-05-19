@@ -16,13 +16,13 @@
 
 //! Comprehensive tests for the hash table implementation.
 
-use nanokv::table::{
+use nanostore::table::{
     BatchOps, Flushable, MemoryHashTable, MutableTable, PointLookup, SearchableTable, Table,
     TableEngineKind, TableReader, WriteBatch,
 };
-use nanokv::txn::TransactionId;
-use nanokv::types::{ScanBounds, TableId, ValueBuf};
-use nanokv::wal::LogSequenceNumber;
+use nanostore::txn::TransactionId;
+use nanostore::types::{ScanBounds, TableId, ValueBuf};
+use nanostore::wal::LogSequenceNumber;
 
 #[test]
 fn test_hash_table_creation() {
@@ -172,7 +172,7 @@ fn test_hash_table_batch_operations() {
         .unwrap();
 
     // Create a batch
-    use nanokv::table::Mutation;
+    use nanostore::table::Mutation;
     use std::borrow::Cow;
 
     let batch = WriteBatch {

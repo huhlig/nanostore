@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document defines the architecture for tables and indexes in NanoKV, supporting multiple storage engines and specialized index types while maintaining a clean, composable interface.
+This document defines the architecture for tables and indexes in Nanostore, supporting multiple storage engines and specialized index types while maintaining a clean, composable interface.
 
 ---
 

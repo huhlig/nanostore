@@ -20,11 +20,11 @@
 //! implementation. Full functionality tests (insert, search, delete) require
 //! completing the node storage implementation (load_node/store_node methods).
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::{HnswConfig, PagedHnswVector, VectorMetric, VectorSearch, VectorSearchOptions};
-use nanokv::txn::TransactionId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::{HnswConfig, PagedHnswVector, VectorMetric, VectorSearch, VectorSearchOptions};
+use nanostore::txn::TransactionId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 #[test]

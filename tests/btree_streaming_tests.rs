@@ -29,13 +29,13 @@
 //! - Memory efficiency
 //! - Edge cases
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::btree::PagedBTree;
-use nanokv::table::{Flushable, MutableTable, PointLookup, SearchableTable, TableError, ValueStream};
-use nanokv::txn::TransactionId;
-use nanokv::types::{TableId, ValueRef, ValueRefDecodeError};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::btree::PagedBTree;
+use nanostore::table::{Flushable, MutableTable, PointLookup, SearchableTable, TableError, ValueStream};
+use nanostore::txn::TransactionId;
+use nanostore::types::{TableId, ValueRef, ValueRefDecodeError};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 /// Helper struct to create a ValueStream from a Vec<u8>
@@ -51,7 +51,7 @@ impl VecValueStream {
 }
 
 impl ValueStream for VecValueStream {
-    fn read(&mut self, buf: &mut [u8]) -> nanokv::table::TableResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> nanostore::table::TableResult<usize> {
         let remaining = self.data.len() - self.position;
         let to_read = remaining.min(buf.len());
 
@@ -82,7 +82,7 @@ impl UnknownSizeStream {
 }
 
 impl ValueStream for UnknownSizeStream {
-    fn read(&mut self, buf: &mut [u8]) -> nanokv::table::TableResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> nanostore::table::TableResult<usize> {
         let remaining = self.data.len() - self.position;
         let to_read = remaining.min(buf.len());
 
@@ -116,7 +116,7 @@ impl ErrorStream {
 }
 
 impl ValueStream for ErrorStream {
-    fn read(&mut self, buf: &mut [u8]) -> nanokv::table::TableResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> nanostore::table::TableResult<usize> {
         if self.position >= self.error_after {
             return Err(TableError::Corruption {
                 location: "stream".to_string(),

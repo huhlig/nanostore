@@ -95,7 +95,7 @@ impl TransactionError {
             Self::Other(_) => "other",
         };
 
-        metrics::counter!("nanokv.transaction.abort.total", "reason" => reason).increment(1);
+        metrics::counter!("nanostore.transaction.abort.total", "reason" => reason).increment(1);
     }
 
     /// Create an invalid state error with full context

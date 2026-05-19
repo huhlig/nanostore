@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-Issue `nanokv-igt`: If transaction commit fails partway through applying writes to storage engines, there is no undo mechanism to roll back the partial changes. The WAL has already recorded the COMMIT record, but some engines may not have received their writes.
+Issue `Nanostore-igt`: If transaction commit fails partway through applying writes to storage engines, there is no undo mechanism to roll back the partial changes. The WAL has already recorded the COMMIT record, but some engines may not have received their writes.
 
 ## Solution: Two-Phase Commit with Undo Log
 

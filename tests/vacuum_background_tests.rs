@@ -16,10 +16,10 @@
 
 //! Tests for background vacuum task and metrics collection.
 
-use nanokv::kvdb::{Database, VacuumConfig};
-use nanokv::table::TableOptions;
-use nanokv::types::Durability;
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::kvdb::{Database, VacuumConfig};
+use nanostore::table::TableOptions;
+use nanostore::types::Durability;
+use nanostore::vfs::MemoryFileSystem;
 use std::time::Duration;
 
 #[test]

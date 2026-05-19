@@ -17,12 +17,12 @@
 //! Benchmarks for TimeSeries table engine aggregation operations.
 
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::TimeSeries;
-use nanokv::table::timeseries::{TimeSeriesAggregation, TimeSeriesConfig, TimeSeriesTable};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::TimeSeries;
+use nanostore::table::timeseries::{TimeSeriesAggregation, TimeSeriesConfig, TimeSeriesTable};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
 use std::sync::Arc;
 
 /// Helper to create a TimeSeries table with test data

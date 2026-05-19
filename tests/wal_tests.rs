@@ -16,11 +16,11 @@
 
 //! Integration tests for WAL (Write-Ahead Log)
 
-use nanokv::pager::{CompressionType, EncryptionType};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::{File, FileSystem, LocalFileSystem, MemoryFileSystem};
-use nanokv::wal::{
+use nanostore::pager::{CompressionType, EncryptionType};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::{File, FileSystem, LocalFileSystem, MemoryFileSystem};
+use nanostore::wal::{
     LogSequenceNumber, WalError, WalReader, WalRecovery, WalWriter, WalWriterConfig, WriteOpType,
 };
 use std::fs;

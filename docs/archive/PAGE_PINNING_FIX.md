@@ -2,7 +2,7 @@
 
 ## Issue Summary
 
-**Issue ID:** nanokv-cu8  
+**Issue ID:** Nanostore-cu8  
 **Severity:** Critical (Priority 0)  
 **Type:** Data Corruption Bug
 
@@ -164,7 +164,7 @@ This fix resolves the core issue but related improvements could include:
 
 ## References
 
-- Issue: nanokv-cu8
+- Issue: Nanostore-cu8
 - Test File: `tests/pager_pin_tests.rs`
 - Implementation: `src/pager/pin_table.rs`, `src/pager/pagefile.rs`
 - Error Type: `src/pager/error.rs` (PagePinned variant)

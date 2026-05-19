@@ -16,7 +16,7 @@
 
 //! Edge case and error handling tests for VFS implementations
 
-use nanokv::vfs::{
+use nanostore::vfs::{
     File, FileLockMode, FileSystem, FileSystemError, LocalFileSystem, MemoryFileSystem,
 };
 use std::io::{Read, Seek, SeekFrom, Write};

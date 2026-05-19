@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 
-use nanokv::snap::{Snapshot, SnapshotId};
-use nanokv::txn::{TransactionId, VersionChain};
-use nanokv::wal::LogSequenceNumber;
+use nanostore::snap::{Snapshot, SnapshotId};
+use nanostore::txn::{TransactionId, VersionChain};
+use nanostore::wal::LogSequenceNumber;
 
 fn snapshot(lsn: u64, active_txns: Vec<u64>) -> Snapshot {
     Snapshot::new(

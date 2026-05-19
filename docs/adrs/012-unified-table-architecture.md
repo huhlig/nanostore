@@ -3,12 +3,12 @@
 **Status**: Accepted  
 **Date**: 2026-05-11  
 **Deciders**: Hans W. Uhlig, Development Team  
-**Technical Story**: Phase 7 - Unified table/index architecture (nanokv-y33)  
+**Technical Story**: Phase 7 - Unified table/index architecture (Nanostore-y33)  
 **Supersedes**: [ADR-007](./007-unified-object-id.md), [ADR-011](./011-indexes-as-specialty-tables.md)
 
 ## Context
 
-NanoKV initially had separate type systems for tables and indexes, with distinct traits, identifiers, and APIs. This created several problems:
+Nanostore initially had separate type systems for tables and indexes, with distinct traits, identifiers, and APIs. This created several problems:
 
 1. **Code Duplication**: Similar functionality implemented separately for tables and indexes
 2. **Complex Transaction Layer**: Had to handle tables and indexes differently despite identical storage semantics
@@ -448,10 +448,10 @@ Track these metrics:
 
 ## Related Issues
 
-- **nanokv-y33**: Phase 7 - Write ADR documenting unified table architecture (this ADR)
-- **nanokv-4ha**: Index trait implementations are completely missing (addressed by this design)
-- **nanokv-6nx**: Implement unified ObjectId system (completed, documented here)
-- **nanokv-j89**: Implement index maintenance logic (depends on this ADR)
+- **Nanostore-y33**: Phase 7 - Write ADR documenting unified table architecture (this ADR)
+- **Nanostore-4ha**: Index trait implementations are completely missing (addressed by this design)
+- **Nanostore-6nx**: Implement unified ObjectId system (completed, documented here)
+- **Nanostore-j89**: Implement index maintenance logic (depends on this ADR)
 
 ## References
 

@@ -17,11 +17,11 @@
 //! Benchmarks for WAL (Write-Ahead Log) implementation
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use nanokv::pager::{CompressionType, EncryptionType};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::{LocalFileSystem, MemoryFileSystem};
-use nanokv::wal::{
+use nanostore::pager::{CompressionType, EncryptionType};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::{LocalFileSystem, MemoryFileSystem};
+use nanostore::wal::{
     GroupCommitConfig, WalReader, WalRecordIterator, WalRecovery, WalWriter, WalWriterConfig,
     WriteOpType,
 };

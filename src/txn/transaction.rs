@@ -961,8 +961,8 @@ impl<FS: FileSystem> Transaction<FS> {
         current_lsn: Arc<RwLock<LogSequenceNumber>>,
     ) -> Self {
         // Increment transaction begin counter
-        metrics::counter!("nanokv.transaction.begin.total").increment(1);
-        metrics::gauge!("nanokv.transaction.active").increment(1.0);
+        metrics::counter!("nanostore.transaction.begin.total").increment(1);
+        metrics::gauge!("nanostore.transaction.active").increment(1.0);
 
         // Write BEGIN record to WAL to register the transaction
         let _ = wal.write_begin(txn_id);
@@ -2999,12 +2999,12 @@ impl<FS: FileSystem> Transaction<FS> {
         let commit_duration = commit_start.elapsed();
         let transaction_duration = self.start_time.elapsed();
 
-        metrics::counter!("nanokv.transaction.commit.total").increment(1);
-        metrics::histogram!("nanokv.transaction.commit.duration_seconds")
+        metrics::counter!("nanostore.transaction.commit.total").increment(1);
+        metrics::histogram!("nanostore.transaction.commit.duration_seconds")
             .record(commit_duration.as_secs_f64());
-        metrics::histogram!("nanokv.transaction.duration_seconds")
+        metrics::histogram!("nanostore.transaction.duration_seconds")
             .record(transaction_duration.as_secs_f64());
-        metrics::gauge!("nanokv.transaction.active").decrement(1.0);
+        metrics::gauge!("nanostore.transaction.active").decrement(1.0);
 
         tracing::info!(
             duration_ms = transaction_duration.as_millis(),
@@ -3052,12 +3052,12 @@ impl<FS: FileSystem> Transaction<FS> {
         let rollback_duration = rollback_start.elapsed();
         let transaction_duration = self.start_time.elapsed();
 
-        metrics::counter!("nanokv.transaction.rollback.total").increment(1);
-        metrics::histogram!("nanokv.transaction.rollback.duration_seconds")
+        metrics::counter!("nanostore.transaction.rollback.total").increment(1);
+        metrics::histogram!("nanostore.transaction.rollback.duration_seconds")
             .record(rollback_duration.as_secs_f64());
-        metrics::histogram!("nanokv.transaction.duration_seconds")
+        metrics::histogram!("nanostore.transaction.duration_seconds")
             .record(transaction_duration.as_secs_f64());
-        metrics::gauge!("nanokv.transaction.active").decrement(1.0);
+        metrics::gauge!("nanostore.transaction.active").decrement(1.0);
 
         tracing::info!(
             duration_ms = transaction_duration.as_millis(),

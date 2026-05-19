@@ -11,7 +11,7 @@ Superseded by [ADR-012: Unified Table Architecture](./012-unified-table-architec
 
 ## Context
 
-NanoKV needs to support secondary indexes for efficient query execution. The question is: should the transaction layer automatically maintain indexes when table data changes, or should index maintenance be explicit?
+Nanostore needs to support secondary indexes for efficient query execution. The question is: should the transaction layer automatically maintain indexes when table data changes, or should index maintenance be explicit?
 
 Two approaches were considered:
 
@@ -48,7 +48,7 @@ With explicit index operations, the Database layer can implement any of these st
 
 ### 3. Support for Diverse Index Types
 
-NanoKV supports many index types (B-Tree, LSM, Bloom filters, full-text, vector, geospatial, etc.). Each has different maintenance characteristics:
+Nanostore supports many index types (B-Tree, LSM, Bloom filters, full-text, vector, geospatial, etc.). Each has different maintenance characteristics:
 
 - Bloom filters are append-only
 - Full-text indexes require tokenization
@@ -163,6 +163,6 @@ impl Database {
 
 ## References
 
-- Issue: nanokv-j89 "Add index operations to Transaction layer"
+- Issue: Nanostore-j89 "Add index operations to Transaction layer"
 - Implementation: `src/txn/transaction.rs`
 - Tests: `tests/transaction_index_tests.rs`

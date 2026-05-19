@@ -20,13 +20,13 @@
 //! corruption scenarios including partial writes, torn pages, checksum failures,
 //! and corrupted metadata structures.
 
-use nanokv::pager::{
+use nanostore::pager::{
     CompressionType, EncryptionType, Page, PageId, PageType, Pager, PagerConfig, PagerError,
 };
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::{File, FileSystem, MemoryFileSystem};
-use nanokv::wal::{WalRecovery, WalWriter, WalWriterConfig, WriteOpType};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::{File, FileSystem, MemoryFileSystem};
+use nanostore::wal::{WalRecovery, WalWriter, WalWriterConfig, WriteOpType};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::panic;
 // ============================================================================

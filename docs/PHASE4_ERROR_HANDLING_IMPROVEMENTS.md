@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the error handling improvements made during Phase 4 of the NanoKV project. The focus was on replacing generic error variants with structured, context-rich error types that provide better debuggability and operational visibility.
+This document describes the error handling improvements made during Phase 4 of the Nanostore project. The focus was on replacing generic error variants with structured, context-rich error types that provide better debuggability and operational visibility.
 
 ## Changes Made
 
@@ -130,8 +130,8 @@ match result {
 ### 4. Operational Visibility
 
 Metrics are emitted with stable labels for monitoring:
-- `nanokv.error.total{subsystem="table", category="validation", variant="invalid_level"}`
-- `nanokv.error.total{subsystem="table", category="consistency", variant="sstable_id_exists"}`
+- `Nanostore.error.total{subsystem="table", category="validation", variant="invalid_level"}`
+- `Nanostore.error.total{subsystem="table", category="consistency", variant="sstable_id_exists"}`
 
 ## Testing
 

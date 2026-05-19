@@ -172,8 +172,8 @@ All existing cache integration tests pass with sharded implementation:
 
 ## Related Issues
 
-- **nanokv-rte**: Pager: Implement sharded cache for better concurrency
-- **nanokv-z34**: Pager: Coarse-grained locking limits concurrency (parent issue)
+- **Nanostore-rte**: Pager: Implement sharded cache for better concurrency
+- **Nanostore-z34**: Pager: Coarse-grained locking limits concurrency (parent issue)
 
 ## References
 

@@ -9,7 +9,7 @@ This document summarizes all beads issues created from the comprehensive code re
 
 ## Critical Issues (P0) - MUST FIX IMMEDIATELY
 
-### 1. nanokv-49y: Pager Race Condition in Page Allocation
+### 1. Nanostore-49y: Pager Race Condition in Page Allocation
 **Status:** Open | **Priority:** 0 (Critical) | **Type:** Bug  
 **Estimated Effort:** 2-3 days
 
@@ -34,7 +34,7 @@ Critical race condition allows multiple threads to receive the same page ID unde
 
 ---
 
-### 2. nanokv-cu8: Pager Data Corruption in Concurrent Free/Read
+### 2. Nanostore-cu8: Pager Data Corruption in Concurrent Free/Read
 **Status:** Open | **Priority:** 0 (Critical) | **Type:** Bug  
 **Estimated Effort:** 2-3 days
 
@@ -63,7 +63,7 @@ Reading pages that were recently freed returns corrupted data, including invalid
 
 ## High Priority Issues (P1) - FIX SOON
 
-### 3. nanokv-16z: WAL Missing Concurrency Tests
+### 3. Nanostore-16z: WAL Missing Concurrency Tests
 **Status:** Open | **Priority:** 1 (High) | **Type:** Task  
 **Estimated Effort:** 1 day
 
@@ -85,7 +85,7 @@ WAL refactored to use RwLock but has ZERO concurrency tests to validate thread s
 
 ---
 
-### 4. nanokv-3nz: Pager Missing Comprehensive Concurrency Tests
+### 4. Nanostore-3nz: Pager Missing Comprehensive Concurrency Tests
 **Status:** Open | **Priority:** 1 (High) | **Type:** Task  
 **Estimated Effort:** 2 days (after fixing race conditions)
 
@@ -109,7 +109,7 @@ WAL refactored to use RwLock but has ZERO concurrency tests to validate thread s
 
 ---
 
-### 5. nanokv-xet: Missing Compression/Encryption Benchmarks
+### 5. Nanostore-xet: Missing Compression/Encryption Benchmarks
 **Status:** Open | **Priority:** 1 (High) | **Type:** Task  
 **Estimated Effort:** 1 day
 
@@ -135,7 +135,7 @@ Compression and encryption benchmarks are commented out, preventing performance 
 
 ## Medium Priority Issues (P2) - PLAN TO FIX
 
-### 6. nanokv-8rz: VFS Missing Property Tests for LocalFileSystem
+### 6. Nanostore-8rz: VFS Missing Property Tests for LocalFileSystem
 **Status:** Open | **Priority:** 2 (Medium) | **Type:** Task  
 **Estimated Effort:** 1 day
 
@@ -149,7 +149,7 @@ Property tests only cover MemoryFileSystem, leaving LocalFileSystem without comp
 
 ---
 
-### 7. nanokv-v0l: Pager Limited Stress Tests (Only 10K Pages)
+### 7. Nanostore-v0l: Pager Limited Stress Tests (Only 10K Pages)
 **Status:** Open | **Priority:** 2 (Medium) | **Type:** Task  
 **Estimated Effort:** 2 days
 
@@ -173,7 +173,7 @@ Stress tests limited to 10,000 pages, insufficient for large-scale validation.
 
 ---
 
-### 8. nanokv-0ie: WAL No Group Commit Optimization
+### 8. Nanostore-0ie: WAL No Group Commit Optimization
 **Status:** Open | **Priority:** 2 (Medium) | **Type:** Feature  
 **Estimated Effort:** 3-5 days
 
@@ -198,7 +198,7 @@ WAL commits each transaction independently, missing group commit optimization op
 
 ## Low Priority Issues (P3) - NICE TO HAVE
 
-### 9. nanokv-z34: Pager Coarse-Grained Locking Limits Concurrency
+### 9. Nanostore-z34: Pager Coarse-Grained Locking Limits Concurrency
 **Status:** Open | **Priority:** 3 (Low) | **Type:** Feature  
 **Estimated Effort:** 1-2 weeks
 
@@ -248,28 +248,28 @@ Pager uses write locks for all operations, limiting concurrent access and throug
 ## Critical Path to Production
 
 ### Week 1: Fix Critical Bugs (P0)
-**Days 1-3:** Fix nanokv-49y (Pager race condition)
+**Days 1-3:** Fix Nanostore-49y (Pager race condition)
 - Implement atomic page ID generation
 - Make page allocation transactional
 - Add concurrency tests
 
-**Days 4-6:** Fix nanokv-cu8 (Concurrent free/read corruption)
+**Days 4-6:** Fix Nanostore-cu8 (Concurrent free/read corruption)
 - Implement page pinning mechanism
 - Synchronize free operations with reads
 - Add cache coherency
 
 ### Week 2: Validate Thread Safety (P1)
-**Day 1:** Complete nanokv-16z (WAL concurrency tests)
+**Day 1:** Complete Nanostore-16z (WAL concurrency tests)
 - Add 6 comprehensive concurrency tests
 - Validate LSN monotonicity
 - Test transaction isolation
 
-**Days 2-3:** Complete nanokv-3nz (Pager concurrency tests)
+**Days 2-3:** Complete Nanostore-3nz (Pager concurrency tests)
 - Un-ignore and fix 3 failing tests
 - Add 5 new concurrency tests
 - Add stress test with 100+ threads
 
-**Day 4:** Complete nanokv-xet (Compression/encryption benchmarks)
+**Day 4:** Complete Nanostore-xet (Compression/encryption benchmarks)
 - Uncomment and fix benchmarks
 - Run performance baselines
 - Document results
@@ -284,50 +284,50 @@ Pager uses write locks for all operations, limiting concurrent access and throug
 ## Production Readiness Checklist
 
 ### Must Have (Blocking)
-- [ ] Fix nanokv-49y: Pager race condition
-- [ ] Fix nanokv-cu8: Concurrent free/read corruption
-- [ ] Complete nanokv-16z: WAL concurrency tests
-- [ ] Complete nanokv-3nz: Pager concurrency tests
+- [ ] Fix Nanostore-49y: Pager race condition
+- [ ] Fix Nanostore-cu8: Concurrent free/read corruption
+- [ ] Complete Nanostore-16z: WAL concurrency tests
+- [ ] Complete Nanostore-3nz: Pager concurrency tests
 
 ### Should Have (High Confidence)
-- [ ] Complete nanokv-xet: Compression/encryption benchmarks
-- [ ] Complete nanokv-8rz: VFS LocalFileSystem property tests
-- [ ] Complete nanokv-v0l: Pager large-scale stress tests
+- [ ] Complete Nanostore-xet: Compression/encryption benchmarks
+- [ ] Complete Nanostore-8rz: VFS LocalFileSystem property tests
+- [ ] Complete Nanostore-v0l: Pager large-scale stress tests
 
 ### Nice to Have (Optimization)
-- [ ] Complete nanokv-0ie: WAL group commit
-- [ ] Complete nanokv-z34: Pager fine-grained locking
+- [ ] Complete Nanostore-0ie: WAL group commit
+- [ ] Complete Nanostore-z34: Pager fine-grained locking
 
 ---
 
 ## Issue Dependencies
 
 ```
-nanokv-49y (Pager race condition) [P0]
-    └─> nanokv-3nz (Pager concurrency tests) [P1]
-            └─> nanokv-v0l (Pager stress tests) [P2]
+Nanostore-49y (Pager race condition) [P0]
+    └─> Nanostore-3nz (Pager concurrency tests) [P1]
+            └─> Nanostore-v0l (Pager stress tests) [P2]
 
-nanokv-cu8 (Free/read corruption) [P0]
-    └─> nanokv-3nz (Pager concurrency tests) [P1]
+Nanostore-cu8 (Free/read corruption) [P0]
+    └─> Nanostore-3nz (Pager concurrency tests) [P1]
 
-nanokv-16z (WAL concurrency tests) [P1]
-    └─> nanokv-0ie (WAL group commit) [P2]
+Nanostore-16z (WAL concurrency tests) [P1]
+    └─> Nanostore-0ie (WAL group commit) [P2]
 
-nanokv-xet (Compression/encryption benchmarks) [P1]
+Nanostore-xet (Compression/encryption benchmarks) [P1]
     └─> (No dependencies)
 
-nanokv-8rz (VFS property tests) [P2]
+Nanostore-8rz (VFS property tests) [P2]
     └─> (No dependencies)
 
-nanokv-z34 (Fine-grained locking) [P3]
-    └─> Requires: nanokv-49y, nanokv-cu8, nanokv-3nz
+Nanostore-z34 (Fine-grained locking) [P3]
+    └─> Requires: Nanostore-49y, Nanostore-cu8, Nanostore-3nz
 ```
 
 ---
 
 ## Next Steps
 
-1. **Immediate:** Start work on nanokv-49y (Pager race condition)
+1. **Immediate:** Start work on Nanostore-49y (Pager race condition)
 2. **This Week:** Complete both P0 issues
 3. **Next Week:** Complete all P1 issues
 4. **Following Weeks:** Address P2 issues as time permits

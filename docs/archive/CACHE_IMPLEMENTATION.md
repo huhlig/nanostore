@@ -2,7 +2,7 @@
 
 ## Overview
 
-The LRU (Least Recently Used) page cache is a critical performance optimization component in NanoKV's pager layer. It reduces disk I/O by keeping frequently accessed pages in memory, significantly improving read and write performance.
+The LRU (Least Recently Used) page cache is a critical performance optimization component in Nanostore's pager layer. It reduces disk I/O by keeping frequently accessed pages in memory, significantly improving read and write performance.
 
 ## Architecture
 

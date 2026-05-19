@@ -16,25 +16,25 @@
 
 //! Comprehensive integration tests for table and index operations.
 
-use nanokv::kvdb::{Database, DatabaseErrorKind};
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::TimeSeriesCursor;
-use nanokv::table::fulltext::FullTextConfig;
-use nanokv::table::graph::{GraphConfig, MemoryGraphTable};
-use nanokv::table::hnsw::HnswConfig;
-use nanokv::table::rtree::SpatialConfig;
-use nanokv::table::timeseries::TimeSeriesConfig;
-use nanokv::table::{
+use nanostore::kvdb::{Database, DatabaseErrorKind};
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::TimeSeriesCursor;
+use nanostore::table::fulltext::FullTextConfig;
+use nanostore::table::graph::{GraphConfig, MemoryGraphTable};
+use nanostore::table::hnsw::HnswConfig;
+use nanostore::table::rtree::SpatialConfig;
+use nanostore::table::timeseries::TimeSeriesConfig;
+use nanostore::table::{
     ApproximateMembership, BatchOps, EdgeCursor, Flushable, FullTextSearch, GeoPoint, GeoSpatial,
     GeometryRef, GraphAdjacency, MutableTable, OrderedScan, PagedBTree, PagedBloomFilter,
     PagedFullTextIndex, PagedHnswVector, PagedRTree, PointLookup, SearchableTable, Table,
     TableCursor, TableEngineKind, TableOptions, TableReader, TableWriter, TimeSeries,
     TimeSeriesTable, VectorSearch,
 };
-use nanokv::txn::TransactionId;
-use nanokv::types::{Bound, KeyBuf, ScanBounds, TableId};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::txn::TransactionId;
+use nanostore::types::{Bound, KeyBuf, ScanBounds, TableId};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use rand::Rng;
 use std::sync::Arc;
 use std::time::Instant;
@@ -298,18 +298,18 @@ fn test_table_batch_operations() {
     let snapshot_lsn = LogSequenceNumber::from(0);
     let mut writer = table.writer(tx_id, snapshot_lsn).unwrap();
 
-    let mutations: Vec<nanokv::table::Mutation> = (0..10)
+    let mutations: Vec<nanostore::table::Mutation> = (0..10)
         .map(|i| {
             let key = format!("key{:03}", i);
             let value = format!("value{}", i);
-            nanokv::table::Mutation::Put {
+            nanostore::table::Mutation::Put {
                 key: std::borrow::Cow::Owned(key.into_bytes()),
                 value: std::borrow::Cow::Owned(value.into_bytes()),
             }
         })
         .collect();
 
-    let batch = nanokv::table::WriteBatch { mutations };
+    let batch = nanostore::table::WriteBatch { mutations };
     let report = writer.apply_batch(batch).unwrap();
     assert_eq!(report.attempted, 10);
     assert_eq!(report.applied, 10);
@@ -395,7 +395,7 @@ fn test_hnsw_vector_insert_and_search() {
     let pager = create_test_pager();
     let config = HnswConfig {
         dimensions: 4,
-        metric: nanokv::table::VectorMetric::Cosine,
+        metric: nanostore::table::VectorMetric::Cosine,
         max_connections: 16,
         max_connections_layer0: 32,
         ef_construction: 200,
@@ -430,7 +430,7 @@ fn test_hnsw_vector_insert_and_search() {
     )
     .unwrap();
 
-    let options = nanokv::table::VectorSearchOptions {
+    let options = nanostore::table::VectorSearchOptions {
         limit: 2,
         ef_search: Some(50),
         probes: None,
@@ -577,7 +577,7 @@ fn test_fulltext_index_and_search() {
     )
     .unwrap();
 
-    let fields = vec![nanokv::table::TextField {
+    let fields = vec![nanostore::table::TextField {
         name: "content",
         text: "The quick brown fox jumps over the lazy dog",
         boost: 1.0,
@@ -591,7 +591,7 @@ fn test_fulltext_index_and_search() {
         )
         .unwrap();
 
-    let fields2 = vec![nanokv::table::TextField {
+    let fields2 = vec![nanostore::table::TextField {
         name: "content",
         text: "The lazy cat sleeps on the warm mat",
         boost: 1.0,
@@ -605,7 +605,7 @@ fn test_fulltext_index_and_search() {
         )
         .unwrap();
 
-    let query = nanokv::table::TextQuery {
+    let query = nanostore::table::TextQuery {
         query: "lazy",
         default_field: Some("content"),
         require_positions: false,
@@ -891,7 +891,7 @@ fn test_vector_search_dimension_mismatch() {
     let pager = create_test_pager();
     let config = HnswConfig {
         dimensions: 4,
-        metric: nanokv::table::VectorMetric::Cosine,
+        metric: nanostore::table::VectorMetric::Cosine,
         max_connections: 16,
         max_connections_layer0: 32,
         ef_construction: 200,

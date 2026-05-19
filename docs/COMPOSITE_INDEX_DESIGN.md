@@ -1,12 +1,12 @@
 # Composite/Multi-Column Index Design
 
-**Issue**: nanokv-au0  
+**Issue**: Nanostore-au0  
 **Date**: 2026-05-12  
 **Status**: Design Phase
 
 ## Executive Summary
 
-This document outlines how to implement composite/multi-column indexes in NanoKV **without requiring schema support**. The key insight is that composite indexes can be implemented using **key encoding conventions** rather than schema metadata, leveraging the existing `DenseOrdered` trait and byte-oriented key-value storage.
+This document outlines how to implement composite/multi-column indexes in Nanostore **without requiring schema support**. The key insight is that composite indexes can be implemented using **key encoding conventions** rather than schema metadata, leveraging the existing `DenseOrdered` trait and byte-oriented key-value storage.
 
 ## Problem Statement
 
@@ -494,7 +494,7 @@ let cursor = index.scan(bounds)?;
 
 ## Conclusion
 
-Composite indexes can be implemented in NanoKV **without schema support** by using:
+Composite indexes can be implemented in Nanostore **without schema support** by using:
 1. **Self-describing key encoding** with type markers
 2. **Existing `DenseOrdered` trait** and table implementations
 3. **Catalog metadata** for field specifications

@@ -2,7 +2,7 @@
 
 ## Analysis Summary
 
-After reviewing all error types across NanoKV modules, I've identified several areas where error context can be improved for better debuggability and operational visibility.
+After reviewing all error types across Nanostore modules, I've identified several areas where error context can be improved for better debuggability and operational visibility.
 
 ## Current State
 
@@ -217,8 +217,8 @@ Status: **Implemented**
 
 #### Implemented Observability API
 
-NanoKV now exposes a centralized shared observability layer in `src/error_observability.rs`
-and re-exports it as `nanokv::error_observability`.
+Nanostore now exposes a centralized shared observability layer in `src/error_observability.rs`
+and re-exports it as `Nanostore::error_observability`.
 
 Core pieces:
 - `ErrorTelemetry` trait for subsystem classification
@@ -232,7 +232,7 @@ Core pieces:
   - `error`
   - `critical`
 - `record_error(&error)` helper for metrics + structured logging
-- `NanoKvError::{classification, severity, record}` convenience methods
+- `NanostoreError::{classification, severity, record}` convenience methods
 
 #### Metrics Emitted
 
@@ -240,7 +240,7 @@ The centralized recorder emits the following metrics:
 
 ```rust
 counter!(
-    "nanokv.error.total",
+    "Nanostore.error.total",
     "subsystem" => ...,
     "category" => ...,
     "variant" => ...,
@@ -248,7 +248,7 @@ counter!(
 ).increment(1);
 
 counter!(
-    "nanokv.error.category.total",
+    "Nanostore.error.category.total",
     "category" => ...,
     "severity" => ...
 ).increment(1);
@@ -277,17 +277,17 @@ set of dimensions for filtering and aggregation.
 #### Example Usage
 
 ```rust
-use nanokv::error::NanoKvError;
-use nanokv::error_observability::record_error;
-use nanokv::pager::PagerError;
+use Nanostore::error::NanostoreError;
+use Nanostore::error_observability::record_error;
+use Nanostore::pager::PagerError;
 
 // Record a subsystem error directly
 let pager_error = PagerError::DatabaseFull;
 let observation = record_error(&pager_error);
 assert_eq!(observation.classification.subsystem, "pager");
 
-// Or record through the unified NanoKvError type
-let err: NanoKvError = pager_error.into();
+// Or record through the unified NanostoreError type
+let err: NanostoreError = pager_error.into();
 let observation = err.record();
 assert_eq!(err.severity().as_str(), "error");
 ```
@@ -314,7 +314,7 @@ pub trait Retryable {
 pub enum RecoveryAction {
     Retry,
     Abort,
-    Fallback(Box<dyn Fn() -> Result<(), NanoKvError>>),
+    Fallback(Box<dyn Fn() -> Result<(), NanostoreError>>),
     Ignore,
 }
 
@@ -359,7 +359,7 @@ pub trait RecoverableError {
 ### Step 7: Error Metrics Infrastructure
 - ✅ Implemented centralized error classification infrastructure
 - ✅ Added metrics collection through `record_error`
-- ✅ Added public reporting API via `NanoKvError::record()`
+- ✅ Added public reporting API via `NanostoreError::record()`
 
 ### Step 8: Error Logging
 - ✅ Integrated shared structured logging through `tracing`

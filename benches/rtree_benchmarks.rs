@@ -17,12 +17,12 @@
 //! Benchmarks for R-Tree geospatial operations
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use nanokv::pager::{PageSize, Pager, PagerConfig};
-use nanokv::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{PageSize, Pager, PagerConfig};
+use nanostore::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::hint::black_box;
 use std::sync::Arc;
 

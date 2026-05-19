@@ -23,12 +23,12 @@
 //! - Serializable: Prevents all anomalies (dirty reads, non-repeatable reads, phantoms)
 //! - SnapshotIsolation: Snapshot-based reads, write-write conflict detection only
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::TableEngineRegistry;
-use nanokv::txn::{ConflictDetector, Transaction, TransactionId};
-use nanokv::types::{Durability, IsolationLevel, TableId, ValueBuf};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::{LogSequenceNumber, WalWriter, WalWriterConfig};
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::TableEngineRegistry;
+use nanostore::txn::{ConflictDetector, Transaction, TransactionId};
+use nanostore::types::{Durability, IsolationLevel, TableId, ValueBuf};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::{LogSequenceNumber, WalWriter, WalWriterConfig};
 use std::sync::{Arc, Mutex, RwLock};
 
 fn create_test_transaction(

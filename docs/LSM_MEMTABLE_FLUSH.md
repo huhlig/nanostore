@@ -120,7 +120,7 @@ End-to-end integration tests in `tests/end_to_end_integration_test.rs`:
 
 ## Known Issues
 
-### SSTable Writer Footer Bug (nanokv-9bnx)
+### SSTable Writer Footer Bug (Nanostore-9bnx)
 
 The `SStableWriter::finish()` method has a bug where the footer is not written correctly, causing "footer_not_found" errors when reading SSTables. This blocks full end-to-end testing of LSM persistence.
 
@@ -171,12 +171,12 @@ db.close()?; // Explicit close with error handling
 2. **Async Drop**: Explore async Drop when Rust supports it for better error handling
 3. **Flush Batching**: Batch multiple memtable flushes for efficiency
 4. **Compression**: Add optional compression during SSTable write
-5. **Fix SSTable Writer**: Resolve footer writing bug (nanokv-9bnx)
+5. **Fix SSTable Writer**: Resolve footer writing bug (Nanostore-9bnx)
 
 ## References
 
-- Issue: nanokv-8ig (Implement LSM memtable flush on database close)
-- Related: nanokv-9bnx (Fix SSTable writer footer bug)
+- Issue: Nanostore-8ig (Implement LSM memtable flush on database close)
+- Related: Nanostore-9bnx (Fix SSTable writer footer bug)
 - Code: `src/table/lsm/mod.rs` - LsmTree implementation
 - Code: `src/kvdb.rs` - Database::close() method
 - Tests: `tests/end_to_end_integration_test.rs`

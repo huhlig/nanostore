@@ -24,9 +24,9 @@
 //! - Chain corruption detection
 //! - Free chain and verify pages released
 
-use nanokv::pager::{OverflowChainStream, Pager, PagerConfig};
-use nanokv::table::ValueStream;
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{OverflowChainStream, Pager, PagerConfig};
+use nanostore::table::ValueStream;
+use nanostore::vfs::MemoryFileSystem;
 
 #[test]
 fn test_single_page_overflow() {

@@ -10,7 +10,7 @@ This document outlines the plan for integrating MVCC (Multi-Version Concurrency 
 - **TimeSeriesTable**: Stores `BTreeMap<i64, VersionChain>` in TimeBucket, implements `commit_versions()` and `vacuum()`
 - **MemoryGraphTable**: Stores `HashMap<(source, label, edge_id), VersionChain>` for edges, implements `commit_versions()`
 
-### ❌ Pending MVCC Integrations (nanokv-302)
+### ❌ Pending MVCC Integrations (Nanostore-302)
 1. **PagedRTree** (geospatial indexing)
 2. **PagedHnswVector** (vector search)
 3. **PagedFullTextIndex** (full-text search)
@@ -20,7 +20,7 @@ This document outlines the plan for integrating MVCC (Multi-Version Concurrency 
 
 Before implementing MVCC for these tables, the following issues must be resolved:
 
-### 1. PagedRTree Transaction Commit (nanokv-8xz, Priority 1)
+### 1. PagedRTree Transaction Commit (Nanostore-8xz, Priority 1)
 **Problem**: PagedRTree methods require `&mut self` but the engine is stored behind `Arc`. GeoSpatial operations are logged to WAL but NOT applied to storage during commit.
 
 **Location**: `src/txn/transaction.rs:1723`
@@ -32,7 +32,7 @@ Before implementing MVCC for these tables, the following issues must be resolved
 - Redesign PagedRTree to support concurrent access
 - Implement a write buffer pattern similar to LSM Tree
 
-### 2. Transaction Commit Path (nanokv-ckm, Priority 2)
+### 2. Transaction Commit Path (Nanostore-ckm, Priority 2)
 **Problem**: Transaction commit doesn't call `commit_versions()` for all engines that use VersionChain.
 
 **Impact**: Even after adding VersionChain support, changes won't be committed properly.
@@ -131,8 +131,8 @@ pub struct BlobEntry {
 ## Implementation Plan
 
 ### Phase 1: Prerequisites (MUST DO FIRST)
-1. ✅ **Resolve nanokv-8xz**: Fix PagedRTree interior mutability
-2. ✅ **Resolve nanokv-ckm**: Update transaction commit path
+1. ✅ **Resolve Nanostore-8xz**: Fix PagedRTree interior mutability
+2. ✅ **Resolve Nanostore-ckm**: Update transaction commit path
 3. ✅ **Test infrastructure**: Ensure MVCC tests work for existing tables
 
 ### Phase 2: PagedRTree Integration
@@ -295,11 +295,11 @@ For each table, add tests for:
 ## Dependencies
 
 ### Blocked By
-- nanokv-8xz: Fix GeoSpatial apply during transaction commit (Priority 1)
-- nanokv-ckm: Update transaction commit path (Priority 2)
+- Nanostore-8xz: Fix GeoSpatial apply during transaction commit (Priority 1)
+- Nanostore-ckm: Update transaction commit path (Priority 2)
 
 ### Blocks
-- nanokv-6ij: Add comprehensive MVCC integration tests (Priority 2)
+- Nanostore-6ij: Add comprehensive MVCC integration tests (Priority 2)
 - Full MVCC support across all table types
 
 ## Timeline Estimate
@@ -326,5 +326,5 @@ Assuming prerequisites are resolved:
 ---
 
 *Created: 2026-05-16*
-*Issue: nanokv-302*
-*Status: Planning - Blocked by nanokv-8xz, nanokv-ckm*
+*Issue: Nanostore-302*
+*Status: Planning - Blocked by Nanostore-8xz, Nanostore-ckm*

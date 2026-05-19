@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the vacuum/garbage collection system for removing obsolete MVCC version chains in NanoKV.
+This document describes the vacuum/garbage collection system for removing obsolete MVCC version chains in Nanostore.
 
 ## Architecture
 
@@ -87,18 +87,18 @@ db.vacuum_all()?;
 
 ## Implementation Status
 
-### Completed (nanokv-5fv) ✅ CLOSED
+### Completed (Nanostore-5fv) ✅ CLOSED
 - ✅ VersionChain::vacuum() method (already existed)
 - ✅ Database::min_visible_lsn() for watermark computation
 - ✅ Database::vacuum_table() and vacuum_all() APIs
 - ✅ TableEngineRegistry::vacuum_table() dispatcher
 - ✅ Infrastructure and design complete
-- ✅ vacuum() methods implemented in all table engines (nanokv-cod)
+- ✅ vacuum() methods implemented in all table engines (Nanostore-cod)
 - ✅ Basic tests passing (version_chain_tests, timeseries_mvcc_tests, memtable tests)
 
 ### Remaining Work
 
-1. **Background vacuum task** (nanokv-mkk) - OPEN
+1. **Background vacuum task** (Nanostore-mkk) - OPEN
    - Periodic background task in Database
    - Configurable vacuum interval
    - Manual trigger API
@@ -108,7 +108,7 @@ db.vacuum_all()?;
      - Time taken for vacuum operations
      - Memory freed by vacuum
 
-3. **Comprehensive tests** (nanokv-914)
+3. **Comprehensive tests** (Nanostore-914)
    - Basic vacuum functionality
    - Watermark respect
    - Base version preservation

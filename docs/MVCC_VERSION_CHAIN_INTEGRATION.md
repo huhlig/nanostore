@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document tracks the integration of MVCC (Multi-Version Concurrency Control) version chains across all storage engines in NanoKV. The `VersionChain` structure exists in `src/txn/version.rs` and provides snapshot isolation through version visibility checking.
+This document tracks the integration of MVCC (Multi-Version Concurrency Control) version chains across all storage engines in Nanostore. The `VersionChain` structure exists in `src/txn/version.rs` and provides snapshot isolation through version visibility checking.
 
 ## Current Status
 
@@ -47,9 +47,9 @@ This document tracks the integration of MVCC (Multi-Version Concurrency Control)
    - Has `commit_versions()` and `vacuum()` methods
    - Serializes/deserializes chains with postcard
 
-### ⏳ Engines WITHOUT VersionChain Integration (nanokv-302)
+### ⏳ Engines WITHOUT VersionChain Integration (Nanostore-302)
 
-**Status**: Blocked by nanokv-8xz (PagedRTree interior mutability) and nanokv-ckm (transaction commit path)
+**Status**: Blocked by Nanostore-8xz (PagedRTree interior mutability) and Nanostore-ckm (transaction commit path)
 
 See `docs/SPECIALTY_TABLE_MVCC_INTEGRATION_PLAN.md` for detailed implementation plan.
 
@@ -57,7 +57,7 @@ See `docs/SPECIALTY_TABLE_MVCC_INTEGRATION_PLAN.md` for detailed implementation 
    - Current: Stores geometry in R-tree nodes
    - Need: Version chains for geometry updates
    - Priority: MEDIUM (geospatial queries)
-   - Blocker: nanokv-8xz (interior mutability issue)
+   - Blocker: Nanostore-8xz (interior mutability issue)
 
 2. **PagedHnswVector** (`src/table/hnsw/paged.rs`)
    - Current: HNSW graph for vector search

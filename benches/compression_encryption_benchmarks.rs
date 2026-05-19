@@ -17,11 +17,11 @@
 //! Comprehensive benchmarks for compression and encryption features
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use nanokv::pager::{CompressionType, EncryptionType, Page, PageType, Pager, PagerConfig};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::{WalWriter, WalWriterConfig, WriteOpType};
+use nanostore::pager::{CompressionType, EncryptionType, Page, PageType, Pager, PagerConfig};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::{WalWriter, WalWriterConfig, WriteOpType};
 use rand::Rng;
 use std::hint::black_box;
 // ============================================================================

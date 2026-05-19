@@ -1,7 +1,7 @@
 # Pager Concurrency Improvements - Complete
 
 **Date:** 2026-05-09  
-**Parent Issue:** nanokv-z34  
+**Parent Issue:** Nanostore-z34  
 **Status:** ✅ Complete
 
 ## Overview
@@ -10,7 +10,7 @@ Successfully completed all phases of pager concurrency improvements, transformin
 
 ## Completed Phases
 
-### Phase 1: Fine-Grained Page Locking (nanokv-5p9)
+### Phase 1: Fine-Grained Page Locking (Nanostore-5p9)
 **Status:** ✅ Closed 2026-05-09
 
 **Implementation:**
@@ -26,7 +26,7 @@ Successfully completed all phases of pager concurrency improvements, transformin
 
 **Documentation:** `docs/PHASE1_COMPLETION_SUMMARY.md`
 
-### Phase 2a: Lock-Free Free List (nanokv-89z)
+### Phase 2a: Lock-Free Free List (Nanostore-89z)
 **Status:** ✅ Closed 2026-05-09
 
 **Implementation:**
@@ -43,7 +43,7 @@ Successfully completed all phases of pager concurrency improvements, transformin
 
 **Documentation:** `docs/LOCK_FREE_FREELIST_IMPLEMENTATION.md`
 
-### Phase 2b: Sharded Cache (nanokv-rte)
+### Phase 2b: Sharded Cache (Nanostore-rte)
 **Status:** ✅ Closed 2026-05-09
 
 **Implementation:**
@@ -193,10 +193,10 @@ Pager
 
 ## Related Issues
 
-- **nanokv-z34:** Parent issue (closed)
-- **nanokv-5p9:** Phase 1 - PageTable integration (closed)
-- **nanokv-89z:** Phase 2a - Lock-free free list (closed)
-- **nanokv-rte:** Phase 2b - Sharded cache (closed)
+- **Nanostore-z34:** Parent issue (closed)
+- **Nanostore-5p9:** Phase 1 - PageTable integration (closed)
+- **Nanostore-89z:** Phase 2a - Lock-free free list (closed)
+- **Nanostore-rte:** Phase 2b - Sharded cache (closed)
 
 ## Files Modified
 
@@ -222,7 +222,7 @@ Pager
 
 ## Conclusion
 
-The pager concurrency improvements represent a significant architectural enhancement to NanoKV. The transformation from coarse-grained locking to a fine-grained, lock-free design:
+The pager concurrency improvements represent a significant architectural enhancement to Nanostore. The transformation from coarse-grained locking to a fine-grained, lock-free design:
 
 ✅ **Eliminates bottlenecks** - No single point of contention  
 ✅ **Scales linearly** - Up to 32 concurrent threads  

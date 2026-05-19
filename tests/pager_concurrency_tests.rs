@@ -23,8 +23,8 @@
 //! - Free list management is thread-safe
 //! - Race conditions are properly handled
 
-use nanokv::pager::{Page, PageType, Pager, PagerConfig};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Page, PageType, Pager, PagerConfig};
+use nanostore::vfs::MemoryFileSystem;
 use std::collections::HashSet;
 use std::sync::{Arc, Barrier};
 use std::thread;

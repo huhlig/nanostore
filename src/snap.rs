@@ -106,10 +106,10 @@ impl Snapshot {
     /// # Examples
     ///
     /// ```
-    /// # use nanokv::snap::Snapshot;
-    /// # use nanokv::snap::SnapshotId;
-    /// # use nanokv::wal::LogSequenceNumber;
-    /// # use nanokv::txn::TransactionId;
+    /// # use nanostore::snap::Snapshot;
+    /// # use nanostore::snap::SnapshotId;
+    /// # use nanostore::wal::LogSequenceNumber;
+    /// # use nanostore::txn::TransactionId;
     /// let active_txns = vec![
     ///     TransactionId::from(5),
     ///     TransactionId::from(10),
@@ -172,10 +172,10 @@ impl Snapshot {
     /// # Examples
     ///
     /// ```
-    /// # use nanokv::snap::Snapshot;
-    /// # use nanokv::wal::LogSequenceNumber;
-    /// # use nanokv::txn::TransactionId;
-    /// # use nanokv::snap::SnapshotId;
+    /// # use nanostore::snap::Snapshot;
+    /// # use nanostore::wal::LogSequenceNumber;
+    /// # use nanostore::txn::TransactionId;
+    /// # use nanostore::snap::SnapshotId;
     /// let snapshot = Snapshot {
     ///     id: SnapshotId::from(1),
     ///     name: "test".to_string(),

@@ -17,10 +17,10 @@
 //! Benchmarks for Pager implementation
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use nanokv::pager::{
+use nanostore::pager::{
     CompressionType, EncryptionType, Page, PageId, PageSize, PageType, Pager, PagerConfig,
 };
-use nanokv::vfs::{LocalFileSystem, MemoryFileSystem};
+use nanostore::vfs::{LocalFileSystem, MemoryFileSystem};
 use std::hint::black_box;
 
 // ============================================================================

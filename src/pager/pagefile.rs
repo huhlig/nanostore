@@ -237,7 +237,7 @@ impl<FS: FileSystem> Pager<FS> {
             let mut superblock = self.superblock.write();
             superblock.mark_page_allocated();
             drop(superblock); // Release immediately
-            counter!("nanokv.pager.page.reused").increment(1);
+            counter!("nanostore.pager.page.reused").increment(1);
             debug!("Page allocated from free list");
             (page_id, true)
         } else {
@@ -245,7 +245,7 @@ impl<FS: FileSystem> Pager<FS> {
             let mut superblock = self.superblock.write();
             let page_id = superblock.allocate_new_page();
             drop(superblock); // Release immediately
-            counter!("nanokv.pager.page.grown").increment(1);
+            counter!("nanostore.pager.page.grown").increment(1);
             debug!("Page allocated by growing database");
             (page_id, false)
         };
@@ -254,7 +254,7 @@ impl<FS: FileSystem> Pager<FS> {
         tracing::Span::current().record("page_id", page_id.as_u64());
         tracing::Span::current().record("from_freelist", from_freelist);
 
-        counter!("nanokv.pager.page.allocated").increment(1);
+        counter!("nanostore.pager.page.allocated").increment(1);
 
         // STEP 2: Prepare data (no locks held)
         let mut page = Page::new(page_id, page_type, self.config.page_size.data_size());
@@ -313,7 +313,7 @@ impl<FS: FileSystem> Pager<FS> {
             file.write_to_offset(page_size as u64, &superblock_bytes)?;
         }
 
-        histogram!("nanokv.pager.allocate.duration_seconds").record(start.elapsed().as_secs_f64());
+        histogram!("nanostore.pager.allocate.duration_seconds").record(start.elapsed().as_secs_f64());
         debug!("Page allocated successfully");
         Ok(page_id)
     }
@@ -329,7 +329,7 @@ impl<FS: FileSystem> Pager<FS> {
 
         if page_id == PageId::from(0) || page_id == PageId::from(1) {
             warn!("Attempted to free reserved page");
-            counter!("nanokv.pager.error", "type" => "invalid_page_id").increment(1);
+            counter!("nanostore.pager.error", "type" => "invalid_page_id").increment(1);
             return Err(PagerError::InvalidPageId(page_id));
         }
 
@@ -337,7 +337,7 @@ impl<FS: FileSystem> Pager<FS> {
         // This prevents freeing pages that are currently being read
         if self.pin_table.is_pinned(page_id) {
             warn!("Attempted to free pinned page");
-            counter!("nanokv.pager.error", "type" => "page_pinned").increment(1);
+            counter!("nanostore.pager.error", "type" => "page_pinned").increment(1);
             return Err(PagerError::PagePinned(page_id));
         }
 
@@ -426,9 +426,9 @@ impl<FS: FileSystem> Pager<FS> {
             file.write_to_offset(page_size as u64, &superblock_bytes)?;
         }
 
-        counter!("nanokv.pager.page.freed").increment(1);
-        histogram!("nanokv.pager.free.duration_seconds").record(start.elapsed().as_secs_f64());
-        gauge!("nanokv.pager.freelist.size").set(self.free_list.total_free() as f64);
+        counter!("nanostore.pager.page.freed").increment(1);
+        histogram!("nanostore.pager.free.duration_seconds").record(start.elapsed().as_secs_f64());
+        gauge!("nanostore.pager.freelist.size").set(self.free_list.total_free() as f64);
         debug!("Page freed successfully");
         Ok(())
     }
@@ -443,7 +443,7 @@ impl<FS: FileSystem> Pager<FS> {
         debug!("Reading page");
 
         if page_id.as_u64() >= self.total_pages() {
-            counter!("nanokv.pager.error", "type" => "page_not_found").increment(1);
+            counter!("nanostore.pager.error", "type" => "page_not_found").increment(1);
             return Err(PagerError::PageNotFound(page_id));
         }
 
@@ -453,8 +453,8 @@ impl<FS: FileSystem> Pager<FS> {
         {
             tracing::Span::current().record("cache_hit", true);
             debug!("Cache hit");
-            counter!("nanokv.pager.page.read").increment(1);
-            histogram!("nanokv.pager.read.duration_seconds").record(start.elapsed().as_secs_f64());
+            counter!("nanostore.pager.page.read").increment(1);
+            histogram!("nanostore.pager.read.duration_seconds").record(start.elapsed().as_secs_f64());
             return Ok(page);
         }
 
@@ -503,9 +503,9 @@ impl<FS: FileSystem> Pager<FS> {
 
         if result.is_ok() {
             let page_size = self.config.page_size.to_u32() as u64;
-            counter!("nanokv.pager.page.read").increment(1);
-            counter!("nanokv.pager.bytes.read").increment(page_size);
-            histogram!("nanokv.pager.read.duration_seconds").record(start.elapsed().as_secs_f64());
+            counter!("nanostore.pager.page.read").increment(1);
+            counter!("nanostore.pager.bytes.read").increment(page_size);
+            histogram!("nanostore.pager.read.duration_seconds").record(start.elapsed().as_secs_f64());
             debug!("Page read successfully");
         }
 
@@ -529,9 +529,9 @@ impl<FS: FileSystem> Pager<FS> {
                 }
                 self.write_page_to_disk(page)?;
                 cache.mark_clean(page.page_id());
-                counter!("nanokv.pager.page.write").increment(1);
-                counter!("nanokv.pager.bytes.written").increment(page_size);
-                histogram!("nanokv.pager.write.duration_seconds")
+                counter!("nanostore.pager.page.write").increment(1);
+                counter!("nanostore.pager.bytes.written").increment(page_size);
+                histogram!("nanostore.pager.write.duration_seconds")
                     .record(start.elapsed().as_secs_f64());
                 debug!("Page written successfully");
                 return Ok(());
@@ -540,9 +540,9 @@ impl<FS: FileSystem> Pager<FS> {
             tracing::Span::current().record("write_through", true);
             self.write_page_to_disk(page)?;
             cache.put(page.clone(), false);
-            counter!("nanokv.pager.page.write").increment(1);
-            counter!("nanokv.pager.bytes.written").increment(page_size);
-            histogram!("nanokv.pager.write.duration_seconds").record(start.elapsed().as_secs_f64());
+            counter!("nanostore.pager.page.write").increment(1);
+            counter!("nanostore.pager.bytes.written").increment(page_size);
+            histogram!("nanostore.pager.write.duration_seconds").record(start.elapsed().as_secs_f64());
             debug!("Page written successfully");
             return Ok(());
         }
@@ -551,9 +551,9 @@ impl<FS: FileSystem> Pager<FS> {
         let result = self.write_page_to_disk(page);
 
         if result.is_ok() {
-            counter!("nanokv.pager.page.write").increment(1);
-            counter!("nanokv.pager.bytes.written").increment(page_size);
-            histogram!("nanokv.pager.write.duration_seconds").record(start.elapsed().as_secs_f64());
+            counter!("nanostore.pager.page.write").increment(1);
+            counter!("nanostore.pager.bytes.written").increment(page_size);
+            histogram!("nanostore.pager.write.duration_seconds").record(start.elapsed().as_secs_f64());
             debug!("Page written successfully");
         }
 
@@ -596,7 +596,7 @@ impl<FS: FileSystem> Pager<FS> {
                 cache.mark_clean(page_id);
             }
 
-            histogram!("nanokv.pager.flush.duration_seconds").record(start.elapsed().as_secs_f64());
+            histogram!("nanostore.pager.flush.duration_seconds").record(start.elapsed().as_secs_f64());
             debug!(
                 flushed_count = dirty_count,
                 duration_ms = start.elapsed().as_millis(),
@@ -612,8 +612,8 @@ impl<FS: FileSystem> Pager<FS> {
 
         // Update metrics gauges with current cache stats
         if let Some(ref s) = stats {
-            gauge!("nanokv.pager.cache.size").set(s.current_size as f64);
-            gauge!("nanokv.pager.cache.dirty_pages").set(s.dirty_pages as f64);
+            gauge!("nanostore.pager.cache.size").set(s.current_size as f64);
+            gauge!("nanostore.pager.cache.dirty_pages").set(s.dirty_pages as f64);
         }
 
         stats
@@ -645,9 +645,9 @@ impl<FS: FileSystem> Pager<FS> {
         file.sync_all()?;
         drop(file);
 
-        histogram!("nanokv.pager.fsync.duration_seconds")
+        histogram!("nanostore.pager.fsync.duration_seconds")
             .record(fsync_start.elapsed().as_secs_f64());
-        histogram!("nanokv.pager.sync.duration_seconds").record(start.elapsed().as_secs_f64());
+        histogram!("nanostore.pager.sync.duration_seconds").record(start.elapsed().as_secs_f64());
         debug!(duration_ms = start.elapsed().as_millis(), "Sync completed");
         Ok(())
     }

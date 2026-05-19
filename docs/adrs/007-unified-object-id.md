@@ -3,7 +3,7 @@
 **Status**: Superseded by [ADR-012](./012-unified-table-architecture.md)
 **Date**: 2026-05-10
 **Deciders**: Hans W. Uhlig, Development Team
-**Technical Story**: Transaction layer improvements (nanokv-i5l, nanokv-6nx)
+**Technical Story**: Transaction layer improvements (Nanostore-i5l, Nanostore-6nx)
 
 > **Note**: This ADR has been superseded by [ADR-012: Unified Table Architecture](./012-unified-table-architecture.md).
 > The core concept of using `ObjectId` for all storage objects remains, but the implementation has evolved
@@ -474,12 +474,12 @@ Unified conflict detection is **simpler and faster**:
 - Update [`TableId`](../../src/table/traits.rs) and [`IndexId`](../../src/index/traits.rs) to wrap `ObjectId`
 - Add conversion methods
 
-**Phase 2**: Update transaction layer (nanokv-6nx)
+**Phase 2**: Update transaction layer (Nanostore-6nx)
 - Change [`TransactionOps`](../../src/txn/transaction.rs:78) to use `ObjectId`
 - Update write_set and read_set to use `ObjectId`
 - Update conflict detection to use `ObjectId`
 
-**Phase 3**: Implement index maintenance (nanokv-j89)
+**Phase 3**: Implement index maintenance (Nanostore-j89)
 - Add index maintenance logic to [`Database`](../../src/kvdb.rs)
 - Implement `insert()`, `update()`, `delete()` with automatic index updates
 - Add index key extraction logic
@@ -522,9 +522,9 @@ Track these metrics:
 
 ## Related Issues
 
-- **nanokv-i5l**: Transaction layer improvements (completed, led to this issue)
-- **nanokv-6nx**: Implement unified ObjectId system (this ADR)
-- **nanokv-j89**: Implement index maintenance logic (depends on this ADR)
+- **Nanostore-i5l**: Transaction layer improvements (completed, led to this issue)
+- **Nanostore-6nx**: Implement unified ObjectId system (this ADR)
+- **Nanostore-j89**: Implement index maintenance logic (depends on this ADR)
 
 ---
 

@@ -16,10 +16,10 @@
 
 //! Comprehensive tests for GraphAdjacency table engine.
 
-use nanokv::table::{GraphAdjacency, GraphConfig, MemoryGraphTable};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::table::{GraphAdjacency, GraphConfig, MemoryGraphTable};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::wal::LogSequenceNumber;
 
 /// Helper to commit graph changes for tests
 fn commit_graph(graph: &MemoryGraphTable) {

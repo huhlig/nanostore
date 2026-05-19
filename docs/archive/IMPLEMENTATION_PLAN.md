@@ -1,4 +1,4 @@
-# NanoKV Implementation Plan
+# Nanostore Implementation Plan
 
 **Version**: 1.0  
 **Date**: 2026-05-07  
@@ -8,18 +8,18 @@
 
 ## Executive Summary
 
-NanoKV is a lightweight embeddable single-file key-value storage engine designed as a **foundation layer for relational and graph databases**. It provides low-level storage primitives that higher-level database systems build upon.
+Nanostore is a lightweight embeddable single-file key-value storage engine designed as a **foundation layer for relational and graph databases**. It provides low-level storage primitives that higher-level database systems build upon.
 
-**Key Design Principle**: NanoKV is NOT an end-user database. It is a storage engine providing:
+**Key Design Principle**: Nanostore is NOT an end-user database. It is a storage engine providing:
 - Efficient key-value storage with multiple table support
 - ACID transactions at the storage layer (1:1 mapping with higher-level transactions)
 - Pluggable storage engines (B-Tree, LSM)
 - Page-level caching and management
 - Write-ahead logging for durability
 
-Higher-level systems (relational query engines, graph databases) use NanoKV's API to implement their own data models, query languages, and optimizations.
+Higher-level systems (relational query engines, graph databases) use Nanostore's API to implement their own data models, query languages, and optimizations.
 
-**Transaction Model**: NanoKV transactions map 1:1 to higher-level database transactions. The higher-level database begins a NanoKV transaction, performs all storage operations within it, then commits or rolls back. This avoids nested transactions and provides clean ACID semantics.
+**Transaction Model**: Nanostore transactions map 1:1 to higher-level database transactions. The higher-level database begins a Nanostore transaction, performs all storage operations within it, then commits or rolls back. This avoids nested transactions and provides clean ACID semantics.
 
 ---
 
@@ -34,9 +34,9 @@ Higher-level systems (relational query engines, graph databases) use NanoKV's AP
 │  - Schema management                            │
 │  - Query language (SQL, Cypher, etc.)           │
 └─────────────────────────────────────────────────┘
-                      ↓ Uses NanoKV API
+                      ↓ Uses Nanostore API
 ┌─────────────────────────────────────────────────┐
-│  NanoKV Storage Engine                          │
+│  Nanostore Storage Engine                          │
 ├─────────────────────────────────────────────────┤
 │  Core API (Transaction Management)              │
 ├─────────────────────────────────────────────────┤
@@ -52,7 +52,7 @@ Higher-level systems (relational query engines, graph databases) use NanoKV's AP
 └─────────────────────────────────────────────────┘
 ```
 
-### What NanoKV Provides
+### What Nanostore Provides
 
 ✅ **Storage Primitives**:
 - Key-value get/put/delete operations
@@ -63,7 +63,7 @@ Higher-level systems (relational query engines, graph databases) use NanoKV's AP
 - Crash recovery
 - Memory tables (for temporary data, joins, intermediate results)
 
-❌ **What NanoKV Does NOT Provide**:
+❌ **What Nanostore Does NOT Provide**:
 - SQL query language
 - Schema definitions (beyond key-value)
 - Query planning/optimization
@@ -277,12 +277,12 @@ pub struct TableConfig {
 
 **Transaction Model**:
 
-NanoKV transactions are designed to be **controlled by the higher-level database**:
+Nanostore transactions are designed to be **controlled by the higher-level database**:
 
-1. **1:1 Mapping**: One higher-level transaction = One NanoKV transaction
-2. **No Nesting**: NanoKV doesn't support nested transactions
+1. **1:1 Mapping**: One higher-level transaction = One Nanostore transaction
+2. **No Nesting**: Nanostore doesn't support nested transactions
 3. **Higher-Level Control**: The database layer manages transaction lifecycle
-4. **ACID Guarantees**: NanoKV ensures atomicity, consistency, isolation, durability
+4. **ACID Guarantees**: Nanostore ensures atomicity, consistency, isolation, durability
 
 **Key Types**:
 
@@ -320,7 +320,7 @@ pub struct TableConfig {
 ```rust
 // Higher-level database controls the transaction
 fn execute_sql_transaction(db: &Database, statements: Vec<SqlStatement>) -> Result<()> {
-    // Begin ONE NanoKV transaction for the entire SQL transaction
+    // Begin ONE Nanostore transaction for the entire SQL transaction
     let txn = db.begin_transaction()?;
     
     // Execute all SQL statements within this single transaction
@@ -360,7 +360,7 @@ fn execute_sql_transaction(db: &Database, statements: Vec<SqlStatement>) -> Resu
 
 **Deliverables**:
 - `src/api/mod.rs`, `src/api/database.rs`, `src/api/table.rs`, `src/api/transaction.rs`
-- `examples/storage_layer_usage.rs`, `examples/relational_on_nanokv.rs`, `examples/graph_on_nanokv.rs`
+- `examples/storage_layer_usage.rs`, `examples/relational_on_Nanostore.rs`, `examples/graph_on_Nanostore.rs`
 - `tests/api_tests.rs`
 
 ---
@@ -412,7 +412,7 @@ fn execute_sql_transaction(db: &Database, statements: Vec<SqlStatement>) -> Resu
 **Purpose**: Command-line interface for database management and debugging.
 
 **Commands**:
-- `nanokv create/open/table/get/put/delete/scan/inspect/check/repair`
+- `Nanostore create/open/table/get/put/delete/scan/inspect/check/repair`
 
 **Tasks**:
 - [ ] Implement CLI commands with Clap
@@ -459,15 +459,15 @@ fn execute_sql_transaction(db: &Database, statements: Vec<SqlStatement>) -> Resu
 
 ## Example Integration Patterns
 
-### Relational Database on NanoKV
+### Relational Database on Nanostore
 
 ```rust
 struct RelationalDatabase {
-    storage: Arc<nanokv::Database>,
+    storage: Arc<Nanostore::Database>,
 }
 
 impl RelationalDatabase {
-    // SQL transaction maps 1:1 to NanoKV transaction
+    // SQL transaction maps 1:1 to Nanostore transaction
     fn execute_transaction(&self, sql_statements: Vec<SqlStatement>) -> Result<()> {
         // Begin ONE storage transaction for entire SQL transaction
         let storage_txn = self.storage.begin_transaction()?;
@@ -551,20 +551,20 @@ impl RelationalDatabase {
 ```
 
 **Key Points**:
-- SQL `BEGIN TRANSACTION` → `nanokv::Database::begin_transaction()`
-- All SQL operations within transaction → All NanoKV operations within same transaction
-- SQL `COMMIT` → `nanokv::Transaction::commit()`
-- SQL `ROLLBACK` → `nanokv::Transaction::rollback()`
+- SQL `BEGIN TRANSACTION` → `Nanostore::Database::begin_transaction()`
+- All SQL operations within transaction → All Nanostore operations within same transaction
+- SQL `COMMIT` → `Nanostore::Transaction::commit()`
+- SQL `ROLLBACK` → `Nanostore::Transaction::rollback()`
 - No nested transactions needed - clean 1:1 mapping
 
-### Graph Database on NanoKV
+### Graph Database on Nanostore
 
 ```rust
 struct Graph {
-    vertices: nanokv::Table,  // vertex_id -> properties
-    edges: nanokv::Table,      // src_id + edge_type + dst_id -> properties
-    outgoing_index: nanokv::Index,  // src_id + edge_type -> [dst_id]
-    incoming_index: nanokv::Index,  // dst_id + edge_type -> [src_id]
+    vertices: Nanostore::Table,  // vertex_id -> properties
+    edges: Nanostore::Table,      // src_id + edge_type + dst_id -> properties
+    outgoing_index: Nanostore::Index,  // src_id + edge_type -> [dst_id]
+    incoming_index: Nanostore::Index,  // dst_id + edge_type -> [src_id]
 }
 
 impl Graph {
@@ -586,7 +586,7 @@ impl Graph {
 2. **Storage Engine: B-Tree First** - Simpler, good for read-heavy workloads
 3. **Concurrency: Readers-Writer Lock** - Simple, correct, can upgrade to MVCC later
 4. **Durability: WAL** - Standard approach, configurable sync
-5. **Transaction Model: 1:1 Mapping** - One higher-level transaction = One NanoKV transaction
+5. **Transaction Model: 1:1 Mapping** - One higher-level transaction = One Nanostore transaction
 6. **Isolation: Read-Committed** - Strong guarantees, can upgrade to serializable later
 7. **Key/Value Types: Byte Slices** - Maximum flexibility
 8. **API Philosophy: Low-Level Primitives** - Storage layer, not end-user database

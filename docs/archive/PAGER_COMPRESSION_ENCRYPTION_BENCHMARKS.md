@@ -134,4 +134,4 @@ This document contains baseline performance results for the Pager's compression 
 
 ## Related Issues
 
-- nanokv-o8f: Missing compression and encryption benchmarks (RESOLVED)
+- Nanostore-o8f: Missing compression and encryption benchmarks (RESOLVED)

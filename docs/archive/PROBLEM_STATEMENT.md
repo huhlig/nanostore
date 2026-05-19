@@ -1,11 +1,11 @@
 # Problem Statement: Table and Index Implementation
 
 **Date**: 2026-05-08  
-**Context**: NanoKV Database Development
+**Context**: Nanostore Database Development
 
 ## Original Task
 
-Review [`embedded_kv_traits.rs`](../src/embedded_kv_traits.rs) and design comprehensive table and index interfaces for the NanoKV embedded database system.
+Review [`embedded_kv_traits.rs`](../src/embedded_kv_traits.rs) and design comprehensive table and index interfaces for the Nanostore embedded database system.
 
 ### Specific Requirements
 
@@ -20,7 +20,7 @@ Review [`embedded_kv_traits.rs`](../src/embedded_kv_traits.rs) and design compre
 
 ### 1. Foundation for Higher-Level Abstractions
 
-NanoKV aims to support multiple database paradigms on a single storage kernel:
+Nanostore aims to support multiple database paradigms on a single storage kernel:
 
 - **Relational databases** - SQL tables with ACID transactions
 - **Document stores** - JSON/BSON collections with flexible schemas

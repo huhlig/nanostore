@@ -2,13 +2,13 @@
 
 **Date**: 2026-05-11  
 **Status**: Completed  
-**Issue**: nanokv-g3n
+**Issue**: Nanostore-g3n
 
 ---
 
 ## Overview
 
-This document describes the implementation of ACID transaction support in NanoKV with full WAL (Write-Ahead Log) integration for durability and crash recovery.
+This document describes the implementation of ACID transaction support in Nanostore with full WAL (Write-Ahead Log) integration for durability and crash recovery.
 
 ## Architecture
 
@@ -44,7 +44,7 @@ Following ADR-011, both tables and indexes are treated uniformly at the transact
 
 #### 2. 1:1 Transaction Mapping
 
-Each NanoKV transaction maps 1:1 to a higher-level transaction. This provides:
+Each Nanostore transaction maps 1:1 to a higher-level transaction. This provides:
 - Predictable transaction boundaries
 - Clear durability guarantees
 - Simplified recovery logic
@@ -309,7 +309,7 @@ All 13 tests passing.
 
 ## Future Enhancements
 
-1. **MVCC Support** (nanokv-3ya)
+1. **MVCC Support** (Nanostore-3ya)
    - Multi-version concurrency control
    - Non-blocking reads
    - Snapshot isolation
@@ -337,6 +337,6 @@ All 13 tests passing.
 
 ## References
 
-- Issue: nanokv-g3n "Phase 4: Transaction Support"
+- Issue: Nanostore-g3n "Phase 4: Transaction Support"
 - Implementation: `src/kvdb.rs`, `src/txn/transaction.rs`
 - Tests: `tests/transaction_wal_integration_tests.rs`

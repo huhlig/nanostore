@@ -1,6 +1,6 @@
 # Table Engine Metrics and Tracing
 
-This document describes the comprehensive metrics and tracing instrumentation added to NanoKV's table engines.
+This document describes the comprehensive metrics and tracing instrumentation added to Nanostore's table engines.
 
 ## Overview
 
@@ -18,46 +18,46 @@ This module provides:
 
 ### Naming Convention
 
-All metrics follow the pattern: `nanokv.table.<engine>.<metric_name>`
+All metrics follow the pattern: `Nanostore.table.<engine>.<metric_name>`
 
 Examples:
-- `nanokv.table.btree.split` - BTree node split counter
-- `nanokv.table.lsm.flush_duration` - LSM memtable flush latency
-- `nanokv.table.bloom.false_positive_rate` - Bloom filter false positive rate
+- `Nanostore.table.btree.split` - BTree node split counter
+- `Nanostore.table.lsm.flush_duration` - LSM memtable flush latency
+- `Nanostore.table.bloom.false_positive_rate` - Bloom filter false positive rate
 
 ## Common Table Metrics
 
 These metrics are available for all table engines:
 
 ### Counters
-- `nanokv.table.<engine>.get` - Point lookup operations
-- `nanokv.table.<engine>.put` - Write operations
-- `nanokv.table.<engine>.delete` - Delete operations
-- `nanokv.table.<engine>.scan` - Scan operations
+- `Nanostore.table.<engine>.get` - Point lookup operations
+- `Nanostore.table.<engine>.put` - Write operations
+- `Nanostore.table.<engine>.delete` - Delete operations
+- `Nanostore.table.<engine>.scan` - Scan operations
 
 ### Histograms (Latency)
-- `nanokv.table.<engine>.get_duration` - Get operation latency (seconds)
-- `nanokv.table.<engine>.put_duration` - Put operation latency (seconds)
-- `nanokv.table.<engine>.delete_duration` - Delete operation latency (seconds)
-- `nanokv.table.<engine>.scan_duration` - Scan operation latency (seconds)
+- `Nanostore.table.<engine>.get_duration` - Get operation latency (seconds)
+- `Nanostore.table.<engine>.put_duration` - Put operation latency (seconds)
+- `Nanostore.table.<engine>.delete_duration` - Delete operation latency (seconds)
+- `Nanostore.table.<engine>.scan_duration` - Scan operation latency (seconds)
 
 ## BTree Metrics
 
 ### Counters
-- `nanokv.table.btree.split` - Node split operations
-- `nanokv.table.btree.merge` - Node merge operations
-- `nanokv.table.btree.node_read` - Node read operations
-- `nanokv.table.btree.node_write` - Node write operations
+- `Nanostore.table.btree.split` - Node split operations
+- `Nanostore.table.btree.merge` - Node merge operations
+- `Nanostore.table.btree.node_read` - Node read operations
+- `Nanostore.table.btree.node_write` - Node write operations
 
 ### Histograms
-- `nanokv.table.btree.node_read_duration` - Node read latency
-- `nanokv.table.btree.node_write_duration` - Node write latency
-- `nanokv.table.btree.search_duration` - Search operation latency
+- `Nanostore.table.btree.node_read_duration` - Node read latency
+- `Nanostore.table.btree.node_write_duration` - Node write latency
+- `Nanostore.table.btree.search_duration` - Search operation latency
 
 ### Gauges
-- `nanokv.table.btree.tree_height` - Current tree height
-- `nanokv.table.btree.internal_nodes` - Number of internal nodes
-- `nanokv.table.btree.leaf_nodes` - Number of leaf nodes
+- `Nanostore.table.btree.tree_height` - Current tree height
+- `Nanostore.table.btree.internal_nodes` - Number of internal nodes
+- `Nanostore.table.btree.leaf_nodes` - Number of leaf nodes
 
 ### Implementation
 
@@ -72,22 +72,22 @@ BTree metrics are instrumented in:
 ## LSM Tree Metrics
 
 ### Counters
-- `nanokv.table.lsm.memtable_write` - Memtable write operations
-- `nanokv.table.lsm.memtable_flush` - Memtable flush operations
-- `nanokv.table.lsm.sstable_read` - SSTable read operations
-- `nanokv.table.lsm.compaction` - Compaction operations
-- `nanokv.table.lsm.compaction_bytes_written` - Bytes written during compaction
-- `nanokv.table.lsm.compaction_bytes_read` - Bytes read during compaction
+- `Nanostore.table.lsm.memtable_write` - Memtable write operations
+- `Nanostore.table.lsm.memtable_flush` - Memtable flush operations
+- `Nanostore.table.lsm.sstable_read` - SSTable read operations
+- `Nanostore.table.lsm.compaction` - Compaction operations
+- `Nanostore.table.lsm.compaction_bytes_written` - Bytes written during compaction
+- `Nanostore.table.lsm.compaction_bytes_read` - Bytes read during compaction
 
 ### Histograms
-- `nanokv.table.lsm.flush_duration` - Memtable flush latency
-- `nanokv.table.lsm.compaction_duration` - Compaction latency
+- `Nanostore.table.lsm.flush_duration` - Memtable flush latency
+- `Nanostore.table.lsm.compaction_duration` - Compaction latency
 
 ### Gauges
-- `nanokv.table.lsm.sstable_count` - Number of SSTables
-- `nanokv.table.lsm.memtable_size_bytes` - Current memtable size
-- `nanokv.table.lsm.read_amplification` - Read amplification factor
-- `nanokv.table.lsm.write_amplification` - Write amplification factor
+- `Nanostore.table.lsm.sstable_count` - Number of SSTables
+- `Nanostore.table.lsm.memtable_size_bytes` - Current memtable size
+- `Nanostore.table.lsm.read_amplification` - Read amplification factor
+- `Nanostore.table.lsm.write_amplification` - Write amplification factor
 
 ### Implementation
 
@@ -101,17 +101,17 @@ LSM metrics are instrumented in:
 ## Bloom Filter Metrics
 
 ### Counters
-- `nanokv.table.bloom.insert` - Insert operations
-- `nanokv.table.bloom.query` - Query operations
-- `nanokv.table.bloom.positive` - Positive query results (may contain)
-- `nanokv.table.bloom.negative` - Negative query results (definitely not present)
-- `nanokv.table.bloom.false_positive` - False positive detections
+- `Nanostore.table.bloom.insert` - Insert operations
+- `Nanostore.table.bloom.query` - Query operations
+- `Nanostore.table.bloom.positive` - Positive query results (may contain)
+- `Nanostore.table.bloom.negative` - Negative query results (definitely not present)
+- `Nanostore.table.bloom.false_positive` - False positive detections
 
 ### Gauges
-- `nanokv.table.bloom.saturation` - Filter saturation level (0.0 to 1.0)
-- `nanokv.table.bloom.false_positive_rate` - Estimated false positive rate
-- `nanokv.table.bloom.bits_set` - Number of bits set in the filter
-- `nanokv.table.bloom.total_bits` - Total number of bits in the filter
+- `Nanostore.table.bloom.saturation` - Filter saturation level (0.0 to 1.0)
+- `Nanostore.table.bloom.false_positive_rate` - Estimated false positive rate
+- `Nanostore.table.bloom.bits_set` - Number of bits set in the filter
+- `Nanostore.table.bloom.total_bits` - Total number of bits in the filter
 
 ### Implementation Status
 
@@ -123,17 +123,17 @@ Bloom filter metrics are defined but not yet instrumented. Future work includes:
 ## RTree Metrics
 
 ### Counters
-- `nanokv.table.rtree.split` - Node split operations
-- `nanokv.table.rtree.query` - Spatial query operations
+- `Nanostore.table.rtree.split` - Node split operations
+- `Nanostore.table.rtree.query` - Spatial query operations
 
 ### Histograms
-- `nanokv.table.rtree.query_candidates` - Number of candidate nodes examined
-- `nanokv.table.rtree.query_results` - Number of results returned
-- `nanokv.table.rtree.query_duration` - Query latency
+- `Nanostore.table.rtree.query_candidates` - Number of candidate nodes examined
+- `Nanostore.table.rtree.query_results` - Number of results returned
+- `Nanostore.table.rtree.query_duration` - Query latency
 
 ### Gauges
-- `nanokv.table.rtree.tree_height` - Current tree height
-- `nanokv.table.rtree.object_count` - Number of objects indexed
+- `Nanostore.table.rtree.tree_height` - Current tree height
+- `Nanostore.table.rtree.object_count` - Number of objects indexed
 
 ### Implementation Status
 
@@ -142,20 +142,20 @@ RTree metrics are defined but not yet instrumented. The RTree already has tracin
 ## TimeSeries Metrics
 
 ### Counters
-- `nanokv.table.timeseries.append` - Data point append operations
-- `nanokv.table.timeseries.bucket_created` - Bucket creation operations
-- `nanokv.table.timeseries.bucket_flushed` - Bucket flush operations
-- `nanokv.table.timeseries.aggregation` - Aggregation query operations
+- `Nanostore.table.timeseries.append` - Data point append operations
+- `Nanostore.table.timeseries.bucket_created` - Bucket creation operations
+- `Nanostore.table.timeseries.bucket_flushed` - Bucket flush operations
+- `Nanostore.table.timeseries.aggregation` - Aggregation query operations
 
 ### Histograms
-- `nanokv.table.timeseries.aggregation_points` - Number of points in aggregation
-- `nanokv.table.timeseries.append_duration` - Append operation latency
-- `nanokv.table.timeseries.aggregation_duration` - Aggregation query latency
+- `Nanostore.table.timeseries.aggregation_points` - Number of points in aggregation
+- `Nanostore.table.timeseries.append_duration` - Append operation latency
+- `Nanostore.table.timeseries.aggregation_duration` - Aggregation query latency
 
 ### Gauges
-- `nanokv.table.timeseries.active_buckets` - Number of active buckets
-- `nanokv.table.timeseries.total_points` - Total data points stored
-- `nanokv.table.timeseries.compression_ratio` - Compression ratio achieved
+- `Nanostore.table.timeseries.active_buckets` - Number of active buckets
+- `Nanostore.table.timeseries.total_points` - Total data points stored
+- `Nanostore.table.timeseries.compression_ratio` - Compression ratio achieved
 
 ### Implementation Status
 
@@ -164,17 +164,17 @@ TimeSeries metrics are defined but not yet instrumented.
 ## HNSW Vector Index Metrics
 
 ### Counters
-- `nanokv.table.hnsw.insert` - Vector insert operations
-- `nanokv.table.hnsw.search` - Vector search operations
+- `Nanostore.table.hnsw.insert` - Vector insert operations
+- `Nanostore.table.hnsw.search` - Vector search operations
 
 ### Histograms
-- `nanokv.table.hnsw.distance_calculations` - Distance calculations during search
-- `nanokv.table.hnsw.search_hops` - Number of hops during search
-- `nanokv.table.hnsw.search_duration` - Search latency
+- `Nanostore.table.hnsw.distance_calculations` - Distance calculations during search
+- `Nanostore.table.hnsw.search_hops` - Number of hops during search
+- `Nanostore.table.hnsw.search_duration` - Search latency
 
 ### Gauges
-- `nanokv.table.hnsw.vector_count` - Number of vectors indexed
-- `nanokv.table.hnsw.max_layer` - Maximum layer in the graph
+- `Nanostore.table.hnsw.vector_count` - Number of vectors indexed
+- `Nanostore.table.hnsw.max_layer` - Maximum layer in the graph
 
 ### Implementation Status
 
@@ -282,16 +282,16 @@ fn search(&self, key: &[u8]) -> Result<Value> {
 
 ```promql
 # BTree p99 search latency
-histogram_quantile(0.99, rate(nanokv_table_btree_search_duration_bucket[5m]))
+histogram_quantile(0.99, rate(Nanostore_table_btree_search_duration_bucket[5m]))
 
 # LSM read amplification
-nanokv_table_lsm_read_amplification
+Nanostore_table_lsm_read_amplification
 
 # Bloom filter false positive rate
-rate(nanokv_table_bloom_false_positive[5m]) / rate(nanokv_table_bloom_positive[5m])
+rate(Nanostore_table_bloom_false_positive[5m]) / rate(Nanostore_table_bloom_positive[5m])
 
 # RTree query efficiency (results per candidate examined)
-rate(nanokv_table_rtree_query_results[5m]) / rate(nanokv_table_rtree_query_candidates[5m])
+rate(Nanostore_table_rtree_query_results[5m]) / rate(Nanostore_table_rtree_query_candidates[5m])
 ```
 
 ## Performance Impact

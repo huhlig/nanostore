@@ -26,14 +26,14 @@
 //!
 //! Note: TimeSeries tables use scan_series() for data access, not get() operations.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::snap::Snapshot;
-use nanokv::table::timeseries::{TimeSeriesConfig, TimeSeriesRetentionPolicy, TimeSeriesTable};
-use nanokv::table::{TimeSeries, TimeSeriesCursor};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::snap::Snapshot;
+use nanostore::table::timeseries::{TimeSeriesConfig, TimeSeriesRetentionPolicy, TimeSeriesTable};
+use nanostore::table::{TimeSeries, TimeSeriesCursor};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -432,7 +432,7 @@ fn test_vacuum_expired_data_with_snapshots() {
 
     // Create snapshot to pin this version
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(1),
         0,
@@ -671,7 +671,7 @@ fn test_vacuum_with_snapshot_visibility() {
 
     // Create snapshot at LSN 1
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(1),
         0,

@@ -17,12 +17,12 @@
 //! Benchmarks for PagedBloomFilter operations
 
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use nanokv::pager::{PageSize, Pager, PagerConfig};
-use nanokv::table::bloom::PagedBloomFilter;
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{PageSize, Pager, PagerConfig};
+use nanostore::table::bloom::PagedBloomFilter;
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 fn create_test_pager() -> Arc<Pager<MemoryFileSystem>> {

@@ -1,10 +1,10 @@
 # Transaction Isolation Levels
 
-This document describes the implementation and semantics of the five transaction isolation levels supported by NanoKV.
+This document describes the implementation and semantics of the five transaction isolation levels supported by Nanostore.
 
 ## Overview
 
-NanoKV implements five standard SQL isolation levels, each providing different guarantees about transaction visibility and conflict detection:
+Nanostore implements five standard SQL isolation levels, each providing different guarantees about transaction visibility and conflict detection:
 
 1. **ReadUncommitted** - Lowest isolation, highest concurrency
 2. **ReadCommitted** - Default level, prevents dirty reads

@@ -19,12 +19,12 @@
 //! These tests verify that transactions correctly integrate with the WAL
 //! for durability and crash recovery.
 
-use nanokv::kvdb::{Database, DatabaseErrorKind};
-use nanokv::table::{ApproximateMembership, TableEngineKind, TableOptions};
-use nanokv::txn::TransactionId;
-use nanokv::types::{Bound, Durability, KeyBuf, KeyEncoding, ScanBounds};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::kvdb::{Database, DatabaseErrorKind};
+use nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
+use nanostore::txn::TransactionId;
+use nanostore::types::{Bound, Durability, KeyBuf, KeyEncoding, ScanBounds};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 
 /// Helper to create default table options for tests
 fn default_table_options() -> TableOptions {

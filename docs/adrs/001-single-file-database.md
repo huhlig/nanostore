@@ -7,7 +7,7 @@
 
 ## Context
 
-NanoKV needs a storage architecture that balances simplicity, portability, and performance. Traditional databases often use multiple files (data files, index files, log files, etc.), which can complicate deployment, backup, and management.
+Nanostore needs a storage architecture that balances simplicity, portability, and performance. Traditional databases often use multiple files (data files, index files, log files, etc.), which can complicate deployment, backup, and management.
 
 Key requirements:
 - Easy deployment and distribution

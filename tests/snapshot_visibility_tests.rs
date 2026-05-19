@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 
-use nanokv::snap::{Snapshot, SnapshotId};
-use nanokv::txn::TransactionId;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::snap::{Snapshot, SnapshotId};
+use nanostore::txn::TransactionId;
+use nanostore::wal::LogSequenceNumber;
 use std::time::Instant;
 
 /// Test basic visibility with watermark optimization

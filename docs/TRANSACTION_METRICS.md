@@ -1,6 +1,6 @@
 # Transaction Layer Metrics and Tracing
 
-This document describes the observability instrumentation added to the transaction layer in NanoKV.
+This document describes the observability instrumentation added to the transaction layer in Nanostore.
 
 ## Overview
 
@@ -8,29 +8,29 @@ The transaction layer now includes comprehensive metrics and tracing to monitor 
 
 ## Metrics
 
-All metrics use the `nanokv.transaction.*` namespace.
+All metrics use the `Nanostore.transaction.*` namespace.
 
 ### Transaction Lifecycle Metrics
 
-#### `nanokv.transaction.begin.total` (Counter)
+#### `Nanostore.transaction.begin.total` (Counter)
 - **Description**: Total number of transactions started
 - **Type**: Counter
 - **When recorded**: When `Transaction::new()` is called
 - **Use case**: Track transaction creation rate
 
-#### `nanokv.transaction.commit.total` (Counter)
+#### `Nanostore.transaction.commit.total` (Counter)
 - **Description**: Total number of successful transaction commits
 - **Type**: Counter
 - **When recorded**: When `Transaction::commit()` completes successfully
 - **Use case**: Track successful transaction completion rate
 
-#### `nanokv.transaction.rollback.total` (Counter)
+#### `Nanostore.transaction.rollback.total` (Counter)
 - **Description**: Total number of transaction rollbacks
 - **Type**: Counter
 - **When recorded**: When `Transaction::rollback()` is called
 - **Use case**: Track rollback rate
 
-#### `nanokv.transaction.abort.total` (Counter)
+#### `Nanostore.transaction.abort.total` (Counter)
 - **Description**: Total number of transaction aborts by reason
 - **Type**: Counter
 - **Labels**: 
@@ -40,7 +40,7 @@ All metrics use the `nanokv.transaction.*` namespace.
 
 ### Active Transaction Metrics
 
-#### `nanokv.transaction.active` (Gauge)
+#### `Nanostore.transaction.active` (Gauge)
 - **Description**: Number of currently active transactions
 - **Type**: Gauge
 - **When recorded**: Incremented on transaction begin, decremented on commit/rollback
@@ -48,21 +48,21 @@ All metrics use the `nanokv.transaction.*` namespace.
 
 ### Latency Metrics
 
-#### `nanokv.transaction.duration_seconds` (Histogram)
+#### `Nanostore.transaction.duration_seconds` (Histogram)
 - **Description**: Total transaction duration from begin to commit/rollback
 - **Type**: Histogram
 - **Unit**: Seconds (as f64)
 - **When recorded**: On transaction commit or rollback
 - **Use case**: Analyze transaction execution time, identify slow transactions
 
-#### `nanokv.transaction.commit.duration_seconds` (Histogram)
+#### `Nanostore.transaction.commit.duration_seconds` (Histogram)
 - **Description**: Time spent in the commit phase (two-phase commit execution)
 - **Type**: Histogram
 - **Unit**: Seconds (as f64)
 - **When recorded**: On successful commit
 - **Use case**: Analyze commit overhead, identify commit bottlenecks
 
-#### `nanokv.transaction.rollback.duration_seconds` (Histogram)
+#### `Nanostore.transaction.rollback.duration_seconds` (Histogram)
 - **Description**: Time spent in the rollback phase
 - **Type**: Histogram
 - **Unit**: Seconds (as f64)
@@ -71,13 +71,13 @@ All metrics use the `nanokv.transaction.*` namespace.
 
 ### Conflict Metrics
 
-#### `nanokv.transaction.conflict.write_write` (Counter)
+#### `Nanostore.transaction.conflict.write_write` (Counter)
 - **Description**: Number of write-write conflicts detected
 - **Type**: Counter
 - **When recorded**: When `ConflictDetector::check_write_conflict()` detects a conflict
 - **Use case**: Monitor contention on specific keys
 
-#### `nanokv.transaction.conflict.read_write` (Counter)
+#### `Nanostore.transaction.conflict.read_write` (Counter)
 - **Description**: Number of read-write conflicts detected (serializable isolation)
 - **Type**: Counter
 - **When recorded**: When `ConflictDetector::check_read_write_conflicts()` detects a conflict
@@ -85,7 +85,7 @@ All metrics use the `nanokv.transaction.*` namespace.
 
 ### Deadlock Metrics
 
-#### `nanokv.transaction.deadlock.detected` (Counter)
+#### `Nanostore.transaction.deadlock.detected` (Counter)
 - **Description**: Number of deadlocks detected
 - **Type**: Counter
 - **When recorded**: When `DeadlockDetector::detect_cycle()` finds a cycle
@@ -135,23 +135,23 @@ The transaction layer uses structured tracing for detailed execution visibility.
 
 ```promql
 # Transaction throughput (commits per second)
-rate(nanokv_transaction_commit_total[5m])
+rate(Nanostore_transaction_commit_total[5m])
 
 # Transaction failure rate
-rate(nanokv_transaction_abort_total[5m])
+rate(Nanostore_transaction_abort_total[5m])
 
 # Average transaction duration
-histogram_quantile(0.95, rate(nanokv_transaction_duration_seconds_bucket[5m]))
+histogram_quantile(0.95, rate(Nanostore_transaction_duration_seconds_bucket[5m]))
 
 # Conflict rate
-rate(nanokv_transaction_conflict_write_write[5m]) + 
-rate(nanokv_transaction_conflict_read_write[5m])
+rate(Nanostore_transaction_conflict_write_write[5m]) + 
+rate(Nanostore_transaction_conflict_read_write[5m])
 
 # Active transaction count
-nanokv_transaction_active
+Nanostore_transaction_active
 
 # Deadlock rate
-rate(nanokv_transaction_deadlock_detected[5m])
+rate(Nanostore_transaction_deadlock_detected[5m])
 ```
 
 ### Tracing Query Examples

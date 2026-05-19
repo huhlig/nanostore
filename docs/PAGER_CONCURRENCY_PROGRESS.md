@@ -1,6 +1,6 @@
 # Pager Concurrency Improvement - Progress Report
 
-## Issue: nanokv-z34
+## Issue: Nanostore-z34
 **Title:** Pager: Coarse-grained locking limits concurrency  
 **Status:** In Progress  
 **Priority:** 3 (Low)  
@@ -274,14 +274,14 @@ The VFS File trait requires `&mut self` for `read_at_offset()`, so we must keep 
    - ⏳ Commit and push changes
 
 2. **Short Term (Next Session):**
-   - Benchmark Phase 1 improvements (see issue nanokv-5p9)
+   - Benchmark Phase 1 improvements (see issue Nanostore-5p9)
    - Measure throughput with 1, 2, 4, 8 threads
    - Compare against baseline performance
    - Validate 3-5x improvement target
 
 3. **Medium Term (Following Sessions):**
-   - Implement Phase 2: Lock-free free list (issue nanokv-89z)
-   - Implement Phase 2: Sharded cache (issue nanokv-rte)
+   - Implement Phase 2: Lock-free free list (issue Nanostore-89z)
+   - Implement Phase 2: Sharded cache (issue Nanostore-rte)
    - Benchmark Phase 2 improvements
    - Consider Phase 3 if needed
 
@@ -295,7 +295,7 @@ The VFS File trait requires `&mut self` for `read_at_offset()`, so we must keep 
 
 - **Design Document:** `docs/PAGER_CONCURRENCY_IMPROVEMENT.md`
 - **Implementation:** `src/pager/page_table.rs`
-- **Issue Tracker:** `bd show nanokv-z34`
+- **Issue Tracker:** `bd show Nanostore-z34`
 - **Related Issues:** None yet (may create for discovered work)
 
 ## Notes

@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-//! End-to-end integration tests for NanoKV database.
+//! End-to-end integration tests for nanostore database.
 //!
 //! These tests validate the complete database lifecycle including:
 //! - Creating database files
@@ -39,10 +39,10 @@
 //! - Explicit Database::close() method for controlled shutdown with error handling
 //! - Data in memtables is persisted to SSTables before the database is destroyed
 
-use nanokv::kvdb::Database;
-use nanokv::table::{TableEngineKind, TableOptions};
-use nanokv::types::KeyEncoding;
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::kvdb::Database;
+use nanostore::table::{TableEngineKind, TableOptions};
+use nanostore::types::KeyEncoding;
+use nanostore::vfs::MemoryFileSystem;
 
 // =============================================================================
 // Test Helpers
@@ -201,7 +201,7 @@ fn test_drop_table_persistence() {
 }
 
 // =============================================================================
-// Data Persistence Tests (Currently Failing - Blocked by nanokv-ni6)
+// Data Persistence Tests (Currently Failing - Blocked by nanostore-ni6)
 // =============================================================================
 
 /// Test BTree data persistence across database close/reopen.

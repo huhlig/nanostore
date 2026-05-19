@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the implementation of the R-Tree geospatial indexing engine for NanoKV, completed as part of issue `nanokv-dat`.
+This document describes the implementation of the R-Tree geospatial indexing engine for Nanostore, completed as part of issue `Nanostore-dat`.
 
 ## Implementation Summary
 
@@ -149,10 +149,10 @@ Comprehensive test suite in `tests/rtree_geospatial_tests.rs`:
 ## Usage Example
 
 ```rust
-use nanokv::pager::Pager;
-use nanokv::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig};
-use nanokv::types::TableId;
-use nanokv::vfs::LocalFileSystem;
+use Nanostore::pager::Pager;
+use Nanostore::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig};
+use Nanostore::types::TableId;
+use Nanostore::vfs::LocalFileSystem;
 use std::sync::Arc;
 
 // Create R-Tree
@@ -225,7 +225,7 @@ let nearest = rtree.nearest(point, 5)?;
 
 ## Conclusion
 
-The R-Tree implementation provides a solid foundation for geospatial indexing in NanoKV. The modular design allows for future enhancements while maintaining compatibility with the existing table engine architecture. The comprehensive test suite ensures correctness across various use cases and configurations.
+The R-Tree implementation provides a solid foundation for geospatial indexing in Nanostore. The modular design allows for future enhancements while maintaining compatibility with the existing table engine architecture. The comprehensive test suite ensures correctness across various use cases and configurations.
 
 ### Next Steps
 
@@ -239,5 +239,5 @@ The R-Tree implementation provides a solid foundation for geospatial indexing in
 ---
 
 **Status**: Core implementation complete, pending type fixes and optimization
-**Issue**: nanokv-dat
+**Issue**: Nanostore-dat
 **Date**: 2026-05-13

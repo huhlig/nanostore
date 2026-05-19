@@ -3,7 +3,7 @@
 **Status**: Accepted  
 **Date**: 2026-05-10  
 **Deciders**: Hans W. Uhlig, Development Team  
-**Technical Story**: Pager concurrency improvements (nanokv-z34, nanokv-5p9)
+**Technical Story**: Pager concurrency improvements (Nanostore-z34, Nanostore-5p9)
 
 ## Context
 

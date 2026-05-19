@@ -273,10 +273,10 @@ Based on the analysis, success depends on:
 - Single-file database
 
 **Differences**:
-- NanoKV: Trait-based, modular design
-- NanoKV: Multiple table engines (BTree + LSM)
-- NanoKV: Specialized indexes (vector, graph, etc.)
-- NanoKV: Rust safety guarantees
+- Nanostore: Trait-based, modular design
+- Nanostore: Multiple table engines (BTree + LSM)
+- Nanostore: Specialized indexes (vector, graph, etc.)
+- Nanostore: Rust safety guarantees
 
 ### RocksDB Comparison
 
@@ -287,10 +287,10 @@ Based on the analysis, success depends on:
 - Write-ahead log
 
 **Differences**:
-- NanoKV: Single-file (vs multiple files)
-- NanoKV: Multiple table engines (not just LSM)
-- NanoKV: Embedded (not client-server)
-- NanoKV: Rust (vs C++)
+- Nanostore: Single-file (vs multiple files)
+- Nanostore: Multiple table engines (not just LSM)
+- Nanostore: Embedded (not client-server)
+- Nanostore: Rust (vs C++)
 
 ## 10. Recommendations
 

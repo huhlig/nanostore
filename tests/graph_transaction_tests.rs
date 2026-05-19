@@ -16,24 +16,24 @@
 
 //! Tests for GraphAdjacency trait implementation on Transaction
 
-use nanokv::table::TableEngineRegistry;
-use nanokv::table::{GraphAdjacency, SpecialtyTableCapabilities};
-use nanokv::txn::{ConflictDetector, Transaction, TransactionId};
-use nanokv::types::{Durability, IsolationLevel, TableId};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::table::TableEngineRegistry;
+use nanostore::table::{GraphAdjacency, SpecialtyTableCapabilities};
+use nanostore::txn::{ConflictDetector, Transaction, TransactionId};
+use nanostore::types::{Durability, IsolationLevel, TableId};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::{Arc, Mutex, RwLock};
 
 /// Helper to create a test transaction
 fn create_test_transaction() -> Transaction<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
-    let wal_config = nanokv::wal::WalWriterConfig::default();
-    let wal = Arc::new(nanokv::wal::WalWriter::create(&fs, "test.wal", wal_config).unwrap());
+    let wal_config = nanostore::wal::WalWriterConfig::default();
+    let wal = Arc::new(nanostore::wal::WalWriter::create(&fs, "test.wal", wal_config).unwrap());
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
 
     // Create a minimal pager for the engine registry
-    let pager_config = nanokv::pager::PagerConfig::default();
-    let pager = Arc::new(nanokv::pager::Pager::create(&fs, "test.db", pager_config).unwrap());
+    let pager_config = nanostore::pager::PagerConfig::default();
+    let pager = Arc::new(nanostore::pager::Pager::create(&fs, "test.db", pager_config).unwrap());
     let engine_registry = Arc::new(TableEngineRegistry::new(pager));
     let current_lsn = Arc::new(RwLock::new(LogSequenceNumber::from(1)));
 

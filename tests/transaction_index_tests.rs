@@ -19,12 +19,12 @@
 //! These tests verify that the transaction layer correctly handles both tables
 //! and indexes uniformly using ObjectId, without automatic index maintenance.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::TableEngineRegistry;
-use nanokv::txn::{ConflictDetector, Transaction, TransactionId};
-use nanokv::types::{Durability, IsolationLevel, TableId};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::{LogSequenceNumber, WalWriter, WalWriterConfig};
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::TableEngineRegistry;
+use nanostore::txn::{ConflictDetector, Transaction, TransactionId};
+use nanostore::types::{Durability, IsolationLevel, TableId};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::{LogSequenceNumber, WalWriter, WalWriterConfig};
 use std::sync::{Arc, Mutex, RwLock};
 
 /// Test context that holds shared resources

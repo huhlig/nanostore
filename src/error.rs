@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-//! Unified error type for NanoKV
+//! Unified error type for nanostore
 //!
 //! This module provides a unified error type that wraps all subsystem-specific
 //! error types, enabling seamless error propagation across layer boundaries
@@ -30,10 +30,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tracing::{Level, error, warn};
 
-/// Result type for NanoKV operations
-pub type NanoKvResult<T> = Result<T, NanoKvError>;
+/// Result type for Nanostore operations
+pub type NanostoreResult<T> = Result<T, NanostoreError>;
 
-/// Unified error type for all NanoKV operations
+/// Unified error type for all Nanostore operations
 ///
 /// This enum wraps all subsystem-specific error types, providing automatic
 /// conversion via `From` implementations. This eliminates the need for manual
@@ -42,18 +42,18 @@ pub type NanoKvResult<T> = Result<T, NanoKvError>;
 /// # Example
 ///
 /// ```rust,ignore
-/// fn operation() -> NanoKvResult<()> {
-///     // Pager errors automatically convert to NanoKvError
+/// fn operation() -> NanostoreResult<()> {
+///     // Pager errors automatically convert to NanostoreError
 ///     let page = pager.read_page(page_id)?;
-///     
+///
 ///     // WAL errors also automatically convert
 ///     wal.write_record(record)?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```
 #[derive(Debug, Error)]
-pub enum NanoKvError {
+pub enum NanostoreError {
     /// Pager subsystem error
     #[error("Pager error: {0}")]
     Pager(#[from] PagerError),
@@ -87,51 +87,51 @@ pub enum NanoKvError {
     Other(String),
 }
 
-impl NanoKvError {
+impl NanostoreError {
     /// Create a generic error from a string
     pub fn other(msg: impl Into<String>) -> Self {
-        NanoKvError::Other(msg.into())
+        NanostoreError::Other(msg.into())
     }
 
     /// Check if this error is a pager error
     pub fn is_pager(&self) -> bool {
-        matches!(self, NanoKvError::Pager(_))
+        matches!(self, NanostoreError::Pager(_))
     }
 
     /// Check if this error is a WAL error
     pub fn is_wal(&self) -> bool {
-        matches!(self, NanoKvError::Wal(_))
+        matches!(self, NanostoreError::Wal(_))
     }
 
     /// Check if this error is a table error
     pub fn is_table(&self) -> bool {
-        matches!(self, NanoKvError::Table(_))
+        matches!(self, NanostoreError::Table(_))
     }
 
     /// Check if this error is a transaction error
     pub fn is_transaction(&self) -> bool {
-        matches!(self, NanoKvError::Transaction(_))
+        matches!(self, NanostoreError::Transaction(_))
     }
 
     /// Check if this error is a cursor error
     pub fn is_cursor(&self) -> bool {
-        matches!(self, NanoKvError::Cursor(_))
+        matches!(self, NanostoreError::Cursor(_))
     }
 
     /// Check if this error is a VFS error
     pub fn is_vfs(&self) -> bool {
-        matches!(self, NanoKvError::Vfs(_))
+        matches!(self, NanostoreError::Vfs(_))
     }
 
     /// Check if this error is an I/O error
     pub fn is_io(&self) -> bool {
-        matches!(self, NanoKvError::Io(_))
+        matches!(self, NanostoreError::Io(_))
     }
 
     /// Get the underlying pager error, if any
     pub fn as_pager(&self) -> Option<&PagerError> {
         match self {
-            NanoKvError::Pager(e) => Some(e),
+            NanostoreError::Pager(e) => Some(e),
             _ => None,
         }
     }
@@ -139,7 +139,7 @@ impl NanoKvError {
     /// Get the underlying WAL error, if any
     pub fn as_wal(&self) -> Option<&WalError> {
         match self {
-            NanoKvError::Wal(e) => Some(e),
+            NanostoreError::Wal(e) => Some(e),
             _ => None,
         }
     }
@@ -147,7 +147,7 @@ impl NanoKvError {
     /// Get the underlying table error, if any
     pub fn as_table(&self) -> Option<&TableError> {
         match self {
-            NanoKvError::Table(e) => Some(e),
+            NanostoreError::Table(e) => Some(e),
             _ => None,
         }
     }
@@ -155,7 +155,7 @@ impl NanoKvError {
     /// Get the underlying transaction error, if any
     pub fn as_transaction(&self) -> Option<&TransactionError> {
         match self {
-            NanoKvError::Transaction(e) => Some(e),
+            NanostoreError::Transaction(e) => Some(e),
             _ => None,
         }
     }
@@ -163,7 +163,7 @@ impl NanoKvError {
     /// Get the underlying cursor error, if any
     pub fn as_cursor(&self) -> Option<&CursorError> {
         match self {
-            NanoKvError::Cursor(e) => Some(e),
+            NanostoreError::Cursor(e) => Some(e),
             _ => None,
         }
     }
@@ -171,7 +171,7 @@ impl NanoKvError {
     /// Get the underlying VFS error, if any
     pub fn as_vfs(&self) -> Option<&FileSystemError> {
         match self {
-            NanoKvError::Vfs(e) => Some(e),
+            NanostoreError::Vfs(e) => Some(e),
             _ => None,
         }
     }
@@ -179,7 +179,7 @@ impl NanoKvError {
     /// Get the underlying I/O error, if any
     pub fn as_io(&self) -> Option<&std::io::Error> {
         match self {
-            NanoKvError::Io(e) => Some(e),
+            NanostoreError::Io(e) => Some(e),
             _ => None,
         }
     }
@@ -200,23 +200,23 @@ impl NanoKvError {
     }
 }
 
-impl ErrorTelemetry for NanoKvError {
+impl ErrorTelemetry for NanostoreError {
     fn classification(&self) -> ErrorClassification {
         match self {
-            NanoKvError::Pager(err) => err.classification(),
-            NanoKvError::Wal(err) => err.classification(),
-            NanoKvError::Table(err) => err.classification(),
-            NanoKvError::Transaction(err) => err.classification(),
-            NanoKvError::Cursor(err) => err.classification(),
-            NanoKvError::Vfs(err) => err.classification(),
-            NanoKvError::Io(_) => ErrorClassification {
+            NanostoreError::Pager(err) => err.classification(),
+            NanostoreError::Wal(err) => err.classification(),
+            NanostoreError::Table(err) => err.classification(),
+            NanostoreError::Transaction(err) => err.classification(),
+            NanostoreError::Cursor(err) => err.classification(),
+            NanostoreError::Vfs(err) => err.classification(),
+            NanostoreError::Io(_) => ErrorClassification {
                 subsystem: "io",
                 category: "io",
                 variant: "io_error",
                 severity: ErrorSeverity::Error,
             },
-            NanoKvError::Other(_) => ErrorClassification {
-                subsystem: "nanokv",
+            NanostoreError::Other(_) => ErrorClassification {
+                subsystem: "nanostore",
                 category: "internal",
                 variant: "other",
                 severity: ErrorSeverity::Error,
@@ -867,7 +867,7 @@ where
     let message = error.to_string();
 
     counter!(
-        "nanokv.error.total",
+        "nanostore.error.total",
         "subsystem" => classification.subsystem,
         "category" => classification.category,
         "variant" => classification.variant,
@@ -876,7 +876,7 @@ where
     .increment(1);
 
     counter!(
-        "nanokv.error.category.total",
+        "nanostore.error.category.total",
         "category" => classification.category,
         "severity" => classification.severity.as_str()
     )
@@ -890,7 +890,7 @@ where
             severity = classification.severity.as_str(),
             timestamp_secs = timestamp_secs,
             error = %message,
-            "nanokv error recorded"
+            "nanostore error recorded"
         ),
         _ => error!(
             subsystem = classification.subsystem,
@@ -899,7 +899,7 @@ where
             severity = classification.severity.as_str(),
             timestamp_secs = timestamp_secs,
             error = %message,
-            "nanokv error recorded"
+            "nanostore error recorded"
         ),
     };
 
@@ -913,7 +913,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::NanoKvError;
+    use crate::error::NanostoreError;
     use crate::pager::{CompressionType, EncryptionType, PageId};
     use crate::table::TableError;
     use crate::txn::TransactionId;
@@ -949,7 +949,7 @@ mod tests {
 
     #[test]
     fn classifies_unified_error_by_wrapped_subsystem() {
-        let err = NanoKvError::from(WalError::corrupted_wal(42, "truncated", "unexpected EOF"));
+        let err = NanostoreError::from(WalError::corrupted_wal(42, "truncated", "unexpected EOF"));
         let classification = err.classification();
 
         assert_eq!(classification.subsystem, "wal");
@@ -981,7 +981,7 @@ mod tests {
         let observation = record_error(&err);
 
         assert_eq!(observation.classification.subsystem, "wal");
-        assert!(logs_contain("nanokv error recorded"));
+        assert!(logs_contain("nanostore error recorded"));
         assert!(logs_contain(r#"subsystem="wal""#));
         assert!(logs_contain(r#"variant="encryption_error""#));
     }
@@ -1004,14 +1004,14 @@ mod tests {
     fn test_error_conversion() {
         // Test that errors convert properly
         let pager_err = PagerError::DatabaseFull;
-        let nanokv_err: NanoKvError = pager_err.into();
-        assert!(nanokv_err.is_pager());
-        assert!(nanokv_err.as_pager().is_some());
+        let nanostore_err: NanostoreError = pager_err.into();
+        assert!(nanostore_err.is_pager());
+        assert!(nanostore_err.as_pager().is_some());
     }
 
     #[test]
     fn test_error_type_checks() {
-        let err = NanoKvError::other("test error");
+        let err = NanostoreError::other("test error");
         assert!(!err.is_pager());
         assert!(!err.is_wal());
         assert!(!err.is_table());
@@ -1024,16 +1024,16 @@ mod tests {
     #[test]
     fn test_error_extraction() {
         let pager_err = PagerError::DatabaseFull;
-        let nanokv_err: NanoKvError = pager_err.into();
+        let nanostore_err: NanostoreError = pager_err.into();
 
-        assert!(nanokv_err.as_pager().is_some());
-        assert!(nanokv_err.as_wal().is_none());
-        assert!(nanokv_err.as_table().is_none());
+        assert!(nanostore_err.as_pager().is_some());
+        assert!(nanostore_err.as_wal().is_none());
+        assert!(nanostore_err.as_table().is_none());
     }
 
     #[test]
     fn test_error_classification() {
-        let err: NanoKvError = PagerError::DatabaseFull.into();
+        let err: NanostoreError = PagerError::DatabaseFull.into();
         let classification = err.classification();
 
         assert_eq!(classification.subsystem, "pager");
@@ -1044,13 +1044,13 @@ mod tests {
 
     #[test]
     fn test_error_severity() {
-        let err: NanoKvError = WalError::corrupted_wal(128, "checksum", "record damaged").into();
+        let err: NanostoreError = WalError::corrupted_wal(128, "checksum", "record damaged").into();
         assert_eq!(err.severity(), ErrorSeverity::Critical);
     }
 
     #[test]
     fn test_error_recording_returns_observation() {
-        let err: NanoKvError = TableError::key_not_found("missing-key").into();
+        let err: NanostoreError = TableError::key_not_found("missing-key").into();
         let observation = err.record();
 
         assert_eq!(observation.classification.subsystem, "table");

@@ -1,4 +1,4 @@
-# NanoKV File Format Specification
+# Nanostore File Format Specification
 
 **Version**: 1.0  
 **Date**: 2026-05-10  
@@ -21,7 +21,7 @@
 
 ## Overview
 
-NanoKV uses two primary file types:
+Nanostore uses two primary file types:
 1. **Database file** (`.db`): Main data storage with page-based structure
 2. **WAL file** (`.wal`): Write-ahead log for durability and recovery
 
@@ -52,7 +52,7 @@ Where `PS` = Page Size (4096, 8192, 16384, 32768, or 65536 bytes)
 ```
 Offset  Size  Type    Description
 ------  ----  ----    -----------
-0       8     u8[8]   Magic number: "NANOKV\0\0" (0x4E414E4F4B560000)
+0       8     u8[8]   Magic number: "Nanostore\0\0" (0x4E414E4F4B560000)
 8       8     u64     Format version (currently 1)
 16      4     u32     Page size (4096/8192/16384/32768/65536)
 20      1     u8      Compression type (0=None, 1=LZ4, 2=Zstd)
@@ -66,7 +66,7 @@ Offset  Size  Type    Description
 ```
 
 **Notes**:
-- Magic number identifies file as NanoKV database
+- Magic number identifies file as Nanostore database
 - Version allows future format changes
 - Encryption salt used for key derivation
 - Timestamps in seconds since Unix epoch

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the comprehensive test coverage for vacuum operations with active snapshots, implemented to address issue `nanokv-t2s`. These tests verify that the vacuum/garbage collection system correctly respects snapshot isolation and handles various edge cases with concurrent snapshots.
+This document describes the comprehensive test coverage for vacuum operations with active snapshots, implemented to address issue `Nanostore-t2s`. These tests verify that the vacuum/garbage collection system correctly respects snapshot isolation and handles various edge cases with concurrent snapshots.
 
 ## Test Suite Location
 
@@ -176,7 +176,7 @@ The following scenarios are deferred or covered elsewhere:
 
 ## Issue Resolution
 
-This test suite fully addresses issue `nanokv-t2s`:
+This test suite fully addresses issue `Nanostore-t2s`:
 - ✅ Multiple concurrent snapshots at different LSNs
 - ✅ Vacuum behavior when oldest snapshot is released
 - ✅ Vacuum with mix of active and released snapshots

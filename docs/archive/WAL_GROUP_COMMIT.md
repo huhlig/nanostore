@@ -76,7 +76,7 @@ GroupCommitConfig::low_latency()
 ### Custom Configuration
 
 ```rust
-use nanokv::wal::{GroupCommitConfig, WalWriterConfig};
+use Nanostore::wal::{GroupCommitConfig, WalWriterConfig};
 
 let mut config = WalWriterConfig::default();
 config.group_commit = GroupCommitConfig {
@@ -99,8 +99,8 @@ config.group_commit = GroupCommitConfig {
 ### Basic Usage
 
 ```rust
-use nanokv::vfs::LocalFileSystem;
-use nanokv::wal::{GroupCommitConfig, WalWriter, WalWriterConfig, WriteOpType};
+use Nanostore::vfs::LocalFileSystem;
+use Nanostore::wal::{GroupCommitConfig, WalWriter, WalWriterConfig, WriteOpType};
 
 let fs = LocalFileSystem::new("./data");
 let mut config = WalWriterConfig::default();

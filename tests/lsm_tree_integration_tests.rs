@@ -22,7 +22,7 @@
 //! Note: Many tests are marked as #[ignore] because the LSM implementation
 //! is not yet complete or the API differs from expectations.
 
-use nanokv::table::lsm::{BloomFilterBuilder, CompactionConfig, CompactionStrategy, LsmConfig};
+use nanostore::table::lsm::{BloomFilterBuilder, CompactionConfig, CompactionStrategy, LsmConfig};
 
 /// Test bloom filter creation
 #[test]
@@ -72,9 +72,9 @@ fn test_default_lsm_config() {
 /// Test memtable operations
 #[test]
 fn test_memtable_operations() {
-    use nanokv::table::lsm::Memtable;
-    use nanokv::txn::TransactionId;
-    use nanokv::wal::LogSequenceNumber;
+    use nanostore::table::lsm::Memtable;
+    use nanostore::txn::TransactionId;
+    use nanostore::wal::LogSequenceNumber;
 
     let memtable = Memtable::new(1024 * 1024);
 
@@ -117,7 +117,7 @@ fn test_memtable_operations() {
 /// Test bloom filter operations
 #[test]
 fn test_bloom_filter_operations() {
-    use nanokv::table::lsm::BloomFilterBuilder;
+    use nanostore::table::lsm::BloomFilterBuilder;
 
     // Create a bloom filter using the builder
     let mut filter = BloomFilterBuilder::new(1000).bits_per_key(10).build();
@@ -148,11 +148,11 @@ fn test_bloom_filter_operations() {
 /// Test SSTable operations (requires full implementation)
 #[test]
 fn test_sstable_operations() {
-    use nanokv::pager::{Pager, PagerConfig};
-    use nanokv::table::lsm::{SStableConfig, SStableId, SStableReader, SStableWriter};
-    use nanokv::txn::VersionChain;
-    use nanokv::vfs::MemoryFileSystem;
-    use nanokv::wal::LogSequenceNumber;
+    use nanostore::pager::{Pager, PagerConfig};
+    use nanostore::table::lsm::{SStableConfig, SStableId, SStableReader, SStableWriter};
+    use nanostore::txn::VersionChain;
+    use nanostore::vfs::MemoryFileSystem;
+    use nanostore::wal::LogSequenceNumber;
     use std::sync::Arc;
 
     // Create pager with MemoryFileSystem
@@ -229,8 +229,8 @@ fn test_sstable_operations() {
 /// Test compaction (requires full implementation)
 #[test]
 fn test_compaction() {
-    use nanokv::table::lsm::{CompactionPicker, FileMetadata, Version, VersionEdit};
-    use nanokv::wal::LogSequenceNumber;
+    use nanostore::table::lsm::{CompactionPicker, FileMetadata, Version, VersionEdit};
+    use nanostore::wal::LogSequenceNumber;
 
     // Create a version with L0 files that exceed the size limit
     let mut version = Version::new(7);
@@ -238,14 +238,14 @@ fn test_compaction() {
     // Add L0 files (each 2MB, total exceeds 10MB limit)
     for i in 0..6u64 {
         let mut metadata = FileMetadata {
-            id: nanokv::table::lsm::SStableId::new(i),
+            id: nanostore::table::lsm::SStableId::new(i),
             level: 0,
             min_key: format!("key{:04}", i).into_bytes(),
             max_key: format!("key{:04}", i + 1).into_bytes(),
             num_entries: 100,
             total_size: 2 * 1024 * 1024, // 2MB each
             created_lsn: LogSequenceNumber::from(0),
-            first_page_id: nanokv::pager::PageId::from(i),
+            first_page_id: nanostore::pager::PageId::from(i),
             num_pages: 1,
         };
         // Make key ranges non-overlapping for cleaner test
@@ -256,7 +256,7 @@ fn test_compaction() {
     }
 
     // Create compaction picker with default config
-    let config = nanokv::table::lsm::CompactionConfig::default();
+    let config = nanostore::table::lsm::CompactionConfig::default();
     let picker = CompactionPicker::new(config);
 
     // Should pick L0 compaction since we exceed the size limit
@@ -291,13 +291,13 @@ fn test_compaction() {
 /// Test LSM tree MVCC snapshot isolation
 #[test]
 fn test_lsm_mvcc() {
-    use nanokv::pager::{PageType, Pager, PagerConfig};
-    use nanokv::table::lsm::LsmTree;
-    use nanokv::table::{Flushable, MutableTable, PointLookup, SearchableTable};
-    use nanokv::txn::TransactionId;
-    use nanokv::types::TableId;
-    use nanokv::vfs::MemoryFileSystem;
-    use nanokv::wal::LogSequenceNumber;
+    use nanostore::pager::{PageType, Pager, PagerConfig};
+    use nanostore::table::lsm::LsmTree;
+    use nanostore::table::{Flushable, MutableTable, PointLookup, SearchableTable};
+    use nanostore::txn::TransactionId;
+    use nanostore::types::TableId;
+    use nanostore::vfs::MemoryFileSystem;
+    use nanostore::wal::LogSequenceNumber;
     use std::sync::Arc;
 
     // Create pager with MemoryFileSystem

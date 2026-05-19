@@ -25,9 +25,9 @@
 //! - vacuum_table() and vacuum_all() APIs
 //! - Different table engines (BTree, Hash, LsmTree, GraphAdjacency, TimeSeries)
 
-use nanokv::kvdb::Database;
-use nanokv::table::{TableEngineKind, TableOptions};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::kvdb::Database;
+use nanostore::table::{TableEngineKind, TableOptions};
+use nanostore::vfs::MemoryFileSystem;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -305,7 +305,7 @@ fn test_vacuum_table_api() {
     assert!(removed >= 0, "Should return non-negative count");
 
     // Test vacuum on non-existent table
-    let fake_id = nanokv::types::TableId::from(999999u64);
+    let fake_id = nanostore::types::TableId::from(999999u64);
     let result = db.vacuum_table(fake_id);
     assert!(result.is_err(), "Should fail on non-existent table");
 

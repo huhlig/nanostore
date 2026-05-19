@@ -21,8 +21,8 @@
 
 #![cfg(test)]
 
-use nanokv::pager::{Page, PageId, PageSize, PageType, Pager, PagerConfig};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Page, PageId, PageSize, PageType, Pager, PagerConfig};
+use nanostore::vfs::MemoryFileSystem;
 
 /// Test cache hit scenario - reading cached pages
 #[test]

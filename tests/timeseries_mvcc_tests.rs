@@ -16,14 +16,14 @@
 
 //! MVCC tests for TimeSeriesTable.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::snap::Snapshot;
-use nanokv::table::TimeSeries;
-use nanokv::table::timeseries::{TimeSeriesConfig, TimeSeriesTable};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::snap::Snapshot;
+use nanostore::table::TimeSeries;
+use nanostore::table::timeseries::{TimeSeriesConfig, TimeSeriesTable};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 #[test]
@@ -51,7 +51,7 @@ fn test_timeseries_mvcc_snapshot_isolation() {
 
     // Create snapshot at LSN 10 (should see value1)
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -79,7 +79,7 @@ fn test_timeseries_mvcc_snapshot_isolation() {
 
     // Create new snapshot at LSN 20 (should see value2)
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -121,7 +121,7 @@ fn test_timeseries_mvcc_multiple_versions() {
     // Each snapshot should see its corresponding version
     for i in 1..=5 {
         let snapshot = Snapshot::new(
-            nanokv::snap::SnapshotId::from(i),
+            nanostore::snap::SnapshotId::from(i),
             format!("snap{}", i),
             LogSequenceNumber::from(i * 10),
             0,
@@ -168,7 +168,7 @@ fn test_timeseries_mvcc_scan_with_snapshot() {
 
     // Create snapshot at LSN 10
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -188,7 +188,7 @@ fn test_timeseries_mvcc_scan_with_snapshot() {
     let cursor1 = table
         .scan_series_snapshot(series_key, 1000, 4000, snapshot1)
         .unwrap();
-    use nanokv::table::TimeSeriesCursor;
+    use nanostore::table::TimeSeriesCursor;
 
     let mut points1 = Vec::new();
     let mut cursor1 = cursor1;
@@ -206,7 +206,7 @@ fn test_timeseries_mvcc_scan_with_snapshot() {
 
     // Scan with new snapshot should see updated value
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -264,7 +264,7 @@ fn test_timeseries_mvcc_vacuum() {
 
     // Latest version should still be accessible
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap".to_string(),
         LogSequenceNumber::from(50),
         0,

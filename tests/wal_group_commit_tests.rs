@@ -16,10 +16,10 @@
 
 //! Tests for WAL group commit functionality
 
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::{GroupCommitConfig, WalWriter, WalWriterConfig, WriteOpType};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::{GroupCommitConfig, WalWriter, WalWriterConfig, WriteOpType};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;

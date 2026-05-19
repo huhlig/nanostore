@@ -14,10 +14,10 @@
 // limitations under the License.
 //
 
-use nanokv::kvdb::Database;
-use nanokv::table::{AppendLogConfig, TableEngineKind, TableOptions};
-use nanokv::types::KeyEncoding;
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::kvdb::Database;
+use nanostore::table::{AppendLogConfig, TableEngineKind, TableOptions};
+use nanostore::types::KeyEncoding;
+use nanostore::vfs::MemoryFileSystem;
 
 fn appendlog_table_options() -> TableOptions {
     let mut options = TableOptions::default();

@@ -16,12 +16,12 @@
 
 //! Integration tests for R-Tree geospatial indexing.
 
-use nanokv::pager::{PageSize, Pager, PagerConfig};
-use nanokv::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{PageSize, Pager, PagerConfig};
+use nanostore::table::{GeoPoint, GeoSpatial, GeometryRef, PagedRTree, SpatialConfig, SplitStrategy};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 fn create_test_pager(fs: &MemoryFileSystem, path: &str) -> Arc<Pager<MemoryFileSystem>> {

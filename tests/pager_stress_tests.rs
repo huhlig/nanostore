@@ -20,8 +20,8 @@
 //! ensuring the system can handle production workloads without
 //! performance degradation or resource issues.
 
-use nanokv::pager::{Page, PageSize, PageType, Pager, PagerConfig};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Page, PageSize, PageType, Pager, PagerConfig};
+use nanostore::vfs::MemoryFileSystem;
 use std::collections::HashSet;
 
 /// Helper function to create a test pager

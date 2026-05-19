@@ -24,13 +24,13 @@
 //! - Memory usage and throughput
 
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use nanokv::pager::{OverflowChainStream, Pager, PagerConfig};
-use nanokv::table::btree::PagedBTree;
-use nanokv::table::{Flushable, MutableTable, PointLookup, SearchableTable, Table, ValueStream};
-use nanokv::txn::TransactionId;
-use nanokv::types::{TableId, ValueRef};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{OverflowChainStream, Pager, PagerConfig};
+use nanostore::table::btree::PagedBTree;
+use nanostore::table::{Flushable, MutableTable, PointLookup, SearchableTable, Table, ValueStream};
+use nanostore::txn::TransactionId;
+use nanostore::types::{TableId, ValueRef};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 /// Helper struct for streaming
@@ -46,7 +46,7 @@ impl VecValueStream {
 }
 
 impl ValueStream for VecValueStream {
-    fn read(&mut self, buf: &mut [u8]) -> nanokv::table::TableResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> nanostore::table::TableResult<usize> {
         let remaining = self.data.len() - self.position;
         let to_read = remaining.min(buf.len());
 

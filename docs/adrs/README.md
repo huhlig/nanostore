@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This directory contains Architecture Decision Records (ADRs) documenting key design decisions made during the development of NanoKV.
+This directory contains Architecture Decision Records (ADRs) documenting key design decisions made during the development of Nanostore.
 
 ## ADR Index
 

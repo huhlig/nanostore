@@ -16,7 +16,7 @@
 
 //! Property-based tests for VFS implementations using proptest
 
-use nanokv::vfs::{File, FileLockMode, FileSystem, LocalFileSystem, MemoryFileSystem};
+use nanostore::vfs::{File, FileLockMode, FileSystem, LocalFileSystem, MemoryFileSystem};
 use proptest::prelude::*;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -400,7 +400,7 @@ fn create_temp_fs() -> (LocalFileSystem, String) {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_nanos();
-    let temp_dir = std::env::temp_dir().join(format!("nanokv_test_{}", timestamp));
+    let temp_dir = std::env::temp_dir().join(format!("nanostore_test_{}", timestamp));
     std::fs::create_dir_all(&temp_dir).expect("Failed to create temp directory");
     let fs = LocalFileSystem::new(&temp_dir);
     (fs, temp_dir.to_string_lossy().to_string())

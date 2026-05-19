@@ -17,8 +17,8 @@
 //! Cache Performance Benchmarks
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use nanokv::pager::{Page, PageId, PageSize, PageType, Pager, PagerConfig};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Page, PageId, PageSize, PageType, Pager, PagerConfig};
+use nanostore::vfs::MemoryFileSystem;
 
 fn bench_cache_hit_rate(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_hit_rate");

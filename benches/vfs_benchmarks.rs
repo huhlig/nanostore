@@ -17,7 +17,7 @@
 //! Benchmarks for VFS implementations
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use nanokv::vfs::{File, FileSystem, LocalFileSystem, MemoryFileSystem};
+use nanostore::vfs::{File, FileSystem, LocalFileSystem, MemoryFileSystem};
 use std::hint::black_box;
 use std::io::{Read, Seek, SeekFrom, Write};
 

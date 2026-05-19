@@ -16,8 +16,8 @@
 
 //! Tests for page pinning mechanism to prevent concurrent free/read corruption
 
-use nanokv::pager::{Page, PageId, PageType, Pager, PagerConfig, PagerError};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Page, PageId, PageType, Pager, PagerConfig, PagerError};
+use nanostore::vfs::MemoryFileSystem;
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::Duration;

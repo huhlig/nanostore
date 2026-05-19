@@ -16,22 +16,22 @@
 
 //! Tests for TimeSeries bucket persistence, eviction, and recovery.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::snap::Snapshot;
-use nanokv::table::TimeSeries;
-use nanokv::table::timeseries::{
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::snap::Snapshot;
+use nanostore::table::TimeSeries;
+use nanostore::table::timeseries::{
     BucketId, BucketManager, TimeBucket, TimeSeriesAggregation, TimeSeriesConfig, TimeSeriesTable,
 };
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 // Helper function to create a snapshot that sees all committed data
 fn create_snapshot() -> Snapshot {
     Snapshot::new(
-        nanokv::snap::SnapshotId::from(0),
+        nanostore::snap::SnapshotId::from(0),
         String::new(),
         LogSequenceNumber::from(u64::MAX),
         0,
@@ -452,7 +452,7 @@ fn test_timeseries_cursor_aggregations() {
     assert_eq!(cursor.max(), Some(40.0));
     assert_eq!(
         cursor.aggregate(TimeSeriesAggregation::Count),
-        Some(nanokv::table::timeseries::AggregationResult::Count(4))
+        Some(nanostore::table::timeseries::AggregationResult::Count(4))
     );
 }
 
@@ -494,14 +494,14 @@ fn test_timeseries_cursor_downsampling_avg() {
     assert_eq!(windows[0].end_ts, 60);
     assert_eq!(
         windows[0].aggregation,
-        nanokv::table::timeseries::AggregationResult::Avg(15.0)
+        nanostore::table::timeseries::AggregationResult::Avg(15.0)
     );
 
     assert_eq!(windows[1].start_ts, 60);
     assert_eq!(windows[1].end_ts, 120);
     assert_eq!(
         windows[1].aggregation,
-        nanokv::table::timeseries::AggregationResult::Avg(40.0)
+        nanostore::table::timeseries::AggregationResult::Avg(40.0)
     );
 }
 
@@ -572,11 +572,11 @@ fn test_timeseries_cursor_downsampling_count_and_invalid_interval() {
     assert_eq!(windows.len(), 2);
     assert_eq!(
         windows[0].aggregation,
-        nanokv::table::timeseries::AggregationResult::Count(2)
+        nanostore::table::timeseries::AggregationResult::Count(2)
     );
     assert_eq!(
         windows[1].aggregation,
-        nanokv::table::timeseries::AggregationResult::Count(1)
+        nanostore::table::timeseries::AggregationResult::Count(1)
     );
 
     let err = cursor
@@ -608,7 +608,7 @@ fn test_aggregation_with_empty_series() {
     assert_eq!(cursor.count(), 0);
     assert_eq!(
         cursor.aggregate(TimeSeriesAggregation::Count),
-        Some(nanokv::table::timeseries::AggregationResult::Count(0))
+        Some(nanostore::table::timeseries::AggregationResult::Count(0))
     );
 }
 
@@ -827,11 +827,11 @@ fn test_downsampling_with_uneven_windows() {
     assert_eq!(windows.len(), 2);
     assert_eq!(
         windows[0].aggregation,
-        nanokv::table::timeseries::AggregationResult::Sum(30.0)
+        nanostore::table::timeseries::AggregationResult::Sum(30.0)
     ); // 10 + 20
     assert_eq!(
         windows[1].aggregation,
-        nanokv::table::timeseries::AggregationResult::Sum(70.0)
+        nanostore::table::timeseries::AggregationResult::Sum(70.0)
     ); // 30 + 40
 }
 
@@ -873,11 +873,11 @@ fn test_downsampling_with_min_max() {
     assert_eq!(min_windows.len(), 2);
     assert_eq!(
         min_windows[0].aggregation,
-        nanokv::table::timeseries::AggregationResult::Min(50.0)
+        nanostore::table::timeseries::AggregationResult::Min(50.0)
     );
     assert_eq!(
         min_windows[1].aggregation,
-        nanokv::table::timeseries::AggregationResult::Min(150.0)
+        nanostore::table::timeseries::AggregationResult::Min(150.0)
     );
 
     // Test max downsampling
@@ -885,11 +885,11 @@ fn test_downsampling_with_min_max() {
     assert_eq!(max_windows.len(), 2);
     assert_eq!(
         max_windows[0].aggregation,
-        nanokv::table::timeseries::AggregationResult::Max(100.0)
+        nanostore::table::timeseries::AggregationResult::Max(100.0)
     );
     assert_eq!(
         max_windows[1].aggregation,
-        nanokv::table::timeseries::AggregationResult::Max(200.0)
+        nanostore::table::timeseries::AggregationResult::Max(200.0)
     );
 }
 

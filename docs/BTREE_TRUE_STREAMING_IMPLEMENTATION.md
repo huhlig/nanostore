@@ -785,7 +785,7 @@ Internal implementation details changed significantly:
 ### Writing Large Values with put_stream()
 
 ```rust
-use nanokv::table::{MutableTable, ValueStream};
+use Nanostore::table::{MutableTable, ValueStream};
 
 // Create a large value stream (e.g., from a file)
 struct FileStream {
@@ -813,7 +813,7 @@ writer.flush()?;
 ### Reading Large Values with get_stream()
 
 ```rust
-use nanokv::table::{SearchableTable, ValueStream};
+use Nanostore::table::{SearchableTable, ValueStream};
 
 // Read the value as a stream
 let reader = table.reader(snapshot_lsn)?;

@@ -25,12 +25,12 @@
 //! here focus on transaction-layer integration: WAL logging, write set tracking,
 //! and the trait interface.
 
-use nanokv::kvdb::Database;
-use nanokv::table::{FullTextSearch, TableEngineKind, TableOptions, TextField, TextQuery};
-use nanokv::txn::TransactionId;
-use nanokv::types::{Durability, KeyEncoding};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::kvdb::Database;
+use nanostore::table::{FullTextSearch, TableEngineKind, TableOptions, TextField, TextQuery};
+use nanostore::txn::TransactionId;
+use nanostore::types::{Durability, KeyEncoding};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 
 fn fulltext_table_options() -> TableOptions {
     TableOptions {

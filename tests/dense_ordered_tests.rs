@@ -19,12 +19,12 @@
 //! Tests both MemoryBTree and PagedBTree implementations of the DenseOrdered trait,
 //! which is used for traditional B-Tree based secondary indexes.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::{DenseOrdered, MemoryBTree, PagedBTree, SpecialtyTableCursor};
-use nanokv::txn::TransactionId;
-use nanokv::types::{Bound, KeyBuf, ScanBounds, TableId};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::{DenseOrdered, MemoryBTree, PagedBTree, SpecialtyTableCursor};
+use nanostore::txn::TransactionId;
+use nanostore::types::{Bound, KeyBuf, ScanBounds, TableId};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 // =============================================================================

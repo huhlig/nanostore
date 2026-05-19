@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document provides a comprehensive overview of the compression and encryption features implemented for NanoKV. These features provide transparent data compression and encryption at both the page level (Pager) and write-ahead log level (WAL), enabling storage optimization and data security without requiring changes to application logic.
+This document provides a comprehensive overview of the compression and encryption features implemented for Nanostore. These features provide transparent data compression and encryption at both the page level (Pager) and write-ahead log level (WAL), enabling storage optimization and data security without requiring changes to application logic.
 
 ### Key Achievements
 
@@ -395,8 +395,8 @@ cargo bench --bench compression_encryption_benchmarks -- --verbose
 
 **Pager with LZ4 compression:**
 ```rust
-use nanokv::pager::{Pager, PagerConfig, CompressionType};
-use nanokv::vfs::LocalFileSystem;
+use Nanostore::pager::{Pager, PagerConfig, CompressionType};
+use Nanostore::vfs::LocalFileSystem;
 
 let fs = LocalFileSystem::new();
 let config = PagerConfig::new()
@@ -407,9 +407,9 @@ let pager = Pager::create(&fs, "database.db", config)?;
 
 **WAL with Zstd compression:**
 ```rust
-use nanokv::pager::CompressionType;
-use nanokv::wal::{WalWriter, WalWriterConfig};
-use nanokv::vfs::LocalFileSystem;
+use Nanostore::pager::CompressionType;
+use Nanostore::wal::{WalWriter, WalWriterConfig};
+use Nanostore::vfs::LocalFileSystem;
 
 let fs = LocalFileSystem::new();
 let mut config = WalWriterConfig::default();
@@ -422,8 +422,8 @@ let wal = WalWriter::create(&fs, "database.wal", config)?;
 
 **Pager with AES-256-GCM encryption:**
 ```rust
-use nanokv::pager::{Pager, PagerConfig, EncryptionType};
-use nanokv::vfs::LocalFileSystem;
+use Nanostore::pager::{Pager, PagerConfig, EncryptionType};
+use Nanostore::vfs::LocalFileSystem;
 
 let fs = LocalFileSystem::new();
 let key = [0x42u8; 32]; // Load from secure storage in production!
@@ -436,9 +436,9 @@ let pager = Pager::create(&fs, "secure.db", config)?;
 
 **WAL with encryption:**
 ```rust
-use nanokv::pager::EncryptionType;
-use nanokv::wal::{WalWriter, WalWriterConfig};
-use nanokv::vfs::LocalFileSystem;
+use Nanostore::pager::EncryptionType;
+use Nanostore::wal::{WalWriter, WalWriterConfig};
+use Nanostore::vfs::LocalFileSystem;
 
 let fs = LocalFileSystem::new();
 let key = [0x42u8; 32]; // Load from secure storage!
@@ -454,9 +454,9 @@ let wal = WalWriter::create(&fs, "secure.wal", config)?;
 
 **Complete secure and compressed database:**
 ```rust
-use nanokv::pager::{Pager, PagerConfig, CompressionType, EncryptionType};
-use nanokv::wal::{WalWriter, WalWriterConfig};
-use nanokv::vfs::LocalFileSystem;
+use Nanostore::pager::{Pager, PagerConfig, CompressionType, EncryptionType};
+use Nanostore::wal::{WalWriter, WalWriterConfig};
+use Nanostore::vfs::LocalFileSystem;
 
 let fs = LocalFileSystem::new();
 let key = [0x42u8; 32]; // Load from secure storage!
@@ -492,7 +492,7 @@ See: [`docs/COMPRESSION_ENCRYPTION.md`](COMPRESSION_ENCRYPTION.md)
 
 ## Summary
 
-The compression and encryption implementation for NanoKV is **complete and production-ready**. The implementation provides:
+The compression and encryption implementation for Nanostore is **complete and production-ready**. The implementation provides:
 
 ✅ **Robust functionality** with dual compression algorithms and industry-standard encryption  
 ✅ **Comprehensive testing** with 64 tests covering all scenarios  

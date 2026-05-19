@@ -1,6 +1,6 @@
 # Phase 4: Transaction Support - Completion Summary
 
-**Issue ID:** nanokv-g3n  
+**Issue ID:** Nanostore-g3n  
 **Status:** COMPLETE ✅  
 **Date:** 2026-05-17
 
@@ -54,7 +54,7 @@ All storage engines fully integrated with transaction support:
 - ✅ **WAL Durability** - Write-ahead logging with recovery
 - ✅ **Conflict Detection** - Write-write and read-write conflicts
 
-### Database API (nanokv-2jm)
+### Database API (Nanostore-2jm)
 - ✅ `create_table()` / `drop_table()` / `list_tables()`
 - ✅ Table handle wrapper for ergonomic access
 - ✅ Support for Memory, BTree, and LSM engines
@@ -100,17 +100,17 @@ All storage engines fully integrated with transaction support:
 
 All discovered issues during Phase 4 implementation have been closed:
 
-1. ✅ **nanokv-ega** - WAL implementation (Phase 1 foundation)
-2. ✅ **nanokv-bvi** - Range delete support
-3. ✅ **nanokv-hd3** - Snapshot lifecycle APIs
-4. ✅ **nanokv-igt** - Two-phase commit with undo mechanism
-5. ✅ **nanokv-kvy** - MVCC version chain integration
-6. ✅ **nanokv-xp3** - GraphAdjacency table engine
-7. ✅ **nanokv-1df** - FullText transaction integration
-8. ✅ **nanokv-8xz** - GeoSpatial transaction integration
-9. ✅ **nanokv-18c** - AppendLog commit handling
-10. ✅ **nanokv-24y** - Complete isolation level enforcement
-11. ✅ **nanokv-2jm** - Database & Table Handle APIs
+1. ✅ **Nanostore-ega** - WAL implementation (Phase 1 foundation)
+2. ✅ **Nanostore-bvi** - Range delete support
+3. ✅ **Nanostore-hd3** - Snapshot lifecycle APIs
+4. ✅ **Nanostore-igt** - Two-phase commit with undo mechanism
+5. ✅ **Nanostore-kvy** - MVCC version chain integration
+6. ✅ **Nanostore-xp3** - GraphAdjacency table engine
+7. ✅ **Nanostore-1df** - FullText transaction integration
+8. ✅ **Nanostore-8xz** - GeoSpatial transaction integration
+9. ✅ **Nanostore-18c** - AppendLog commit handling
+10. ✅ **Nanostore-24y** - Complete isolation level enforcement
+11. ✅ **Nanostore-2jm** - Database & Table Handle APIs
 
 ## Documentation
 
@@ -149,14 +149,14 @@ Phase 4 is **production-ready** with:
 
 The following are separate phases that depend on Phase 4 being complete:
 
-- **Phase 5**: REST API (optional) - nanokv-1jm
-- **Phase 5**: CLI Tool (optional) - nanokv-rtf
-- **Phase 6**: Benchmarking - nanokv-usf
-- **Phase 6**: Stress Testing - nanokv-9zl
-- **Phase 6**: Property-Based Testing - nanokv-d45
-- **Phase 6**: Fuzzing - nanokv-040
-- **Phase 6**: Documentation - nanokv-549, nanokv-x0o, nanokv-3os
-- **Phase 7**: Enhanced MVCC - nanokv-3ya
+- **Phase 5**: REST API (optional) - Nanostore-1jm
+- **Phase 5**: CLI Tool (optional) - Nanostore-rtf
+- **Phase 6**: Benchmarking - Nanostore-usf
+- **Phase 6**: Stress Testing - Nanostore-9zl
+- **Phase 6**: Property-Based Testing - Nanostore-d45
+- **Phase 6**: Fuzzing - Nanostore-040
+- **Phase 6**: Documentation - Nanostore-549, Nanostore-x0o, Nanostore-3os
+- **Phase 7**: Enhanced MVCC - Nanostore-3ya
 
 ## Conclusion
 

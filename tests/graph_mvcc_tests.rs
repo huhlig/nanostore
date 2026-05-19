@@ -16,11 +16,11 @@
 
 //! Tests for MVCC support in MemoryGraphTable
 
-use nanokv::table::GraphAdjacency;
-use nanokv::table::graph::{GraphConfig, MemoryGraphTable};
-use nanokv::txn::{TransactionId, VersionChain};
-use nanokv::types::TableId;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::table::GraphAdjacency;
+use nanostore::table::graph::{GraphConfig, MemoryGraphTable};
+use nanostore::txn::{TransactionId, VersionChain};
+use nanostore::types::TableId;
+use nanostore::wal::LogSequenceNumber;
 
 #[test]
 fn test_graph_mvcc_uncommitted_edges_not_visible() {
@@ -329,7 +329,7 @@ fn test_graph_mvcc_capabilities() {
         GraphConfig::default(),
     );
 
-    let caps = nanokv::table::Table::capabilities(&graph);
+    let caps = nanostore::table::Table::capabilities(&graph);
     assert!(caps.mvcc_native, "Graph table should support native MVCC");
     assert!(
         caps.memory_resident,

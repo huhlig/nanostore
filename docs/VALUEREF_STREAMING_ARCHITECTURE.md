@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the ValueRef-based streaming architecture for handling large values in NanoKV. This architecture enables efficient storage and retrieval of values that exceed the inline threshold without loading entire values into memory.
+This document describes the ValueRef-based streaming architecture for handling large values in Nanostore. This architecture enables efficient storage and retrieval of values that exceed the inline threshold without loading entire values into memory.
 
 ## Motivation
 

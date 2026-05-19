@@ -24,10 +24,10 @@
 //! 5. Vacuum with active snapshots
 //! 6. Cross-table transaction visibility
 
-use nanokv::kvdb::Database;
-use nanokv::table::{TableEngineKind, TableOptions};
-use nanokv::types::{Durability, KeyEncoding};
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::kvdb::Database;
+use nanostore::table::{TableEngineKind, TableOptions};
+use nanostore::types::{Durability, KeyEncoding};
+use nanostore::vfs::MemoryFileSystem;
 
 /// Helper to create a test database
 fn create_test_db() -> Database<MemoryFileSystem> {

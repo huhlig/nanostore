@@ -16,13 +16,13 @@
 
 //! MVCC tests for PagedHnswVector.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::snap::Snapshot;
-use nanokv::table::hnsw::{HnswConfig, PagedHnswVector};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::snap::Snapshot;
+use nanostore::table::hnsw::{HnswConfig, PagedHnswVector};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 /// Helper function to create a test vector with a specific pattern.
@@ -57,7 +57,7 @@ fn test_hnsw_mvcc_snapshot_isolation() {
 
     // Create snapshot at LSN 10 (should see vector1)
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -83,7 +83,7 @@ fn test_hnsw_mvcc_snapshot_isolation() {
 
     // Create new snapshot at LSN 20 (should see both vectors)
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -123,7 +123,7 @@ fn test_hnsw_mvcc_multiple_versions() {
     // Each snapshot should see its corresponding set of vectors
     for i in 1..=5 {
         let snapshot = Snapshot::new(
-            nanokv::snap::SnapshotId::from(i),
+            nanostore::snap::SnapshotId::from(i),
             format!("snap{}", i),
             LogSequenceNumber::from(i * 10),
             0,
@@ -169,7 +169,7 @@ fn test_hnsw_mvcc_delete_creates_tombstone() {
 
     // Create snapshot before deletion
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -201,7 +201,7 @@ fn test_hnsw_mvcc_delete_creates_tombstone() {
 
     // New snapshot should not see the vector
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -244,7 +244,7 @@ fn test_hnsw_mvcc_nearest_neighbor_snapshot() {
 
     // Create snapshot at LSN 10
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -272,7 +272,7 @@ fn test_hnsw_mvcc_nearest_neighbor_snapshot() {
 
     // New snapshot should see all three vectors
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -336,7 +336,7 @@ fn test_hnsw_mvcc_vacuum() {
 
     // Latest versions should still be accessible
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap".to_string(),
         LogSequenceNumber::from(70),
         0,
@@ -374,7 +374,7 @@ fn test_hnsw_mvcc_uncommitted_not_visible() {
 
     // Create a snapshot - uncommitted data should not be visible
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -419,7 +419,7 @@ fn test_hnsw_mvcc_concurrent_transactions() {
 
     // Snapshot at LSN 10 should only see vector1
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -446,7 +446,7 @@ fn test_hnsw_mvcc_concurrent_transactions() {
 
     // Snapshot at LSN 20 should see vector1 and vector2
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -461,7 +461,7 @@ fn test_hnsw_mvcc_concurrent_transactions() {
 
     // Snapshot at LSN 30 should see all three
     let snapshot3 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(3),
+        nanostore::snap::SnapshotId::from(3),
         "snap3".to_string(),
         LogSequenceNumber::from(30),
         0,
@@ -498,7 +498,7 @@ fn test_hnsw_mvcc_delete_and_reinsert() {
 
     // Create snapshot after insert
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -513,7 +513,7 @@ fn test_hnsw_mvcc_delete_and_reinsert() {
 
     // Create snapshot after delete
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -561,7 +561,7 @@ fn test_hnsw_mvcc_search_with_limit() {
         .unwrap();
 
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap".to_string(),
         LogSequenceNumber::from(10),
         0,

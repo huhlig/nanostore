@@ -1,6 +1,6 @@
 # BTree ValueRef Streaming Implementation Plan
 
-## Issue: nanokv-72g - Implement true streaming with ValueRef for BTree
+## Issue: Nanostore-72g - Implement true streaming with ValueRef for BTree
 
 ## Current State
 
@@ -192,7 +192,7 @@ Instead of implementing now, create a clear pattern for when this is needed:
 
 ## Related Issues
 
-- nanokv-hc5 (closed as duplicate)
+- Nanostore-hc5 (closed as duplicate)
 - Future: LSM streaming optimization
 - Future: Bloom filter streaming (if needed)
 

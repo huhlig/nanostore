@@ -2,13 +2,13 @@
 
 **Status**: Complete  
 **Date**: 2026-05-11  
-**Issue**: nanokv-2jm
+**Issue**: Nanostore-2jm
 
 ---
 
 ## Overview
 
-Phase 4 implements the high-level Database and Table handle APIs, providing ergonomic access to NanoKV's storage layer with automatic index maintenance and proper error handling.
+Phase 4 implements the high-level Database and Table handle APIs, providing ergonomic access to Nanostore's storage layer with automatic index maintenance and proper error handling.
 
 ## Design Philosophy: "All Collections Are Tables"
 
@@ -343,10 +343,10 @@ Comprehensive test suite with 23 tests covering:
 ### Basic CRUD
 
 ```rust
-use nanokv::kvdb::Database;
-use nanokv::table::{TableOptions, TableKind, TableEngineKind};
-use nanokv::types::KeyEncoding;
-use nanokv::vfs::MemoryFileSystem;
+use Nanostore::kvdb::Database;
+use Nanostore::table::{TableOptions, TableKind, TableEngineKind};
+use Nanostore::types::KeyEncoding;
+use Nanostore::vfs::MemoryFileSystem;
 
 // Create database
 let fs = MemoryFileSystem::new();
@@ -404,7 +404,7 @@ users.delete(b"user3")?;
 ### Working with Indexes
 
 ```rust
-use nanokv::table::{IndexKind, IndexField, IndexConsistency};
+use Nanostore::table::{IndexKind, IndexField, IndexConsistency};
 
 // Create index
 let index_id = db.create_index(
@@ -433,7 +433,7 @@ for index in indexes {
 ### Error Handling
 
 ```rust
-use nanokv::kvdb::DatabaseErrorKind;
+use Nanostore::kvdb::DatabaseErrorKind;
 
 match db.insert(table_id, b"user1", b"Alice") {
     Ok(()) => println!("Success"),
@@ -454,7 +454,7 @@ match db.insert(table_id, b"user1", b"Alice") {
 
 ## Architecture Alignment
 
-This implementation aligns with NanoKV's architecture:
+This implementation aligns with Nanostore's architecture:
 
 ### ADR-007: Unified ObjectId System
 - ✅ Uses `ObjectId` for both tables and indexes
@@ -597,4 +597,4 @@ Current implementation uses a placeholder. Full implementation needs:
 ---
 
 **Status**: ✅ Complete  
-**Next Phase**: Transaction support improvements (nanokv-g3n)
+**Next Phase**: Transaction support improvements (Nanostore-g3n)

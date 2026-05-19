@@ -16,12 +16,12 @@
 
 //! Tests for bloom filter tombstone-based rollback.
 
-use nanokv::pager::Pager;
-use nanokv::table::bloom::PagedBloomFilter;
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::Pager;
+use nanostore::table::bloom::PagedBloomFilter;
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 #[test]
@@ -29,7 +29,7 @@ fn test_bloom_filter_rollback_basic() {
     // Create test infrastructure
     let fs = Arc::new(MemoryFileSystem::new());
     let pager =
-        Arc::new(Pager::create(&*fs, "test.db", nanokv::pager::PagerConfig::default()).unwrap());
+        Arc::new(Pager::create(&*fs, "test.db", nanostore::pager::PagerConfig::default()).unwrap());
 
     // Create bloom filter
     let table_id = TableId::from(1);
@@ -69,7 +69,7 @@ fn test_bloom_filter_rollback_basic() {
 fn test_bloom_filter_rollback_visibility() {
     let fs = Arc::new(MemoryFileSystem::new());
     let pager =
-        Arc::new(Pager::create(&*fs, "test.db", nanokv::pager::PagerConfig::default()).unwrap());
+        Arc::new(Pager::create(&*fs, "test.db", nanostore::pager::PagerConfig::default()).unwrap());
 
     let table_id = TableId::from(1);
     let mut bloom = PagedBloomFilter::new(
@@ -116,7 +116,7 @@ fn test_bloom_filter_rollback_visibility() {
 fn test_bloom_filter_tombstone_vacuum() {
     let fs = Arc::new(MemoryFileSystem::new());
     let pager =
-        Arc::new(Pager::create(&*fs, "test.db", nanokv::pager::PagerConfig::default()).unwrap());
+        Arc::new(Pager::create(&*fs, "test.db", nanostore::pager::PagerConfig::default()).unwrap());
 
     let table_id = TableId::from(1);
     let mut bloom = PagedBloomFilter::new(
@@ -167,7 +167,7 @@ fn test_bloom_filter_tombstone_vacuum() {
 fn test_bloom_filter_multiple_tombstones() {
     let fs = Arc::new(MemoryFileSystem::new());
     let pager =
-        Arc::new(Pager::create(&*fs, "test.db", nanokv::pager::PagerConfig::default()).unwrap());
+        Arc::new(Pager::create(&*fs, "test.db", nanostore::pager::PagerConfig::default()).unwrap());
 
     let table_id = TableId::from(1);
     let mut bloom = PagedBloomFilter::new(
@@ -217,7 +217,7 @@ fn test_bloom_filter_multiple_tombstones() {
 fn test_bloom_filter_uncommitted_tombstone() {
     let fs = Arc::new(MemoryFileSystem::new());
     let pager =
-        Arc::new(Pager::create(&*fs, "test.db", nanokv::pager::PagerConfig::default()).unwrap());
+        Arc::new(Pager::create(&*fs, "test.db", nanostore::pager::PagerConfig::default()).unwrap());
 
     let table_id = TableId::from(1);
     let mut bloom = PagedBloomFilter::new(

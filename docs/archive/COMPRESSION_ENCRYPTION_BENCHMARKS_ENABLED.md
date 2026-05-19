@@ -1,7 +1,7 @@
 # Compression and Encryption Benchmarks - Re-enabled
 
 **Date:** 2026-05-08  
-**Issue:** nanokv-xet  
+**Issue:** Nanostore-xet  
 **Status:** ✅ Complete
 
 ## Summary

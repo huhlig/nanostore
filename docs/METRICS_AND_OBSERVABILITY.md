@@ -1,6 +1,6 @@
 # Metrics and Observability
 
-NanoKV includes comprehensive metrics and tracing instrumentation for production monitoring and performance analysis.
+Nanostore includes comprehensive metrics and tracing instrumentation for production monitoring and performance analysis.
 
 ## Overview
 
@@ -9,7 +9,7 @@ The library uses:
 - **`tracing`** crate for structured logging and spans
 - **`tracing-timing`** crate for latency percentile tracking
 
-As a library, NanoKV does **not** include a metrics exporter. Users must configure their own exporter in their application code.
+As a library, Nanostore does **not** include a metrics exporter. Users must configure their own exporter in their application code.
 
 ## Instrumented Components
 
@@ -106,14 +106,14 @@ fn main() {
         .install()
         .expect("failed to install Prometheus recorder");
 
-    // Now use NanoKV - metrics will be collected automatically
+    // Now use Nanostore - metrics will be collected automatically
     // ...
 }
 ```
 
 ### Using Other Exporters
 
-NanoKV works with any `metrics`-compatible exporter:
+Nanostore works with any `metrics`-compatible exporter:
 
 - **Prometheus**: `metrics-exporter-prometheus`
 - **StatsD**: `metrics-exporter-statsd`
@@ -132,7 +132,7 @@ fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Now use NanoKV - traces will be logged
+    // Now use Nanostore - traces will be logged
     // ...
 }
 ```
@@ -152,7 +152,7 @@ fn main() {
         .with(timing_layer)
         .init();
 
-    // Now use NanoKV - timing data will be collected
+    // Now use Nanostore - timing data will be collected
     // ...
 }
 ```
@@ -251,12 +251,12 @@ std::env::set_var("RUST_LOG", "off");
 std::env::set_var("RUST_LOG", "warn");
 
 // Enable debug for specific modules
-std::env::set_var("RUST_LOG", "nanokv::pager=debug,nanokv::wal=debug");
+std::env::set_var("RUST_LOG", "Nanostore::pager=debug,Nanostore::wal=debug");
 ```
 
 ## Custom Metrics
 
-Applications can add their own metrics alongside NanoKV's:
+Applications can add their own metrics alongside Nanostore's:
 
 ```rust
 use metrics::{counter, histogram};
@@ -265,7 +265,7 @@ use metrics::{counter, histogram};
 counter!("app.requests").increment(1);
 histogram!("app.request_duration").record(duration.as_secs_f64());
 
-// NanoKV metrics are collected automatically
+// Nanostore metrics are collected automatically
 db.write(key, value)?;
 ```
 
@@ -273,7 +273,7 @@ db.write(key, value)?;
 
 ### No Metrics Appearing
 
-1. Ensure a metrics recorder is installed before using NanoKV
+1. Ensure a metrics recorder is installed before using Nanostore
 2. Check that the recorder is properly configured
 3. Verify the metrics endpoint is accessible
 

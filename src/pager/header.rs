@@ -18,7 +18,7 @@
 
 use crate::pager::{CompressionType, EncryptionType, PageSize, PagerError, PagerResult};
 
-/// Magic number for NanoKV database files: "NKDB" in ASCII
+/// Magic number for nanostore database files: "NKDB" in ASCII
 const MAGIC: [u8; 4] = [0x4E, 0x4B, 0x44, 0x42]; // "NKDB"
 
 /// Current file format version

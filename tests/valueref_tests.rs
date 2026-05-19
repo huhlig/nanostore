@@ -22,9 +22,9 @@
 //! - Round-trip encoding/decoding with actual page IDs
 //! - Size calculations and thresholds
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::types::ValueRef;
-use nanokv::vfs::MemoryFileSystem;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::types::ValueRef;
+use nanostore::vfs::MemoryFileSystem;
 
 #[test]
 fn test_valueref_inline_usage() {

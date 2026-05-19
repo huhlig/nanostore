@@ -19,11 +19,11 @@
 //! This test suite validates the integration between the Pager and WAL modules
 //! with various compression and encryption configurations.
 
-use nanokv::pager::{CompressionType, EncryptionType, PageSize, Pager, PagerConfig};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::{File, FileSystem, MemoryFileSystem};
-use nanokv::wal::{WalRecovery, WalWriter, WalWriterConfig, WriteOpType};
+use nanostore::pager::{CompressionType, EncryptionType, PageSize, Pager, PagerConfig};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::{File, FileSystem, MemoryFileSystem};
+use nanostore::wal::{WalRecovery, WalWriter, WalWriterConfig, WriteOpType};
 
 // ============================================================================
 // 1. PAGER + WAL INTEGRATION TESTS

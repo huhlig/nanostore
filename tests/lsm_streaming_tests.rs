@@ -24,13 +24,13 @@
 //! - Stream across multiple levels
 //! - Verify overflow pages freed after compaction
 
-use nanokv::pager::{PageType, Pager, PagerConfig};
-use nanokv::table::lsm::{LsmConfig, LsmTree};
-use nanokv::table::{Flushable, MutableTable, PointLookup, SearchableTable, ValueStream};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{PageType, Pager, PagerConfig};
+use nanostore::table::lsm::{LsmConfig, LsmTree};
+use nanostore::table::{Flushable, MutableTable, PointLookup, SearchableTable, ValueStream};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 /// Helper struct to create a ValueStream from a Vec<u8>
@@ -46,7 +46,7 @@ impl VecValueStream {
 }
 
 impl ValueStream for VecValueStream {
-    fn read(&mut self, buf: &mut [u8]) -> nanokv::table::TableResult<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> nanostore::table::TableResult<usize> {
         let remaining = self.data.len() - self.position;
         let to_read = remaining.min(buf.len());
 

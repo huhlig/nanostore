@@ -2,7 +2,7 @@
 
 ## Overview
 
-The LSM manifest recovery feature provides disaster recovery capabilities for the NanoKV database. If the manifest file becomes corrupted or lost, the system can reconstruct it by scanning all SSTable files on disk and reading their metadata.
+The LSM manifest recovery feature provides disaster recovery capabilities for the Nanostore database. If the manifest file becomes corrupted or lost, the system can reconstruct it by scanning all SSTable files on disk and reading their metadata.
 
 ## When to Use Recovery
 
@@ -57,8 +57,8 @@ The recovery uses a **conservative placement strategy**:
 ### Basic Recovery
 
 ```rust
-use nanokv::table::lsm::{Manifest, SStableConfig};
-use nanokv::pager::{Pager, PageId};
+use Nanostore::table::lsm::{Manifest, SStableConfig};
+use Nanostore::pager::{Pager, PageId};
 use std::sync::Arc;
 
 // Open the pager

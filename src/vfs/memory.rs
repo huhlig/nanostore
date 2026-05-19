@@ -24,7 +24,7 @@ use super::{File, FileSystem, FileSystemError, FileSystemResult};
 /// Memory File System
 ///
 /// ```rust
-/// use nanokv::vfs::{File, FileSystem, MemoryFileSystem};
+/// use nanostore::vfs::{File, FileSystem, MemoryFileSystem};
 /// use std::io::{Read, Seek, SeekFrom, Write};
 ///
 /// let fs = MemoryFileSystem::new();

@@ -16,14 +16,14 @@
 
 //! MVCC tests for PagedRTree geospatial indexing.
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::snap::Snapshot;
-use nanokv::table::rtree::{PagedRTree, SpatialConfig};
-use nanokv::table::{GeoPoint, GeometryRef};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::snap::Snapshot;
+use nanostore::table::rtree::{PagedRTree, SpatialConfig};
+use nanostore::table::{GeoPoint, GeometryRef};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 #[test]
@@ -48,7 +48,7 @@ fn test_rtree_mvcc_snapshot_isolation() {
 
     // Create snapshot at LSN 10 (should see point1)
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -79,7 +79,7 @@ fn test_rtree_mvcc_snapshot_isolation() {
 
     // Create new snapshot at LSN 20 (should see both points)
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -119,7 +119,7 @@ fn test_rtree_mvcc_multiple_versions() {
     // Each snapshot should see its corresponding set of points
     for i in 1..=5 {
         let snapshot = Snapshot::new(
-            nanokv::snap::SnapshotId::from(i),
+            nanostore::snap::SnapshotId::from(i),
             format!("snap{}", i),
             LogSequenceNumber::from(i * 10),
             0,
@@ -165,7 +165,7 @@ fn test_rtree_mvcc_delete_creates_tombstone() {
 
     // Create snapshot before deletion
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -201,7 +201,7 @@ fn test_rtree_mvcc_delete_creates_tombstone() {
 
     // New snapshot should not see the point
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -241,7 +241,7 @@ fn test_rtree_mvcc_nearest_neighbor_snapshot() {
 
     // Create snapshot at LSN 10
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -266,7 +266,7 @@ fn test_rtree_mvcc_nearest_neighbor_snapshot() {
 
     // New snapshot should find point3 as nearest
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -309,7 +309,7 @@ fn test_rtree_mvcc_vacuum() {
 
     // Latest version should still be accessible
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap".to_string(),
         LogSequenceNumber::from(50),
         0,
@@ -344,7 +344,7 @@ fn test_rtree_mvcc_uncommitted_not_visible() {
 
     // Create a snapshot - uncommitted data should not be visible
     let snapshot = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -389,7 +389,7 @@ fn test_rtree_mvcc_concurrent_transactions() {
 
     // Snapshot at LSN 10 should only see point1
     let snapshot1 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(1),
+        nanostore::snap::SnapshotId::from(1),
         "snap1".to_string(),
         LogSequenceNumber::from(10),
         0,
@@ -421,7 +421,7 @@ fn test_rtree_mvcc_concurrent_transactions() {
 
     // Snapshot at LSN 20 should see point1 and point2
     let snapshot2 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(2),
+        nanostore::snap::SnapshotId::from(2),
         "snap2".to_string(),
         LogSequenceNumber::from(20),
         0,
@@ -436,7 +436,7 @@ fn test_rtree_mvcc_concurrent_transactions() {
 
     // Snapshot at LSN 30 should see all three
     let snapshot3 = Snapshot::new(
-        nanokv::snap::SnapshotId::from(3),
+        nanostore::snap::SnapshotId::from(3),
         "snap3".to_string(),
         LogSequenceNumber::from(30),
         0,

@@ -22,7 +22,7 @@
 //! - read_at_offset: Slice length mismatch when buf.len() != actual slice length
 //! - Corrupted data being returned due to race conditions
 
-use nanokv::vfs::{File, FileSystem, MemoryFileSystem};
+use nanostore::vfs::{File, FileSystem, MemoryFileSystem};
 use std::io::Write;
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -481,7 +481,7 @@ fn test_concurrent_directory_operations() {
 /// try to acquire locks on the same file simultaneously.
 #[test]
 fn test_concurrent_lock_contention() {
-    use nanokv::vfs::FileLockMode;
+    use nanostore::vfs::FileLockMode;
 
     let fs = Arc::new(MemoryFileSystem::new());
     let path = "/test_lock.dat";

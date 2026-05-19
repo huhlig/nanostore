@@ -16,7 +16,7 @@
 
 //! Write-Ahead Log (WAL) implementation
 //!
-//! The WAL provides durability and crash recovery for NanoKV. All modifications
+//! The WAL provides durability and crash recovery for nanostore. All modifications
 //! are first written to the WAL before being applied to the database, ensuring
 //! that committed transactions survive crashes.
 //!
@@ -39,8 +39,8 @@
 //! # Example Usage
 //!
 //! ```rust,ignore
-//! use nanokv::wal::{WalWriter, WalWriterConfig, WriteOpType};
-//! use nanokv::vfs::LocalFileSystem;
+//! use nanostore::wal::{WalWriter, WalWriterConfig, WriteOpType};
+//! use nanostore::vfs::LocalFileSystem;
 //!
 //! let fs = LocalFileSystem::new();
 //! let config = WalWriterConfig::default();
@@ -65,8 +65,8 @@
 //! # Recovery
 //!
 //! ```rust,ignore
-//! use nanokv::wal::WalRecovery;
-//! use nanokv::vfs::LocalFileSystem;
+//! use nanostore::wal::WalRecovery;
+//! use nanostore::vfs::LocalFileSystem;
 //!
 //! let fs = LocalFileSystem::new();
 //! let result = WalRecovery::recover(&fs, "database.wal")?;

@@ -79,7 +79,7 @@ impl PageTable {
     /// # Examples
     ///
     /// ```
-    /// use nanokv::pager::PageTable;
+    /// use nanostore::pager::PageTable;
     ///
     /// // Create with 64 shards (already power of 2)
     /// let table = PageTable::with_shard_count(64);
@@ -129,7 +129,7 @@ impl PageTable {
     /// # Examples
     ///
     /// ```
-    /// use nanokv::pager::{PageTable, PageId};
+    /// use nanostore::pager::{PageTable, PageId};
     ///
     /// let table = PageTable::new();
     /// let page_id = PageId::from(42);
@@ -162,7 +162,7 @@ impl PageTable {
     /// # Examples
     ///
     /// ```
-    /// use nanokv::pager::{PageTable, PageId};
+    /// use nanostore::pager::{PageTable, PageId};
     ///
     /// let table = PageTable::new();
     /// let page_id = PageId::from(42);

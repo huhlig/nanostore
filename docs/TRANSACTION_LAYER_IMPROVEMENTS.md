@@ -1,6 +1,6 @@
 # Transaction Layer Structural Improvements
 
-**Issue:** nanokv-i5l  
+**Issue:** Nanostore-i5l  
 **Date:** 2026-05-10  
 **Status:** Completed
 
@@ -152,12 +152,12 @@ The Transaction layer currently uses `TableId` for all operations. Since both ta
 
 - **Current:** Separate `TableId` and `IndexId` types, Transaction only uses `TableId`
 - **Future:** May need unified `ObjectId` or conversion mechanism
-- **See:** Issue nanokv-6nx for design options and decision
+- **See:** Issue Nanostore-6nx for design options and decision
 
 ### Future Work
 
-1. **Object ID System:** Design unified ID system for catalog (nanokv-6nx)
-2. **Index Maintenance:** Implement Database layer logic for automatic index updates (nanokv-j89)
+1. **Object ID System:** Design unified ID system for catalog (Nanostore-6nx)
+2. **Index Maintenance:** Implement Database layer logic for automatic index updates (Nanostore-j89)
 3. **WAL Integration:** Write commit records to WAL
 4. **Table Engine Integration:** Apply write_set to actual storage engines
 5. **Deadlock Detection:** Integrate DeadlockDetector for cycle detection
@@ -180,6 +180,6 @@ These changes enable:
 
 ## References
 
-- Issue: nanokv-i5l
+- Issue: Nanostore-i5l
 - ADR-003: MVCC Concurrency
 - ADR-006: Sharded Concurrency

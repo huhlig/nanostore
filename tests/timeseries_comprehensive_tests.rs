@@ -24,14 +24,14 @@
 //! 5. Retention policy enforcement
 //! 6. Edge cases (empty ranges, negative timestamps, etc.)
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::TimeSeries;
-use nanokv::table::TimeSeriesCursor;
-use nanokv::table::timeseries::{TimeSeriesConfig, TimeSeriesTable};
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::TimeSeries;
+use nanostore::table::TimeSeriesCursor;
+use nanostore::table::timeseries::{TimeSeriesConfig, TimeSeriesTable};
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 // Helper function to create a transaction ID for testing
@@ -525,14 +525,14 @@ fn test_table_verify() {
 #[test]
 fn test_retention_policy_configuration() {
     let config = TimeSeriesConfig::default().with_retention_policy(
-        nanokv::table::timeseries::TimeSeriesRetentionPolicy::max_age(
+        nanostore::table::timeseries::TimeSeriesRetentionPolicy::max_age(
             std::time::Duration::from_secs(3600),
         ),
     );
 
     assert!(matches!(
         config.retention_policy,
-        nanokv::table::timeseries::TimeSeriesRetentionPolicy::MaxAge(d) if d == std::time::Duration::from_secs(3600)
+        nanostore::table::timeseries::TimeSeriesRetentionPolicy::MaxAge(d) if d == std::time::Duration::from_secs(3600)
     ));
 }
 
@@ -541,7 +541,7 @@ fn test_retention_policy_with_no_retention() {
     let config = TimeSeriesConfig::default();
     assert!(matches!(
         config.retention_policy,
-        nanokv::table::timeseries::TimeSeriesRetentionPolicy::None
+        nanostore::table::timeseries::TimeSeriesRetentionPolicy::None
     ));
 }
 

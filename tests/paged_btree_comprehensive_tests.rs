@@ -24,15 +24,15 @@
 //! - Concurrent access patterns
 //! - Edge cases (empty tree, single node, large values)
 
-use nanokv::pager::{Pager, PagerConfig};
-use nanokv::table::btree::PagedBTree;
-use nanokv::table::{
+use nanostore::pager::{Pager, PagerConfig};
+use nanostore::table::btree::PagedBTree;
+use nanostore::table::{
     Flushable, MutableTable, OrderedScan, PointLookup, SearchableTable, TableCursor,
 };
-use nanokv::txn::TransactionId;
-use nanokv::types::{ScanBounds, TableId};
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::LogSequenceNumber;
+use nanostore::txn::TransactionId;
+use nanostore::types::{ScanBounds, TableId};
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::LogSequenceNumber;
 use std::sync::Arc;
 
 // =============================================================================
@@ -387,7 +387,7 @@ fn test_range_scan_inclusive_both() {
     );
 
     let reader = table.reader(LogSequenceNumber::from(100)).unwrap();
-    use nanokv::types::{Bound, KeyBuf};
+    use nanostore::types::{Bound, KeyBuf};
     let bounds = ScanBounds::Range {
         start: Bound::Included(KeyBuf(b"key_0020".to_vec())),
         end: Bound::Included(KeyBuf(b"key_0030".to_vec())),
@@ -420,7 +420,7 @@ fn test_range_scan_exclusive_both() {
     );
 
     let reader = table.reader(LogSequenceNumber::from(100)).unwrap();
-    use nanokv::types::{Bound, KeyBuf};
+    use nanostore::types::{Bound, KeyBuf};
     let bounds = ScanBounds::Range {
         start: Bound::Excluded(KeyBuf(b"key_0020".to_vec())),
         end: Bound::Excluded(KeyBuf(b"key_0030".to_vec())),
@@ -453,7 +453,7 @@ fn test_range_scan_from_start() {
     );
 
     let reader = table.reader(LogSequenceNumber::from(100)).unwrap();
-    use nanokv::types::{Bound, KeyBuf};
+    use nanostore::types::{Bound, KeyBuf};
     let bounds = ScanBounds::Range {
         start: Bound::Included(KeyBuf(b"key_0020".to_vec())),
         end: Bound::Unbounded,
@@ -483,7 +483,7 @@ fn test_range_scan_to_end() {
     );
 
     let reader = table.reader(LogSequenceNumber::from(100)).unwrap();
-    use nanokv::types::{Bound, KeyBuf};
+    use nanostore::types::{Bound, KeyBuf};
     let bounds = ScanBounds::Range {
         start: Bound::Unbounded,
         end: Bound::Included(KeyBuf(b"key_0030".to_vec())),
@@ -514,7 +514,7 @@ fn test_range_scan_empty_range() {
 
     let reader = table.reader(LogSequenceNumber::from(100)).unwrap();
     // Range where start > end
-    use nanokv::types::{Bound, KeyBuf};
+    use nanostore::types::{Bound, KeyBuf};
     let bounds = ScanBounds::Range {
         start: Bound::Included(KeyBuf(b"key_0040".to_vec())),
         end: Bound::Included(KeyBuf(b"key_0020".to_vec())),
@@ -552,7 +552,7 @@ fn test_prefix_scan_basic() {
 
     // Scan with "user:1:" prefix
     let prefix = b"user:1:";
-    use nanokv::types::KeyBuf;
+    use nanostore::types::KeyBuf;
     let bounds = ScanBounds::Prefix(KeyBuf(prefix.to_vec()));
     let mut cursor = reader.scan(bounds, LogSequenceNumber::from(100)).unwrap();
 

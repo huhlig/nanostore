@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document analyzes the current MVCC (Multi-Version Concurrency Control) test coverage in NanoKV and identifies gaps that need to be filled per issue nanokv-xzt.
+This document analyzes the current MVCC (Multi-Version Concurrency Control) test coverage in Nanostore and identifies gaps that need to be filled per issue Nanostore-xzt.
 
 ## Current Test Coverage
 
@@ -98,7 +98,7 @@ This document analyzes the current MVCC (Multi-Version Concurrency Control) test
 - ❌ No snapshot management tests
 - ❌ No MVCC visibility tests
 
-## Required Test Coverage (per nanokv-xzt)
+## Required Test Coverage (per Nanostore-xzt)
 
 ### 1. Basic Snapshot Isolation (Concurrent Reads See Consistent State)
 

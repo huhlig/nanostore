@@ -19,11 +19,11 @@
 //! These tests verify that the WAL writer is thread-safe and can handle
 //! concurrent operations without data races, panics, or corruption.
 
-use nanokv::pager::CompressionType;
-use nanokv::txn::TransactionId;
-use nanokv::types::TableId;
-use nanokv::vfs::MemoryFileSystem;
-use nanokv::wal::{WalReader, WalRecovery, WalWriter, WalWriterConfig, WriteOpType};
+use nanostore::pager::CompressionType;
+use nanostore::txn::TransactionId;
+use nanostore::types::TableId;
+use nanostore::vfs::MemoryFileSystem;
+use nanostore::wal::{WalReader, WalRecovery, WalWriter, WalWriterConfig, WriteOpType};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;

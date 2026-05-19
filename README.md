@@ -1,9 +1,9 @@
-# NanoKV
+# Nanostore
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Actions Status](https://github.com/huhlig/nanokv/workflows/rust/badge.svg)](https://github.com/huhlig/nanokv/actions)
+[![Actions Status](https://github.com/huhlig/nanostore/workflows/rust/badge.svg)](https://github.com/huhlig/nanostore/actions)
 
-> NanoKV is a lightweight embeddable single-file key-value database with ACID transactions, MVCC concurrency, and multiple storage engines.
+> Nanostore is a lightweight embeddable single-file database with ACID transactions, MVCC concurrency, and multiple storage engines.
 
 ## Features
 
@@ -47,7 +47,7 @@
 ## Quick Start
 
 ```rust
-use nanokv::{Database, TableConfig, TableEngineKind};
+use nanostore::{Database, TableConfig, TableEngineKind};
 
 // Create database
 let db = Database::create("mydb.db")?;
@@ -78,7 +78,7 @@ assert_eq!(value, Some(b"Alice".to_vec()));
 ## Project Structure
 
 ```
-nanokv/
+nanostore/
 ├── docs/            # Documentation, Architecture, ADRs
 ├── src/
 │   ├── vfs/         # Virtual File System
@@ -110,7 +110,7 @@ cargo test --test pager_stress_tests
 
 ### Large-Scale Stress Tests
 
-NanoKV includes comprehensive stress tests for 100K-200K pages that are marked with `#[ignore]` to avoid slowing down regular test runs.
+Nanostore includes comprehensive stress tests for 100K-200K pages that are marked with `#[ignore]` to avoid slowing down regular test runs.
 
 ```bash
 # Run all large-scale stress tests
