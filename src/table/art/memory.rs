@@ -589,7 +589,7 @@ impl MemoryART {
 
                     let old_leaf = Box::new(ARTNode::Leaf(Leaf::new(
                         leaf.key.clone(),
-                        leaf.chain.value.to_vec(),
+                        Vec::from(leaf.chain.value.as_inline().unwrap_or(&[])),
                         tx_id,
                     )));
                     let new_leaf = Box::new(ARTNode::Leaf(Leaf::new(key.to_vec(), value, tx_id)));
@@ -691,7 +691,7 @@ impl MemoryART {
 
                     let old_leaf = Box::new(ARTNode::Leaf(Leaf::new(
                         leaf.key.clone(),
-                        leaf.chain.value.to_vec(),
+                        Vec::from(leaf.chain.value.as_inline().unwrap_or(&[])),
                         tx_id,
                     )));
                     let new_leaf = Box::new(ARTNode::Leaf(Leaf::new(key.to_vec(), value, tx_id)));
@@ -792,8 +792,8 @@ impl MemoryART {
                         Vec::new(),
                     );
                     leaf.chain
-                        .find_visible_version(&snapshot)
-                        .map(|v| v.to_vec())
+                        .find_visible_inline(&snapshot)
+                        .map(|v| Vec::from(v))
                 } else {
                     None
                 }
@@ -1060,9 +1060,9 @@ impl MemoryART {
                         0,
                         Vec::new(),
                     );
-                    if let Some(value) = leaf.chain.find_visible_version(&snapshot) {
+                    if let Some(value) = leaf.chain.find_visible_inline(&snapshot) {
                         eprintln!("Collecting leaf: {:?}", String::from_utf8_lossy(&leaf.key));
-                        result.push((leaf.key.clone(), value.to_vec()));
+                        result.push((leaf.key.clone(), Vec::from(value)));
                     } else {
                         eprintln!("Leaf not visible: {:?}", String::from_utf8_lossy(&leaf.key));
                     }
@@ -1201,7 +1201,10 @@ impl MemoryART {
         match node.as_mut() {
             ARTNode::Leaf(leaf) => {
                 // Vacuum the leaf's version chain
-                leaf.chain.vacuum(min_visible_lsn)
+                let (removed, _freed_refs) = leaf.chain.vacuum(min_visible_lsn);
+                // Note: freed_refs contains ValueRefs for external values that need cleanup
+                // For in-memory ART, we don't use external values, so we can ignore this
+                removed
             }
             ARTNode::Node4 { children, .. } => {
                 let mut total_removed = 0;

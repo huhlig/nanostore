@@ -163,7 +163,7 @@ impl HnswNode {
     /// Check if this node is visible to the given snapshot.
     /// Returns false if the visible version is a tombstone.
     fn is_visible(&self, snapshot: &Snapshot) -> bool {
-        match self.version_chain.find_visible_version(snapshot) {
+        match self.version_chain.find_visible_inline(snapshot) {
             Some(value) => !Self::is_tombstone(value),
             None => false,
         }
@@ -205,7 +205,11 @@ impl HnswNode {
     }
 
     /// Vacuum old versions from this node's chain.
-    fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
+    /// Returns (removed_count, freed_refs) where freed_refs contains ValueRefs that need cleanup.
+    fn vacuum(
+        &mut self,
+        min_visible_lsn: LogSequenceNumber,
+    ) -> (usize, Vec<crate::types::ValueRef>) {
         self.version_chain.vacuum(min_visible_lsn)
     }
 }
@@ -1830,7 +1834,12 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let id_to_node = self.id_to_node.read().unwrap();
         for &node_id in id_to_node.values() {
             let mut node = self.load_node(node_id)?;
-            let removed = node.vacuum(min_visible_lsn);
+            let (removed, freed_refs) = node.vacuum(min_visible_lsn);
+
+            // Free overflow pages for removed external values
+            if !freed_refs.is_empty() {
+                self.pager.free_value_refs(&freed_refs)?;
+            }
 
             if removed > 0 {
                 total_removed += removed;

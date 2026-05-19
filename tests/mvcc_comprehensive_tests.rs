@@ -636,7 +636,10 @@ fn test_read_your_writes_basic() {
     // Verify committed value is visible to new transactions
     let tx_read = db.begin_read().unwrap();
     let value = tx_read.get(table_id, b"key1").unwrap();
-    assert_eq!(value.as_ref().map(|v| v.0.as_slice()), Some(&b"my_value"[..]));
+    assert_eq!(
+        value.as_ref().map(|v| v.0.as_slice()),
+        Some(&b"my_value"[..])
+    );
 }
 
 /// Test read-your-writes with multiple operations
@@ -791,33 +794,57 @@ fn test_historical_reads_multiple_keys() {
     // Snapshot 1: both keys original
     let tx_s1 = db.begin_read_at(snap1.lsn).unwrap();
     assert_eq!(
-        tx_s1.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_s1
+            .get(table_id, b"key1")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"v1"[..])
     );
     assert_eq!(
-        tx_s1.get(table_id, b"key2").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_s1
+            .get(table_id, b"key2")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"v2"[..])
     );
 
     // Snapshot 2: key1 updated, key2 original
     let tx_s2 = db.begin_read_at(snap2.lsn).unwrap();
     assert_eq!(
-        tx_s2.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_s2
+            .get(table_id, b"key1")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"v1_updated"[..])
     );
     assert_eq!(
-        tx_s2.get(table_id, b"key2").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_s2
+            .get(table_id, b"key2")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"v2"[..])
     );
 
     // Current: both keys updated
     let tx_current = db.begin_read().unwrap();
     assert_eq!(
-        tx_current.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_current
+            .get(table_id, b"key1")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"v1_updated"[..])
     );
     assert_eq!(
-        tx_current.get(table_id, b"key2").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_current
+            .get(table_id, b"key2")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"v2_updated"[..])
     );
 
@@ -825,7 +852,6 @@ fn test_historical_reads_multiple_keys() {
     db.release_snapshot(snap1.id).unwrap();
     db.release_snapshot(snap2.id).unwrap();
 }
-
 
 // =============================================================================
 // Phase 7: Comprehensive Rollback Tests
@@ -855,7 +881,10 @@ fn test_rollback_single_write() {
 fn test_rollback_multiple_writes() {
     let db = create_test_db();
     let table_id = db
-        .create_table("test_rollback_multi", table_options(TableEngineKind::Memory))
+        .create_table(
+            "test_rollback_multi",
+            table_options(TableEngineKind::Memory),
+        )
         .unwrap();
 
     // Write multiple keys and rollback
@@ -877,7 +906,10 @@ fn test_rollback_multiple_writes() {
 fn test_rollback_updates() {
     let db = create_test_db();
     let table_id = db
-        .create_table("test_rollback_update", table_options(TableEngineKind::Memory))
+        .create_table(
+            "test_rollback_update",
+            table_options(TableEngineKind::Memory),
+        )
         .unwrap();
 
     // Write initial value
@@ -905,7 +937,10 @@ fn test_rollback_updates() {
 fn test_rollback_deletes() {
     let db = create_test_db();
     let table_id = db
-        .create_table("test_rollback_delete", table_options(TableEngineKind::Memory))
+        .create_table(
+            "test_rollback_delete",
+            table_options(TableEngineKind::Memory),
+        )
         .unwrap();
 
     // Write initial value
@@ -933,7 +968,10 @@ fn test_rollback_deletes() {
 fn test_rollback_isolation() {
     let db = create_test_db();
     let table_id = db
-        .create_table("test_rollback_isolation", table_options(TableEngineKind::Memory))
+        .create_table(
+            "test_rollback_isolation",
+            table_options(TableEngineKind::Memory),
+        )
         .unwrap();
 
     // Transaction 1: Write and commit
@@ -954,12 +992,20 @@ fn test_rollback_isolation() {
     // Verify: tx1 and tx3 visible, tx2 not visible
     let tx_read = db.begin_read().unwrap();
     assert_eq!(
-        tx_read.get(table_id, b"key1").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_read
+            .get(table_id, b"key1")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"tx1_value"[..])
     );
     assert!(tx_read.get(table_id, b"key2").unwrap().is_none());
     assert_eq!(
-        tx_read.get(table_id, b"key3").unwrap().as_ref().map(|v| v.0.as_slice()),
+        tx_read
+            .get(table_id, b"key3")
+            .unwrap()
+            .as_ref()
+            .map(|v| v.0.as_slice()),
         Some(&b"tx3_value"[..])
     );
 }

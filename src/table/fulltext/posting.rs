@@ -61,7 +61,7 @@ impl PostingEntry {
 
     /// Check if this entry is visible to the given snapshot.
     pub fn is_visible(&self, snapshot: &Snapshot) -> bool {
-        match self.version_chain.find_visible_version(snapshot) {
+        match self.version_chain.find_visible_inline(snapshot) {
             Some(value) => !Self::is_tombstone(value),
             None => false,
         }
@@ -104,7 +104,11 @@ impl PostingEntry {
     }
 
     /// Vacuum old versions from this entry's chain.
-    pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
+    /// Returns (removed_count, freed_refs) where freed_refs contains ValueRefs that need cleanup.
+    pub fn vacuum(
+        &mut self,
+        min_visible_lsn: LogSequenceNumber,
+    ) -> (usize, Vec<crate::types::ValueRef>) {
         self.version_chain.vacuum(min_visible_lsn)
     }
 }
@@ -155,11 +159,21 @@ impl PostingList {
     }
 
     /// Vacuum old versions from all entries.
-    pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
-        self.entries
-            .iter_mut()
-            .map(|e| e.vacuum(min_visible_lsn))
-            .sum()
+    /// Returns (removed_count, freed_refs) where freed_refs contains ValueRefs that need cleanup.
+    pub fn vacuum(
+        &mut self,
+        min_visible_lsn: LogSequenceNumber,
+    ) -> (usize, Vec<crate::types::ValueRef>) {
+        let mut total_removed = 0;
+        let mut all_freed_refs = Vec::new();
+
+        for entry in &mut self.entries {
+            let (removed, freed_refs) = entry.vacuum(min_visible_lsn);
+            total_removed += removed;
+            all_freed_refs.extend(freed_refs);
+        }
+
+        (total_removed, all_freed_refs)
     }
 
     /// Serialize to bytes.

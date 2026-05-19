@@ -1391,7 +1391,13 @@ impl<FS: FileSystem> PagedRTree<FS> {
             RTreeNode::Leaf { entries, .. } => {
                 let mut modified = false;
                 for entry in entries.iter_mut() {
-                    let removed = entry.vacuum(min_visible_lsn);
+                    let (removed, freed_refs) = entry.vacuum(min_visible_lsn);
+
+                    // Free overflow pages for removed external values
+                    if !freed_refs.is_empty() {
+                        self.pager.free_value_refs(&freed_refs)?;
+                    }
+
                     if removed > 0 {
                         total_removed += removed;
                         modified = true;

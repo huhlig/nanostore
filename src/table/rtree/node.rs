@@ -105,7 +105,7 @@ impl LeafEntry {
     /// Check if this entry is visible to the given snapshot.
     /// Returns false if the visible version is a tombstone.
     pub fn is_visible(&self, snapshot: &Snapshot) -> bool {
-        match self.version_chain.find_visible_version(snapshot) {
+        match self.version_chain.find_visible_inline(snapshot) {
             Some(value) => !Self::is_tombstone(value),
             None => false,
         }
@@ -147,7 +147,11 @@ impl LeafEntry {
     }
 
     /// Vacuum old versions from this entry's chain.
-    pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> usize {
+    /// Returns (removed_count, freed_refs) where freed_refs contains ValueRefs that need cleanup.
+    pub fn vacuum(
+        &mut self,
+        min_visible_lsn: LogSequenceNumber,
+    ) -> (usize, Vec<crate::types::ValueRef>) {
         self.version_chain.vacuum(min_visible_lsn)
     }
 

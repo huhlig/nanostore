@@ -269,12 +269,16 @@ impl MemoryGraphTable {
 
             // Vacuum outgoing edges
             for chain in index.outgoing_edges.values_mut() {
-                total_removed += chain.vacuum(min_visible_lsn);
+                let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
+                total_removed += removed;
+                // Note: Graph edges are in-memory, no overflow pages to free
             }
 
             // Vacuum incoming edges
             for chain in index.incoming_edges.values_mut() {
-                total_removed += chain.vacuum(min_visible_lsn);
+                let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
+                total_removed += removed;
+                // Note: Graph edges are in-memory, no overflow pages to free
             }
         }
 

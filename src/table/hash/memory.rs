@@ -33,6 +33,7 @@ use crate::table::{
     BatchOps, BatchReport, Flushable, MutableTable, PointLookup, Table, TableCapabilities,
     TableEngineKind, TableError, TableResult, TableStatistics, WriteBatch,
 };
+use crate::txn::VersionValue;
 use crate::txn::{TransactionId, VersionChain};
 use crate::types::{ScanBounds, TableId, ValueBuf};
 use crate::wal::LogSequenceNumber;
@@ -130,12 +131,12 @@ impl MemoryHashTable {
                 0,
                 Vec::new(),
             );
-            if let Some(value) = chain.find_visible_version(&snapshot) {
+            if let Some(value) = chain.find_visible_inline(&snapshot) {
                 // Empty value means tombstone (deleted)
                 if value.is_empty() {
                     return Ok(None);
                 }
-                return Ok(Some(ValueBuf(value.to_vec())));
+                return Ok(Some(ValueBuf(Vec::from(value))));
             }
         }
         Ok(None)
@@ -160,7 +161,7 @@ impl MemoryHashTable {
         // Create new version chain
         let prev_version = data.get(key).map(|chain| Box::new(chain.clone()));
         let new_chain = VersionChain {
-            value: value.to_vec(),
+            value: VersionValue::inline(value.to_vec()),
             created_by: tx_id,
             commit_lsn: Some(commit_lsn),
             prev_version,
@@ -220,7 +221,9 @@ impl MemoryHashTable {
         let mut total_removed = 0;
 
         for (_key, chain) in data.iter_mut() {
-            let removed = chain.vacuum(min_visible_lsn);
+            let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
+            // Note: freed_refs contains ValueRefs for external values that need cleanup
+            // For in-memory hash tables, we don't use external values, so we can ignore this
             total_removed += removed;
         }
 
@@ -252,8 +255,8 @@ impl MemoryHashTable {
 
         for key in keys {
             if let Some(chain) = data.get(*key) {
-                if let Some(value) = chain.find_visible_version(&snapshot) {
-                    results.push(Some(ValueBuf(value.to_vec())));
+                if let Some(value) = chain.find_visible_inline(&snapshot) {
+                    results.push(Some(ValueBuf(Vec::from(value))));
                 } else {
                     results.push(None);
                 }
@@ -451,7 +454,7 @@ impl<'a> Flushable for MemoryHashTableWriter<'a> {
 
                     let prev_version = data.get(&key).map(|chain| Box::new(chain.clone()));
                     let new_chain = VersionChain {
-                        value,
+                        value: VersionValue::inline(value),
                         created_by: self.tx_id,
                         commit_lsn: None, // Uncommitted - will be set by commit_versions()
                         prev_version,
@@ -470,7 +473,7 @@ impl<'a> Flushable for MemoryHashTableWriter<'a> {
 
                         let prev_version = Some(Box::new(chain.clone()));
                         let tombstone = VersionChain {
-                            value: Vec::new(), // Empty value = tombstone
+                            value: VersionValue::inline(Vec::new()), // Empty value = tombstone
                             created_by: self.tx_id,
                             commit_lsn: None, // Uncommitted
                             prev_version,

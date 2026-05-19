@@ -257,7 +257,9 @@ impl<FS: FileSystem> FileBlob<FS> {
             }
 
             // Vacuum the chain
-            total_removed += chain.vacuum(min_visible_lsn);
+            let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
+            total_removed += removed;
+            // Note: FileBlob stores blobs as separate files, not in pager overflow pages
         }
 
         // Delete orphaned blob files

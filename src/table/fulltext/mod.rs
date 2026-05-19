@@ -584,7 +584,9 @@ impl<FS: FileSystem> PagedFullTextIndex<FS> {
         let mut index = self.inverted_index.write().unwrap();
         let mut total_removed = 0;
         for posting_list in index.values_mut() {
-            total_removed += posting_list.vacuum(min_visible_lsn);
+            let (removed, _freed_refs) = posting_list.vacuum(min_visible_lsn);
+            total_removed += removed;
+            // Note: FullText index is in-memory, no overflow pages to free
         }
         Ok(total_removed)
     }

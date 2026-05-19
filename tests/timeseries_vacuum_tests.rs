@@ -38,14 +38,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Helper to create a test TimeSeries table
-fn create_test_table(
-    name: &str,
-    config: TimeSeriesConfig,
-) -> TimeSeriesTable<MemoryFileSystem> {
+fn create_test_table(name: &str, config: TimeSeriesConfig) -> TimeSeriesTable<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
-    let pager = Arc::new(
-        Pager::create(&fs, &format!("{}.db", name), PagerConfig::default()).unwrap(),
-    );
+    let pager =
+        Arc::new(Pager::create(&fs, &format!("{}.db", name), PagerConfig::default()).unwrap());
     TimeSeriesTable::new(TableId::from(1), name.to_string(), pager, config).unwrap()
 }
 
@@ -63,9 +59,7 @@ fn append_points(
     commit_lsn: LogSequenceNumber,
 ) {
     for (ts, value) in points {
-        table
-            .append_point(series_key, *ts, *value, tx_id)
-            .unwrap();
+        table.append_point(series_key, *ts, *value, tx_id).unwrap();
     }
     table.commit_versions(tx_id, commit_lsn).unwrap();
 }
@@ -289,7 +283,10 @@ fn test_vacuum_with_max_points_retention_policy() {
 
     // Verify data is still accessible (retention enforcement may vary)
     let count = count_points(&table, series_key, 0, 1000);
-    assert!(count >= 5, "Should have at least 5 points per retention policy");
+    assert!(
+        count >= 5,
+        "Should have at least 5 points per retention policy"
+    );
 }
 
 #[test]
@@ -378,10 +375,7 @@ fn test_vacuum_with_multiple_buckets() {
 
     // Verify data integrity after vacuum
     let count_after = count_points(&table, series_key, 0, 5000);
-    assert_eq!(
-        count_after, 15,
-        "Should still have all points after vacuum"
-    );
+    assert_eq!(count_after, 15, "Should still have all points after vacuum");
 }
 
 #[test]
@@ -427,11 +421,7 @@ fn test_vacuum_expired_data_with_snapshots() {
     let series_key = b"sensor_data";
 
     // Insert initial data
-    let initial_points = vec![
-        (100i64, b"v1" as &[u8]),
-        (200i64, b"v2"),
-        (300i64, b"v3"),
-    ];
+    let initial_points = vec![(100i64, b"v1" as &[u8]), (200i64, b"v2"), (300i64, b"v3")];
     append_points(
         &mut table,
         series_key,
@@ -451,11 +441,7 @@ fn test_vacuum_expired_data_with_snapshots() {
     );
 
     // Add more data
-    let new_points = vec![
-        (400i64, b"v4" as &[u8]),
-        (500i64, b"v5"),
-        (600i64, b"v6"),
-    ];
+    let new_points = vec![(400i64, b"v4" as &[u8]), (500i64, b"v5"), (600i64, b"v6")];
     append_points(
         &mut table,
         series_key,
@@ -474,7 +460,10 @@ fn test_vacuum_expired_data_with_snapshots() {
 
     // Vacuum with higher LSN (snapshot released)
     let removed2 = table.vacuum(LogSequenceNumber::from(3)).unwrap();
-    assert!(removed2 >= 0, "Vacuum should complete after snapshot release");
+    assert!(
+        removed2 >= 0,
+        "Vacuum should complete after snapshot release"
+    );
 }
 
 #[test]
@@ -643,10 +632,7 @@ fn test_vacuum_with_multiple_series() {
     // Verify each series independently
     for series_key in &series_keys {
         let count = count_points(&table, series_key, 0, 500);
-        assert_eq!(
-            count, 5,
-            "Each series should have 5 points after vacuum"
-        );
+        assert_eq!(count, 5, "Each series should have 5 points after vacuum");
     }
 }
 

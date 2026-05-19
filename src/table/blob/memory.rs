@@ -289,7 +289,9 @@ impl MemoryBlob {
         let mut total_removed = 0;
 
         for chain in store.values_mut() {
-            total_removed += chain.vacuum(min_visible_lsn);
+            let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
+            total_removed += removed;
+            // Note: MemoryBlob doesn't use overflow pages, so freed_refs should be empty
         }
 
         Ok(total_removed)

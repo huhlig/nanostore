@@ -36,19 +36,19 @@ use nanokv::vfs::MemoryFileSystem;
 fn create_test_db() -> Database<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
     let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
-    
+
     // Disable background vacuum for manual control in tests
     let mut config = db.vacuum_config();
     config.enabled = false;
     db.set_vacuum_config(config);
-    
+
     db
 }
 
 #[test]
 fn test_lsm_vacuum_requires_immutable_memtable() {
     let db = create_test_db();
-    
+
     // Create LSM table
     let table_id = db
         .create_table(
@@ -59,7 +59,7 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert data into active memtable
     for i in 0..10 {
         let key = format!("key{}", i);
@@ -67,7 +67,7 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
         db.insert(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
-    
+
     // Update to create version chains
     for i in 0..10 {
         let key = format!("key{}", i);
@@ -75,11 +75,11 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
         db.update(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
-    
+
     // Vacuum should fail because memtable is not immutable
     // The LSM implementation requires memtables to be immutable before vacuum
     let result = db.vacuum_table(table_id);
-    
+
     // This should either succeed (if implementation handles active memtable)
     // or fail with a specific error about memtable not being immutable
     match result {
@@ -89,7 +89,10 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
                 let key = format!("key{}", i);
                 let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
                 let expected = format!("value{}_v2", i);
-                assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+                assert_eq!(
+                    value.as_ref().map(|v| v.as_ref()),
+                    Some(expected.as_bytes())
+                );
             }
         }
         Err(e) => {
@@ -103,7 +106,7 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
 #[test]
 fn test_lsm_vacuum_with_immutable_memtables() {
     let db = create_test_db();
-    
+
     // Create LSM table with small memtable size to trigger rotation
     let table_id = db
         .create_table(
@@ -114,7 +117,7 @@ fn test_lsm_vacuum_with_immutable_memtables() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert data
     for i in 0..20 {
         let key = format!("key{:03}", i);
@@ -122,10 +125,12 @@ fn test_lsm_vacuum_with_immutable_memtables() {
         db.insert(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
-    
+
     // Create a snapshot to pin some versions
-    let snapshot = db.create_snapshot("snap1").expect("Failed to create snapshot");
-    
+    let snapshot = db
+        .create_snapshot("snap1")
+        .expect("Failed to create snapshot");
+
     // Update to create new versions
     for i in 0..20 {
         let key = format!("key{:03}", i);
@@ -133,7 +138,7 @@ fn test_lsm_vacuum_with_immutable_memtables() {
         db.update(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
-    
+
     // Force memtable rotation by filling it up
     // This creates immutable memtables that can be vacuumed
     for i in 20..100 {
@@ -141,36 +146,43 @@ fn test_lsm_vacuum_with_immutable_memtables() {
         let value = vec![0u8; 1024]; // Large values to fill memtable
         let _ = db.insert(table_id, key.as_bytes(), &value);
     }
-    
+
     // Now vacuum should work on immutable memtables
     let result = db.vacuum_table(table_id);
-    
+
     // Vacuum may succeed or fail depending on whether there are immutable memtables
     match result {
         Ok(removed) => {
-            println!("Vacuum removed {} versions from immutable memtables", removed);
-            
+            println!(
+                "Vacuum removed {} versions from immutable memtables",
+                removed
+            );
+
             // Verify data is still accessible
             for i in 0..20 {
                 let key = format!("key{:03}", i);
                 let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
                 let expected = format!("value{}_v2", i);
-                assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+                assert_eq!(
+                    value.as_ref().map(|v| v.as_ref()),
+                    Some(expected.as_bytes())
+                );
             }
         }
         Err(e) => {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Clean up
-    db.release_snapshot(snapshot.id).expect("Failed to release snapshot");
+    db.release_snapshot(snapshot.id)
+        .expect("Failed to release snapshot");
 }
 
 #[test]
 fn test_lsm_vacuum_preserves_snapshot_visibility() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -180,7 +192,7 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert initial data
     for i in 0..10 {
         let key = format!("key{}", i);
@@ -188,10 +200,12 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
         db.insert(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
-    
+
     // Create snapshot at this point
-    let snapshot1 = db.create_snapshot("snap1").expect("Failed to create snapshot");
-    
+    let snapshot1 = db
+        .create_snapshot("snap1")
+        .expect("Failed to create snapshot");
+
     // Update all keys
     for i in 0..10 {
         let key = format!("key{}", i);
@@ -199,10 +213,12 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
         db.update(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
-    
+
     // Create another snapshot
-    let snapshot2 = db.create_snapshot("snap2").expect("Failed to create snapshot");
-    
+    let snapshot2 = db
+        .create_snapshot("snap2")
+        .expect("Failed to create snapshot");
+
     // Update again
     for i in 0..10 {
         let key = format!("key{}", i);
@@ -210,27 +226,32 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
         db.update(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
-    
+
     // Vacuum should preserve versions visible to snapshots
     let _ = db.vacuum_table(table_id);
-    
+
     // Verify current data is accessible
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         let expected = format!("value{}_v3", i);
-        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+        assert_eq!(
+            value.as_ref().map(|v| v.as_ref()),
+            Some(expected.as_bytes())
+        );
     }
-    
+
     // Clean up
-    db.release_snapshot(snapshot1.id).expect("Failed to release");
-    db.release_snapshot(snapshot2.id).expect("Failed to release");
+    db.release_snapshot(snapshot1.id)
+        .expect("Failed to release");
+    db.release_snapshot(snapshot2.id)
+        .expect("Failed to release");
 }
 
 #[test]
 fn test_lsm_vacuum_with_tombstones() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -240,7 +261,7 @@ fn test_lsm_vacuum_with_tombstones() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert keys
     for i in 0..20 {
         let key = format!("key{}", i);
@@ -248,17 +269,17 @@ fn test_lsm_vacuum_with_tombstones() {
         db.insert(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
-    
+
     // Delete half the keys (creates tombstones)
     for i in 0..10 {
         let key = format!("key{}", i);
         db.delete(table_id, key.as_bytes())
             .expect("Failed to delete");
     }
-    
+
     // Vacuum should handle tombstones
     let result = db.vacuum_table(table_id);
-    
+
     match result {
         Ok(removed) => {
             println!("Vacuum removed {} versions including tombstones", removed);
@@ -267,27 +288,30 @@ fn test_lsm_vacuum_with_tombstones() {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Verify deleted keys are still deleted
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         assert_eq!(value, None, "Deleted key should return None");
     }
-    
+
     // Verify remaining keys are accessible
     for i in 10..20 {
         let key = format!("key{}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         let expected = format!("value{}", i);
-        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+        assert_eq!(
+            value.as_ref().map(|v| v.as_ref()),
+            Some(expected.as_bytes())
+        );
     }
 }
 
 #[test]
 fn test_lsm_sstable_compaction_cleans_old_versions() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -297,7 +321,7 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert a large amount of data to trigger memtable flushes
     // This will create SSTables
     for batch in 0..5 {
@@ -308,7 +332,7 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
                 .expect("Failed to insert");
         }
     }
-    
+
     // Update some keys to create multiple versions
     for i in 0..50 {
         let key = format!("key{:05}", i);
@@ -316,14 +340,14 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
         db.update(table_id, key.as_bytes(), &value)
             .expect("Failed to update");
     }
-    
+
     // Note: In a real LSM implementation, compaction would be triggered
     // automatically or manually to merge SSTables and remove old versions.
     // Vacuum only affects memtables, not SSTables.
-    
+
     // Vacuum memtables (won't affect SSTables)
     let result = db.vacuum_table(table_id);
-    
+
     match result {
         Ok(removed) => {
             println!("Vacuum removed {} versions from memtables", removed);
@@ -332,7 +356,7 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Verify data is still accessible
     for i in 0..50 {
         let key = format!("key{:05}", i);
@@ -344,7 +368,7 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
 #[test]
 fn test_lsm_vacuum_empty_table() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -354,10 +378,10 @@ fn test_lsm_vacuum_empty_table() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Vacuum empty LSM table
     let result = db.vacuum_table(table_id);
-    
+
     match result {
         Ok(removed) => {
             assert_eq!(removed, 0, "Empty table should have no versions to remove");
@@ -372,7 +396,7 @@ fn test_lsm_vacuum_empty_table() {
 #[test]
 fn test_lsm_vacuum_with_multiple_version_chains() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -382,15 +406,15 @@ fn test_lsm_vacuum_with_multiple_version_chains() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Create long version chains for multiple keys
     for key_idx in 0..5 {
         let key = format!("key{}", key_idx);
-        
+
         // Insert initial version
         db.insert(table_id, key.as_bytes(), b"v1")
             .expect("Failed to insert");
-        
+
         // Create multiple versions
         for version in 2..=10 {
             let value = format!("v{}", version);
@@ -398,10 +422,10 @@ fn test_lsm_vacuum_with_multiple_version_chains() {
                 .expect("Failed to update");
         }
     }
-    
+
     // Vacuum should clean up old versions
     let result = db.vacuum_table(table_id);
-    
+
     match result {
         Ok(removed) => {
             println!("Vacuum removed {} old versions", removed);
@@ -410,7 +434,7 @@ fn test_lsm_vacuum_with_multiple_version_chains() {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Verify latest versions are still accessible
     for key_idx in 0..5 {
         let key = format!("key{}", key_idx);
@@ -422,7 +446,7 @@ fn test_lsm_vacuum_with_multiple_version_chains() {
 #[test]
 fn test_lsm_vacuum_coordination_with_compaction() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -432,7 +456,7 @@ fn test_lsm_vacuum_coordination_with_compaction() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert data across multiple levels
     // L0: Recent writes in memtable
     for i in 0..50 {
@@ -441,7 +465,7 @@ fn test_lsm_vacuum_coordination_with_compaction() {
         db.insert(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
-    
+
     // Update to create versions
     for i in 0..50 {
         let key = format!("key{:03}", i);
@@ -449,14 +473,14 @@ fn test_lsm_vacuum_coordination_with_compaction() {
         db.update(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
-    
+
     // Vacuum memtables
     let vacuum_result = db.vacuum_table(table_id);
-    
+
     match vacuum_result {
         Ok(removed) => {
             println!("Vacuum removed {} versions from memtables", removed);
-            
+
             // Note: In a full implementation, compaction would be triggered
             // to merge SSTables and remove old versions at the SSTable level.
             // Vacuum and compaction work together:
@@ -467,20 +491,23 @@ fn test_lsm_vacuum_coordination_with_compaction() {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Verify data integrity
     for i in 0..50 {
         let key = format!("key{:03}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         let expected = format!("value{}_v2", i);
-        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+        assert_eq!(
+            value.as_ref().map(|v| v.as_ref()),
+            Some(expected.as_bytes())
+        );
     }
 }
 
 #[test]
 fn test_lsm_vacuum_respects_min_visible_lsn() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -490,7 +517,7 @@ fn test_lsm_vacuum_respects_min_visible_lsn() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert initial data
     for i in 0..10 {
         let key = format!("key{}", i);
@@ -498,10 +525,12 @@ fn test_lsm_vacuum_respects_min_visible_lsn() {
         db.insert(table_id, key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
-    
+
     // Create snapshot to establish min_visible_lsn
-    let snapshot = db.create_snapshot("snap1").expect("Failed to create snapshot");
-    
+    let snapshot = db
+        .create_snapshot("snap1")
+        .expect("Failed to create snapshot");
+
     // Update all keys multiple times
     for version in 2..=5 {
         for i in 0..10 {
@@ -511,35 +540,42 @@ fn test_lsm_vacuum_respects_min_visible_lsn() {
                 .expect("Failed to update");
         }
     }
-    
+
     // Vacuum should respect the snapshot's LSN
     let result = db.vacuum_table(table_id);
-    
+
     match result {
         Ok(removed) => {
-            println!("Vacuum removed {} versions while respecting min_visible_lsn", removed);
+            println!(
+                "Vacuum removed {} versions while respecting min_visible_lsn",
+                removed
+            );
         }
         Err(e) => {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Verify latest data is accessible
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         let expected = format!("v5_{}", i);
-        assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(expected.as_bytes()));
+        assert_eq!(
+            value.as_ref().map(|v| v.as_ref()),
+            Some(expected.as_bytes())
+        );
     }
-    
+
     // Clean up
-    db.release_snapshot(snapshot.id).expect("Failed to release snapshot");
+    db.release_snapshot(snapshot.id)
+        .expect("Failed to release snapshot");
 }
 
 #[test]
 fn test_lsm_vacuum_after_memtable_flush() {
     let db = create_test_db();
-    
+
     let table_id = db
         .create_table(
             "lsm_table",
@@ -549,7 +585,7 @@ fn test_lsm_vacuum_after_memtable_flush() {
             },
         )
         .expect("Failed to create table");
-    
+
     // Insert enough data to potentially trigger memtable flush
     for i in 0..200 {
         let key = format!("key{:05}", i);
@@ -557,7 +593,7 @@ fn test_lsm_vacuum_after_memtable_flush() {
         db.insert(table_id, key.as_bytes(), &value)
             .expect("Failed to insert");
     }
-    
+
     // Update some keys
     for i in 0..50 {
         let key = format!("key{:05}", i);
@@ -565,11 +601,11 @@ fn test_lsm_vacuum_after_memtable_flush() {
         db.update(table_id, key.as_bytes(), &value)
             .expect("Failed to update");
     }
-    
+
     // After flush, memtables become immutable and can be vacuumed
     // (or they're converted to SSTables)
     let result = db.vacuum_table(table_id);
-    
+
     match result {
         Ok(removed) => {
             println!("Vacuum removed {} versions after flush", removed);
@@ -578,7 +614,7 @@ fn test_lsm_vacuum_after_memtable_flush() {
             println!("Vacuum failed: {:?}", e);
         }
     }
-    
+
     // Verify data integrity
     for i in 0..50 {
         let key = format!("key{:05}", i);

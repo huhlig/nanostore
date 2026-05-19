@@ -382,8 +382,14 @@ impl<FS: FileSystem> PagedBlob<FS> {
                 current = version.prev_version.as_ref();
             }
 
-            // Vacuum the chain
-            total_removed += chain.vacuum(min_visible_lsn);
+            // Vacuum the chain and free overflow pages
+            let (removed, freed_refs) = chain.vacuum(min_visible_lsn);
+            total_removed += removed;
+
+            // Free overflow pages for removed external values
+            if !freed_refs.is_empty() {
+                self.pager.free_value_refs(&freed_refs)?;
+            }
         }
 
         // Free orphaned blob pages

@@ -160,22 +160,19 @@ pub mod btree {
     /// Record node read latency.
     #[inline]
     pub fn record_node_read_duration(start: Instant) {
-        histogram!("nanokv.table.btree.node_read_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.btree.node_read_duration").record(start.elapsed().as_secs_f64());
     }
 
     /// Record node write latency.
     #[inline]
     pub fn record_node_write_duration(start: Instant) {
-        histogram!("nanokv.table.btree.node_write_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.btree.node_write_duration").record(start.elapsed().as_secs_f64());
     }
 
     /// Record search operation latency.
     #[inline]
     pub fn record_search_duration(start: Instant) {
-        histogram!("nanokv.table.btree.search_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.btree.search_duration").record(start.elapsed().as_secs_f64());
     }
 }
 
@@ -252,15 +249,13 @@ pub mod lsm {
     /// Record memtable flush latency.
     #[inline]
     pub fn record_flush_duration(start: Instant) {
-        histogram!("nanokv.table.lsm.flush_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.lsm.flush_duration").record(start.elapsed().as_secs_f64());
     }
 
     /// Record compaction latency.
     #[inline]
     pub fn record_compaction_duration(start: Instant) {
-        histogram!("nanokv.table.lsm.compaction_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.lsm.compaction_duration").record(start.elapsed().as_secs_f64());
     }
 }
 
@@ -378,8 +373,7 @@ pub mod rtree {
     /// Record spatial query latency.
     #[inline]
     pub fn record_query_duration(start: Instant) {
-        histogram!("nanokv.table.rtree.query_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.rtree.query_duration").record(start.elapsed().as_secs_f64());
     }
 }
 
@@ -444,8 +438,7 @@ pub mod timeseries {
     /// Record append operation latency.
     #[inline]
     pub fn record_append_duration(start: Instant) {
-        histogram!("nanokv.table.timeseries.append_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.timeseries.append_duration").record(start.elapsed().as_secs_f64());
     }
 
     /// Record aggregation query latency.
@@ -505,8 +498,7 @@ pub mod hnsw {
     /// Record vector search latency.
     #[inline]
     pub fn record_search_duration(start: Instant) {
-        histogram!("nanokv.table.hnsw.search_duration")
-            .record(start.elapsed().as_secs_f64());
+        histogram!("nanokv.table.hnsw.search_duration").record(start.elapsed().as_secs_f64());
     }
 }
 

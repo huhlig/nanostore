@@ -30,7 +30,7 @@ use crate::wal::LogSequenceNumber;
 pub enum VersionValue {
     /// Value stored inline in the version chain (for small values)
     Inline(Vec<u8>),
-    
+
     /// Value stored externally in overflow pages (for large values)
     /// The ValueRef contains the page location information
     External(ValueRef),
@@ -41,22 +41,22 @@ impl VersionValue {
     pub fn inline(data: Vec<u8>) -> Self {
         Self::Inline(data)
     }
-    
+
     /// Create an external version value with a ValueRef.
     pub fn external(value_ref: ValueRef) -> Self {
         Self::External(value_ref)
     }
-    
+
     /// Check if this is an inline value.
     pub fn is_inline(&self) -> bool {
         matches!(self, Self::Inline(_))
     }
-    
+
     /// Check if this is an external value.
     pub fn is_external(&self) -> bool {
         matches!(self, Self::External(_))
     }
-    
+
     /// Get the inline data if this is an inline value.
     pub fn as_inline(&self) -> Option<&[u8]> {
         match self {
@@ -64,7 +64,7 @@ impl VersionValue {
             Self::External(_) => None,
         }
     }
-    
+
     /// Get the ValueRef if this is an external value.
     pub fn as_external(&self) -> Option<&ValueRef> {
         match self {
@@ -72,7 +72,7 @@ impl VersionValue {
             Self::External(value_ref) => Some(value_ref),
         }
     }
-    
+
     /// Get a size hint for the value.
     pub fn size_hint(&self) -> Option<u64> {
         match self {
@@ -80,7 +80,7 @@ impl VersionValue {
             Self::External(value_ref) => value_ref.size_hint(),
         }
     }
-    
+
     /// Check if this is an empty value (for tombstone detection).
     pub fn is_empty(&self) -> bool {
         match self {
@@ -92,17 +92,15 @@ impl VersionValue {
             }
         }
     }
-    
+
     /// Get the length of the value in bytes.
     pub fn len(&self) -> usize {
         match self {
             Self::Inline(data) => data.len(),
-            Self::External(value_ref) => {
-                value_ref.size_hint().map_or(0, |size| size as usize)
-            }
+            Self::External(value_ref) => value_ref.size_hint().map_or(0, |size| size as usize),
         }
     }
-    
+
     /// Convert to a Vec<u8> if this is an inline value.
     /// Returns None for external values (caller must read from overflow pages).
     pub fn to_vec(&self) -> Option<Vec<u8>> {
@@ -111,7 +109,7 @@ impl VersionValue {
             Self::External(_) => None,
         }
     }
-    
+
     /// Get inline data as a slice, or None for external values.
     pub fn as_slice(&self) -> Option<&[u8]> {
         match self {
@@ -170,7 +168,7 @@ impl VersionChain {
             prev_version: None,
         }
     }
-    
+
     /// Create a new version chain entry with external value (ValueRef)
     pub fn new_external(value_ref: ValueRef, created_by: TransactionId) -> Self {
         Self {
@@ -195,7 +193,7 @@ impl VersionChain {
             prev_version: Some(Box::new(self)),
         }
     }
-    
+
     /// Add a new external version to the front of the chain
     pub fn prepend_external(self, value_ref: ValueRef, created_by: TransactionId) -> Self {
         Self {
@@ -229,7 +227,7 @@ impl VersionChain {
 
         None
     }
-    
+
     /// Find the newest visible inline value.
     ///
     /// This is a convenience method for callers that only want inline values.
@@ -253,7 +251,7 @@ impl VersionChain {
     /// This method only identifies which ValueRefs need cleanup.
     pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> (usize, Vec<ValueRef>) {
         let mut freed_refs = Vec::new();
-        
+
         fn retain_obsolete_versions(
             node: &VersionChain,
             min_visible_lsn: LogSequenceNumber,
@@ -278,7 +276,7 @@ impl VersionChain {
 
             let is_obsolete = matches!(node.commit_lsn, Some(lsn) if lsn < min_visible_lsn);
             let will_be_removed = is_obsolete && !keep_this_obsolete;
-            
+
             // Track external values that will be removed so caller can free overflow pages
             if will_be_removed {
                 if let VersionValue::External(value_ref) = &node.value {
@@ -325,24 +323,29 @@ impl VersionChain {
         }
 
         let mut keep_obsolete_budget = 1;
-        *self = retain_obsolete_versions(self, min_visible_lsn, &mut keep_obsolete_budget, &mut freed_refs);
+        *self = retain_obsolete_versions(
+            self,
+            min_visible_lsn,
+            &mut keep_obsolete_budget,
+            &mut freed_refs,
+        );
         (removed, freed_refs)
     }
-    
+
     /// Collect all external ValueRefs in this version chain.
     ///
     /// This is useful for operations that need to track or free overflow pages.
     pub fn collect_external_refs(&self) -> Vec<ValueRef> {
         let mut refs = Vec::new();
         let mut current = Some(self);
-        
+
         while let Some(version) = current {
             if let VersionValue::External(value_ref) = &version.value {
                 refs.push(*value_ref);
             }
             current = version.prev_version.as_deref();
         }
-        
+
         refs
     }
 }

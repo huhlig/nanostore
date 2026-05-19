@@ -982,6 +982,88 @@ impl<FS: FileSystem> Pager<FS> {
 
         Ok(())
     }
+
+    /// Free overflow pages referenced by a ValueRef
+    ///
+    /// This is a convenience method for vacuum operations that need to clean up
+    /// external values. It handles both SinglePage and OverflowChain variants.
+    ///
+    /// # Arguments
+    /// * `value_ref` - The ValueRef to free
+    ///
+    /// # Returns
+    /// * `Ok(usize)` - Number of pages freed
+    /// * `Err(PagerError)` - If freeing fails
+    #[instrument(skip(self))]
+    pub fn free_value_ref(&self, value_ref: &crate::types::ValueRef) -> PagerResult<usize> {
+        use crate::types::ValueRef;
+
+        match value_ref {
+            ValueRef::Inline => {
+                // Inline values don't use overflow pages
+                Ok(0)
+            }
+            ValueRef::SinglePage { page_id, .. } => {
+                // Free single overflow page
+                self.free_page(PageId::from(*page_id as u64))?;
+                counter!("pager.vacuum_pages_freed").increment(1);
+                Ok(1)
+            }
+            ValueRef::OverflowChain {
+                first_page_id,
+                page_count,
+                ..
+            } => {
+                // Free entire overflow chain
+                self.free_overflow_chain(PageId::from(*first_page_id as u64))?;
+                counter!("pager.vacuum_pages_freed").increment(*page_count as u64);
+                Ok(*page_count as usize)
+            }
+        }
+    }
+
+    /// Free multiple overflow pages referenced by ValueRefs
+    ///
+    /// This is a batch operation for vacuum that processes multiple freed values.
+    /// It continues on error and returns the total number of pages freed and any errors.
+    ///
+    /// # Arguments
+    /// * `value_refs` - Slice of ValueRefs to free
+    ///
+    /// # Returns
+    /// * `Ok(usize)` - Total number of pages freed
+    /// * `Err(PagerError)` - If any freeing operation fails (after attempting all)
+    #[instrument(skip(self, value_refs), fields(count = value_refs.len()))]
+    pub fn free_value_refs(&self, value_refs: &[crate::types::ValueRef]) -> PagerResult<usize> {
+        let mut total_freed = 0;
+        let mut errors = Vec::new();
+
+        for (idx, value_ref) in value_refs.iter().enumerate() {
+            match self.free_value_ref(value_ref) {
+                Ok(freed) => total_freed += freed,
+                Err(e) => {
+                    warn!("Failed to free ValueRef at index {}: {:?}", idx, e);
+                    errors.push((idx, e));
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            // Return first error but log that we had multiple
+            warn!(
+                "Failed to free {} out of {} ValueRefs",
+                errors.len(),
+                value_refs.len()
+            );
+            return Err(errors.into_iter().next().unwrap().1);
+        }
+
+        counter!("pager.vacuum_batch_freed").increment(1);
+        histogram!("pager.vacuum_batch_size").record(value_refs.len() as f64);
+        histogram!("pager.vacuum_total_pages_freed").record(total_freed as f64);
+
+        Ok(total_freed)
+    }
 }
 
 #[cfg(test)]

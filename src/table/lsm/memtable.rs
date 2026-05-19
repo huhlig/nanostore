@@ -381,7 +381,7 @@ impl Memtable {
     /// Estimate the memory size of a version chain.
     fn estimate_chain_size(chain: &VersionChain) -> usize {
         let mut size = std::mem::size_of::<VersionChain>();
-        
+
         // Add size of the value in the chain
         size += match &chain.value {
             VersionValue::Inline(data) => data.len(),
@@ -390,16 +390,14 @@ impl Memtable {
                 std::mem::size_of_val(value_ref)
             }
         };
-        
+
         let mut current = chain.prev_version.as_deref();
 
         while let Some(version) = current {
             size += std::mem::size_of::<VersionChain>();
             size += match &version.value {
                 VersionValue::Inline(data) => data.len(),
-                VersionValue::External(value_ref) => {
-                    std::mem::size_of_val(value_ref)
-                }
+                VersionValue::External(value_ref) => std::mem::size_of_val(value_ref),
             };
             current = version.prev_version.as_deref();
         }

@@ -31,10 +31,10 @@
 use crate::pager::{Page, PageId, PageType, Pager};
 use crate::snap::Snapshot;
 use crate::table::{
-    BatchOps, BatchReport, DenseOrdered, Flushable, MutableTable, OrderedScan,
-    PointLookup, SearchableTable, SpecialtyTableCapabilities, SpecialtyTableCursor,
-    SpecialtyTableStats, Table, TableCapabilities, TableCursor, TableEngineKind, TableReader,
-    TableResult, TableStatistics, TableWriter, VerificationReport, WriteBatch,
+    BatchOps, BatchReport, DenseOrdered, Flushable, MutableTable, OrderedScan, PointLookup,
+    SearchableTable, SpecialtyTableCapabilities, SpecialtyTableCursor, SpecialtyTableStats, Table,
+    TableCapabilities, TableCursor, TableEngineKind, TableError, TableReader, TableResult,
+    TableStatistics, TableWriter, VerificationReport, WriteBatch,
 };
 use crate::txn::{TransactionId, VersionChain};
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
@@ -2673,10 +2673,15 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 mut entries,
                 next_leaf,
             } => {
-                // Vacuum each entry's version chain
+                // Vacuum each entry's version chain and free overflow pages
                 for entry in &mut entries {
-                    let (removed, _freed_refs) = entry.chain.vacuum(min_visible_lsn);
+                    let (removed, freed_refs) = entry.chain.vacuum(min_visible_lsn);
                     total_removed += removed;
+
+                    // Free overflow pages for removed external values
+                    if !freed_refs.is_empty() {
+                        self.pager.free_value_refs(&freed_refs)?;
+                    }
                 }
 
                 // Write the updated node back to disk
