@@ -77,9 +77,11 @@ pub use crate::table::bloom::{BloomFilter, BloomFilterBuilder};
 use crate::pager::{PageId, Pager};
 use crate::table::error::{TableError, TableResult};
 use crate::table::{
-    BatchOps, BatchReport, Flushable, MutableTable, OrderedScan, PointLookup, Table,
+    BatchOps, BatchReport, ConsistencyError, ConsistencyErrorType, ConsistencyWarning,
+    DenseOrdered, Flushable, MutableTable, OrderedScan, PointLookup, Severity,
+    SpecialtyTableCapabilities, SpecialtyTableCursor, SpecialtyTableStats, Table,
     TableCapabilities, TableCursor, TableEngineKind, TableReader, TableStatistics, TableWriter,
-    ValueStream, WriteBatch,
+    VerificationReport, ValueStream, WriteBatch,
 };
 use crate::txn::TransactionId;
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
@@ -722,7 +724,7 @@ impl<'a, FS: FileSystem> TableReader for LsmReader<'a, FS> {
     }
 
     fn approximate_len(&self) -> TableResult<Option<u64>> {
-        let stats = self.tree.stats()?;
+        let stats = <LsmTree<FS> as Table>::stats(self.tree)?;
         Ok(stats.row_count)
     }
 }
@@ -1011,6 +1013,222 @@ impl<'a, FS: FileSystem> LsmCursor<'a, FS> {
         }
 
         Ok(())
+    }
+}
+
+// =============================================================================
+// DenseOrdered Specialty Table Implementation
+// =============================================================================
+
+/// Specialty cursor for LSM-based secondary indexes.
+///
+/// Merges results from memtables and SSTables across all levels,
+/// maintaining proper MVCC visibility and ordering.
+pub struct LsmSpecialtyCursor<'a, FS: FileSystem> {
+    inner: LsmCursor<'a, FS>,
+}
+
+impl<'a, FS: FileSystem> SpecialtyTableCursor for LsmSpecialtyCursor<'a, FS> {
+    fn valid(&self) -> bool {
+        self.inner.valid()
+    }
+
+    fn index_key(&self) -> Option<&[u8]> {
+        self.inner.key()
+    }
+
+    fn primary_key(&self) -> Option<&[u8]> {
+        self.inner.value()
+    }
+
+    fn next(&mut self) -> TableResult<()> {
+        self.inner.next()
+    }
+
+    fn prev(&mut self) -> TableResult<()> {
+        self.inner.prev()
+    }
+
+    fn seek(&mut self, index_key: &[u8]) -> TableResult<()> {
+        self.inner.seek(index_key)
+    }
+}
+
+impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
+    type Cursor<'a> = LsmSpecialtyCursor<'a, FS> where FS: 'a;
+
+    fn table_id(&self) -> TableId {
+        self.table_id
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn capabilities(&self) -> SpecialtyTableCapabilities {
+        SpecialtyTableCapabilities {
+            exact: true,
+            approximate: false,
+            ordered: true,
+            sparse: false,
+            supports_delete: true,
+            supports_range_query: true,
+            supports_prefix_query: true,
+            supports_scoring: false,
+            supports_incremental_rebuild: false,
+            may_be_stale: false,
+        }
+    }
+
+    fn insert_entry(
+        &mut self,
+        index_key: &[u8],
+        primary_key: &[u8],
+        tx_id: TransactionId,
+        commit_lsn: LogSequenceNumber,
+    ) -> TableResult<()> {
+        // For a secondary index, we store: index_key -> primary_key
+        // This allows lookups by the indexed field to find the primary key
+        self.insert_internal(
+            index_key.to_vec(),
+            primary_key.to_vec(),
+            tx_id,
+            Some(commit_lsn),
+        )
+    }
+
+    fn delete_entry(
+        &mut self,
+        index_key: &[u8],
+        _primary_key: &[u8],
+        tx_id: TransactionId,
+        commit_lsn: LogSequenceNumber,
+    ) -> TableResult<()> {
+        // For secondary indexes, we delete by inserting a tombstone
+        // The LSM tree's compaction will eventually remove the entry
+        self.delete_internal(index_key.to_vec(), tx_id, Some(commit_lsn))
+    }
+
+    fn scan(&self, bounds: ScanBounds) -> TableResult<Self::Cursor<'_>> {
+        // Create cursor directly without intermediate reader to avoid lifetime issues
+        let inner = LsmCursor::new(self, bounds, LogSequenceNumber::from(u64::MAX))?;
+        Ok(LsmSpecialtyCursor { inner })
+    }
+
+    fn stats(&self) -> TableResult<SpecialtyTableStats> {
+        let table_stats = <LsmTree<FS> as Table>::stats(self)?;
+        
+        // Estimate entry count from memtable and SSTables
+        let memtable_entries = {
+            let memtable = self.active_memtable.read().unwrap();
+            memtable.len() as u64
+        };
+        
+        let immutable_entries: u64 = {
+            let immutable = self.immutable_memtables.read().unwrap();
+            immutable.iter().map(|m| m.len() as u64).sum()
+        };
+        
+        // Get SSTable entry counts from manifest
+        let version = self.manifest.current();
+        let mut sstable_entries = 0u64;
+        for level in 0..version.num_levels() {
+            let files = version.level_files(level as u32);
+            sstable_entries += files.iter().map(|f| f.num_entries).sum::<u64>();
+        }
+        
+        let total_entries = memtable_entries + immutable_entries + sstable_entries;
+        
+        Ok(SpecialtyTableStats {
+            entry_count: Some(total_entries),
+            size_bytes: table_stats.total_size_bytes,
+            distinct_keys: None,
+            stale_entries: None,
+            last_updated_lsn: None,
+        })
+    }
+
+    fn verify(&self) -> TableResult<VerificationReport> {
+        let mut report = VerificationReport {
+            checked_items: 0,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        };
+
+        // Verify memtable
+        let memtable = self.active_memtable.read().unwrap();
+        if memtable.is_immutable() {
+            report.warnings.push(ConsistencyWarning {
+                location: "active_memtable".to_string(),
+                description: "Active memtable is marked as immutable".to_string(),
+            });
+        }
+        report.checked_items += 1;
+
+        // Verify immutable memtables
+        let immutable = self.immutable_memtables.read().unwrap();
+        for (i, memtable) in immutable.iter().enumerate() {
+            if !memtable.is_immutable() {
+                report.errors.push(ConsistencyError {
+                    error_type: ConsistencyErrorType::CorruptedIndex,
+                    location: format!("immutable_memtable[{}]", i),
+                    description: format!("Immutable memtable {} is not marked as immutable", i),
+                    severity: Severity::Error,
+                });
+            }
+            report.checked_items += 1;
+        }
+
+        // Verify manifest and SSTables
+        let version = self.manifest.current();
+        
+        // Check level invariants
+        for level in 0..version.num_levels() {
+            let files = version.level_files(level as u32);
+            
+            if level > 0 {
+                // L1+ files should not overlap
+                for i in 0..files.len().saturating_sub(1) {
+                    if files[i].max_key >= files[i + 1].min_key {
+                        report.errors.push(ConsistencyError {
+                            error_type: ConsistencyErrorType::CorruptedIndex,
+                            location: format!("level_{}_files", level),
+                            description: format!(
+                                "Level {} files {} and {} overlap: max_key >= next min_key",
+                                level, i, i + 1
+                            ),
+                            severity: Severity::Error,
+                        });
+                    }
+                    report.checked_items += 1;
+                }
+            }
+            
+            // Verify each file's metadata
+            for (i, file) in files.iter().enumerate() {
+                if file.min_key > file.max_key {
+                    report.errors.push(ConsistencyError {
+                        error_type: ConsistencyErrorType::CorruptedIndex,
+                        location: format!("level_{}_file_{}", level, i),
+                        description: format!(
+                            "Level {} file {}: min_key > max_key",
+                            level, i
+                        ),
+                        severity: Severity::Error,
+                    });
+                }
+                
+                if file.num_entries == 0 {
+                    report.warnings.push(ConsistencyWarning {
+                        location: format!("level_{}_file_{}", level, i),
+                        description: format!("Level {} file {} has zero entries", level, i),
+                    });
+                }
+                report.checked_items += 1;
+            }
+        }
+
+        Ok(report)
     }
 }
 
