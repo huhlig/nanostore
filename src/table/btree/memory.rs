@@ -113,7 +113,7 @@ impl MemoryBTree {
         let mut total_removed = 0;
 
         for (_key, chain) in data.iter_mut() {
-            let removed = chain.vacuum(min_visible_lsn);
+            let (removed, _freed_refs) = chain.vacuum(min_visible_lsn);
             total_removed += removed;
         }
 
@@ -208,7 +208,7 @@ impl<'a> PointLookup for MemoryBTreeReader<'a> {
                 0,
                 Vec::new(),
             );
-            if let Some(value) = chain.find_visible_version(&snapshot) {
+            if let Some(value) = chain.find_visible_inline(&snapshot) {
                 return Ok(Some(ValueBuf(value.to_vec())));
             }
         }
@@ -364,7 +364,7 @@ impl<'a> BatchOps for MemoryBTreeWriter<'a> {
 
         for key in keys {
             if let Some(chain) = data.get(*key) {
-                if let Some(value) = chain.find_visible_version(&snapshot) {
+                if let Some(value) = chain.find_visible_inline(&snapshot) {
                     results.push(Some(ValueBuf(value.to_vec())));
                 } else {
                     results.push(None);
@@ -548,7 +548,7 @@ impl<'a> MemoryBTreeCursor<'a> {
             0,
             Vec::new(),
         );
-        chain.find_visible_version(&snapshot).map(|v| v.to_vec())
+        chain.find_visible_inline(&snapshot).map(|v| v.to_vec())
     }
 }
 
@@ -921,7 +921,7 @@ impl DenseOrdered for MemoryBTree {
                 Vec::new(),
             );
 
-            if let Some(stored_primary_key) = chain.find_visible_version(&snapshot)
+            if let Some(stored_primary_key) = chain.find_visible_inline(&snapshot)
                 && stored_primary_key == primary_key
             {
                 // Remove the entry

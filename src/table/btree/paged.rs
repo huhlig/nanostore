@@ -31,10 +31,10 @@
 use crate::pager::{Page, PageId, PageType, Pager};
 use crate::snap::Snapshot;
 use crate::table::{
-    BatchOps, BatchReport, DenseOrdered, Flushable, KeyStatistics, MutableTable, OrderedScan,
+    BatchOps, BatchReport, DenseOrdered, Flushable, MutableTable, OrderedScan,
     PointLookup, SearchableTable, SpecialtyTableCapabilities, SpecialtyTableCursor,
     SpecialtyTableStats, Table, TableCapabilities, TableCursor, TableEngineKind, TableReader,
-    TableResult, TableStatistics, TableWriter, ValueStatistics, VerificationReport, WriteBatch,
+    TableResult, TableStatistics, TableWriter, VerificationReport, WriteBatch,
 };
 use crate::txn::{TransactionId, VersionChain};
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
@@ -639,7 +639,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 0,
                 Vec::new(),
             );
-            if let Some(value) = entries[pos].chain.find_visible_version(&snapshot) {
+            if let Some(value) = entries[pos].chain.find_visible_inline(&snapshot) {
                 if value.is_empty() {
                     return Ok(None);
                 }
@@ -1668,7 +1668,7 @@ impl<FS: FileSystem> Table for PagedBTree<FS> {
     }
 
     fn stats(&self) -> TableResult<TableStatistics> {
-        let start = Instant::now();
+        let _start = Instant::now();
 
         // Collect statistics by traversing the tree
         let stats = self.collect_tree_statistics()?;
@@ -2113,7 +2113,7 @@ impl<'a, FS: FileSystem> PagedBTreeCursor<'a, FS> {
                     Vec::new(),
                 );
 
-                if let Some(value) = entry.chain.find_visible_version(&snapshot) {
+                if let Some(value) = entry.chain.find_visible_inline(&snapshot) {
                     if value.is_empty() {
                         self.current_key = None;
                         self.current_value = None;
@@ -2537,7 +2537,7 @@ impl<FS: FileSystem> DenseOrdered for PagedBTree<FS> {
                 Vec::new(),
             );
 
-            if let Some(stored_primary_key) = entries[pos].chain.find_visible_version(&snapshot)
+            if let Some(stored_primary_key) = entries[pos].chain.find_visible_inline(&snapshot)
                 && stored_primary_key == primary_key
             {
                 // Remove the entry
@@ -2675,7 +2675,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             } => {
                 // Vacuum each entry's version chain
                 for entry in &mut entries {
-                    let removed = entry.chain.vacuum(min_visible_lsn);
+                    let (removed, _freed_refs) = entry.chain.vacuum(min_visible_lsn);
                     total_removed += removed;
                 }
 
