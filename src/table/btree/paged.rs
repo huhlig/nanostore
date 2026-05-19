@@ -37,9 +37,10 @@ use crate::table::{
     TableStatistics, TableWriter, VerificationReport, WriteBatch,
 };
 use crate::txn::{TransactionId, VersionChain};
-use crate::types::{Bound, ScanBounds, TableId, ValueBuf};
+use crate::types::{Bound, ScanBounds, TableId, ValueBuf, ValueRef};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tracing::{debug, instrument};
@@ -643,6 +644,39 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 if value.is_empty() {
                     return Ok(None);
                 }
+                
+                // Check if this is an encoded ValueRef (external value)
+                if value.len() >= 1 && (value[0] == 0x01 || value[0] == 0x02) {
+                    // Try to decode as ValueRef
+                    if let Ok(value_ref) = ValueRef::decode(value) {
+                        if value_ref.requires_overflow() {
+                            // Read from overflow pages
+                            match value_ref {
+                                ValueRef::SinglePage { page_id, offset, length } => {
+                                    let page = self.pager.read_page(PageId::from(page_id as u64))?;
+                                    let data = &page.data()[offset as usize..offset as usize + length as usize];
+                                    return Ok(Some(ValueBuf(data.to_vec())));
+                                }
+                                ValueRef::OverflowChain { first_page_id, total_length, .. } => {
+                                    let data = self.pager.read_overflow_chain(PageId::from(first_page_id as u64))?;
+                                    if data.len() != total_length as usize {
+                                        return Err(TableError::corruption(
+                                            "get_internal",
+                                            "overflow_chain_length_mismatch",
+                                            format!("Expected {} bytes, got {}", total_length, data.len()),
+                                        ));
+                                    }
+                                    return Ok(Some(ValueBuf(data)));
+                                }
+                                ValueRef::Inline => {
+                                    // This shouldn't happen, but fall through to return the raw value
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Return inline value
                 return Ok(Some(ValueBuf(value.to_vec())));
             }
         }
@@ -1726,6 +1760,7 @@ impl<FS: FileSystem> SearchableTable for PagedBTree<FS> {
             tx_id,
             snapshot_lsn,
             pending_changes: Vec::new(),
+            streaming_contexts: HashMap::new(),
         })
     }
 }
@@ -1740,6 +1775,76 @@ pub struct PagedBTreeReader<'a, FS: FileSystem> {
     snapshot_lsn: LogSequenceNumber,
 }
 
+/// Stream for reading a value from a single overflow page
+struct SinglePageStream<'a, FS: FileSystem> {
+    pager: &'a Pager<FS>,
+    page_id: PageId,
+    offset: usize,
+    length: usize,
+    position: usize,
+    buffer: Option<Vec<u8>>,
+}
+
+impl<'a, FS: FileSystem> SinglePageStream<'a, FS> {
+    fn new(pager: &'a Pager<FS>, page_id: PageId, offset: usize, length: usize) -> Self {
+        Self {
+            pager,
+            page_id,
+            offset,
+            length,
+            position: 0,
+            buffer: None,
+        }
+    }
+
+    fn load_data(&mut self) -> TableResult<()> {
+        if self.buffer.is_some() {
+            return Ok(());
+        }
+
+        let page = self.pager.read_page(self.page_id)
+            .map_err(TableError::Pager)?;
+        
+        if self.offset + self.length > page.data().len() {
+            return Err(TableError::corruption(
+                format!("SinglePage at page {}", self.page_id.as_u64()),
+                "value_overflow",
+                format!(
+                    "Value extends beyond page boundary: offset={}, length={}, page_size={}",
+                    self.offset, self.length, page.data().len()
+                ),
+            ));
+        }
+
+        let data = &page.data()[self.offset..self.offset + self.length];
+        self.buffer = Some(data.to_vec());
+        Ok(())
+    }
+}
+
+impl<'a, FS: FileSystem> crate::table::ValueStream for SinglePageStream<'a, FS> {
+    fn read(&mut self, buf: &mut [u8]) -> TableResult<usize> {
+        // Load data on first read
+        self.load_data()?;
+
+        let buffer = self.buffer.as_ref().unwrap();
+        let remaining = buffer.len() - self.position;
+        
+        if remaining == 0 {
+            return Ok(0);
+        }
+
+        let to_copy = remaining.min(buf.len());
+        buf[..to_copy].copy_from_slice(&buffer[self.position..self.position + to_copy]);
+        self.position += to_copy;
+        Ok(to_copy)
+    }
+
+    fn size_hint(&self) -> Option<u64> {
+        Some(self.length as u64)
+    }
+}
+
 impl<'a, FS: FileSystem> PointLookup for PagedBTreeReader<'a, FS> {
     fn get(&self, key: &[u8], snapshot_lsn: LogSequenceNumber) -> TableResult<Option<ValueBuf>> {
         self.table.get_internal(key, snapshot_lsn)
@@ -1750,17 +1855,58 @@ impl<'a, FS: FileSystem> PointLookup for PagedBTreeReader<'a, FS> {
         key: &[u8],
         snapshot_lsn: LogSequenceNumber,
     ) -> TableResult<Option<Box<dyn crate::table::ValueStream + '_>>> {
+        use crate::pager::OverflowChainStream;
         use crate::table::SliceValueStream;
 
-        // For now, use default implementation that loads the full value
-        // TODO: Implement true streaming with ValueRef and overflow chains
-        // This requires modifying VersionChain to store ValueRef information
-        self.get(key, snapshot_lsn).map(|opt| {
-            opt.map(|value_buf| {
-                Box::new(SliceValueStream::new(value_buf.0))
-                    as Box<dyn crate::table::ValueStream + '_>
-            })
-        })
+        // Get the value using existing get_internal
+        let value_opt = self.table.get_internal(key, snapshot_lsn)?;
+        
+        match value_opt {
+            None => Ok(None),
+            Some(value_buf) => {
+                let value = &value_buf.0;
+                
+                // Check if this is an encoded ValueRef
+                // ValueRef encoding: 0x01 = SinglePage, 0x02 = OverflowChain, 0x00 = Inline
+                if value.len() >= 1 && (value[0] == 0x01 || value[0] == 0x02) {
+                    // Decode ValueRef
+                    let value_ref = ValueRef::decode(value)
+                        .map_err(|e| TableError::corruption(
+                            "ValueRef decode",
+                            "invalid_encoding",
+                            format!("Failed to decode ValueRef: {:?}", e)
+                        ))?;
+                    
+                    match value_ref {
+                        ValueRef::SinglePage { page_id, offset, length } => {
+                            // Return stream for single page
+                            Ok(Some(Box::new(SinglePageStream::new(
+                                &self.table.pager,
+                                PageId::from(page_id as u64),
+                                offset as usize,
+                                length as usize,
+                            ))))
+                        }
+                        ValueRef::OverflowChain { first_page_id, total_length, .. } => {
+                            // Return stream for overflow chain
+                            Ok(Some(Box::new(OverflowChainStream::new(
+                                &self.table.pager,
+                                PageId::from(first_page_id as u64),
+                                total_length,
+                            ))))
+                        }
+                        ValueRef::Inline => {
+                            // This shouldn't happen - inline values aren't encoded as ValueRef
+                            // Return the raw value as a stream
+                            Ok(Some(Box::new(SliceValueStream::new(value.to_vec()))))
+                        }
+                    }
+                } else {
+                    // Regular inline value - return as stream
+                    Ok(Some(Box::new(SliceValueStream::new(value.to_vec()))))
+                }
+            }
+        }
     }
 }
 
@@ -1789,18 +1935,160 @@ impl<'a, FS: FileSystem> TableReader for PagedBTreeReader<'a, FS> {
     }
 }
 
+// =============================================================================
+// Streaming Infrastructure
+// =============================================================================
+
+/// Represents a pending change in the writer's buffer.
+#[derive(Debug, Clone)]
+enum PendingChange {
+    /// Insert/update with inline value
+    Inline {
+        key: Vec<u8>,
+        value: Vec<u8>,
+    },
+    /// Insert/update with external value (already written to overflow pages)
+    External {
+        key: Vec<u8>,
+        value_ref: ValueRef,
+    },
+    /// Delete operation
+    Delete {
+        key: Vec<u8>,
+    },
+}
+
+/// Context for streaming a value to overflow pages.
+/// Tracks allocated pages for rollback capability.
+#[derive(Debug)]
+struct StreamingContext {
+    /// Pages allocated so far (for rollback)
+    allocated_pages: Vec<PageId>,
+    /// Total bytes written
+    total_written: u64,
+}
+
+impl StreamingContext {
+    /// Create a new streaming context
+    fn new() -> Self {
+        Self {
+            allocated_pages: Vec::new(),
+            total_written: 0,
+        }
+    }
+
+    /// Add a page to the context
+    fn add_page(&mut self, page_id: PageId, bytes_written: usize) {
+        self.allocated_pages.push(page_id);
+        self.total_written += bytes_written as u64;
+    }
+
+    /// Rollback by freeing all allocated pages
+    fn rollback<FS: FileSystem>(&mut self, pager: &mut Pager<FS>) -> TableResult<()> {
+        for page_id in self.allocated_pages.drain(..) {
+            pager.free_page(page_id)?;
+        }
+        self.total_written = 0;
+        Ok(())
+    }
+
+    /// Commit the context, returning allocated pages and total bytes written
+    fn commit(self) -> (Vec<PageId>, u64) {
+        (self.allocated_pages, self.total_written)
+    }
+}
+
+// =============================================================================
+// Writer
+// =============================================================================
+/// Helper stream that combines buffered data with a remaining stream.
+/// Used for adaptive streaming when switching from inline to external storage.
+struct CompositeStream<'a> {
+    /// Buffered data to read first
+    buffered: Vec<u8>,
+    /// Current chunk to read
+    current_chunk: Vec<u8>,
+    /// Position in buffered data
+    buffer_pos: usize,
+    /// Position in current chunk
+    chunk_pos: usize,
+    /// Remaining stream
+    remaining: &'a mut dyn crate::table::ValueStream,
+    /// Whether we've started reading from remaining stream
+    reading_remaining: bool,
+}
+
+impl<'a> CompositeStream<'a> {
+    fn new(
+        buffered: Vec<u8>,
+        current_chunk: Vec<u8>,
+        remaining: &'a mut dyn crate::table::ValueStream,
+    ) -> Self {
+        Self {
+            buffered,
+            current_chunk,
+            buffer_pos: 0,
+            chunk_pos: 0,
+            remaining,
+            reading_remaining: false,
+        }
+    }
+}
+
+impl<'a> crate::table::ValueStream for CompositeStream<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> TableResult<usize> {
+        let mut total_read = 0;
+
+        // First, read from buffered data
+        if self.buffer_pos < self.buffered.len() {
+            let to_copy = (buf.len() - total_read).min(self.buffered.len() - self.buffer_pos);
+            buf[total_read..total_read + to_copy]
+                .copy_from_slice(&self.buffered[self.buffer_pos..self.buffer_pos + to_copy]);
+            self.buffer_pos += to_copy;
+            total_read += to_copy;
+        }
+
+        // Then read from current chunk
+        if total_read < buf.len() && self.chunk_pos < self.current_chunk.len() {
+            let to_copy = (buf.len() - total_read).min(self.current_chunk.len() - self.chunk_pos);
+            buf[total_read..total_read + to_copy]
+                .copy_from_slice(&self.current_chunk[self.chunk_pos..self.chunk_pos + to_copy]);
+            self.chunk_pos += to_copy;
+            total_read += to_copy;
+        }
+
+        // Finally, read from remaining stream
+        if total_read < buf.len() {
+            self.reading_remaining = true;
+            let n = self.remaining.read(&mut buf[total_read..])?;
+            total_read += n;
+        }
+
+        Ok(total_read)
+    }
+
+    fn size_hint(&self) -> Option<u64> {
+        // We don't know the total size
+        None
+    }
+}
+
+
 /// Write view of the paged B-Tree for a specific transaction.
 pub struct PagedBTreeWriter<'a, FS: FileSystem> {
     table: &'a PagedBTree<FS>,
     tx_id: TransactionId,
     snapshot_lsn: LogSequenceNumber,
-    pending_changes: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+    pending_changes: Vec<PendingChange>,
+    streaming_contexts: HashMap<Vec<u8>, StreamingContext>,
 }
 
 impl<'a, FS: FileSystem> MutableTable for PagedBTreeWriter<'a, FS> {
     fn put(&mut self, key: &[u8], value: &[u8]) -> TableResult<u64> {
-        self.pending_changes
-            .push((key.to_vec(), Some(value.to_vec())));
+        self.pending_changes.push(PendingChange::Inline {
+            key: key.to_vec(),
+            value: value.to_vec(),
+        });
         // Return approximate size: key + value + overhead
         Ok((key.len() + value.len() + 16) as u64)
     }
@@ -1810,55 +2098,35 @@ impl<'a, FS: FileSystem> MutableTable for PagedBTreeWriter<'a, FS> {
         key: &[u8],
         stream: &mut dyn crate::table::ValueStream,
     ) -> TableResult<u64> {
-        // Check size hint to determine storage strategy
         let size_hint = stream.size_hint();
         let max_inline = self.max_inline_size().unwrap_or(4096);
-
-        // If small enough or no size hint, use default implementation (inline storage)
+        
+        // Strategy 1: Known small value - buffer inline
         if let Some(size) = size_hint {
             if size <= max_inline as u64 {
-                // Read entire value and store inline
-                let mut buffer = Vec::with_capacity(size as usize);
-                let mut temp_buf = vec![0u8; 8192];
-                loop {
-                    let n = stream.read(&mut temp_buf)?;
-                    if n == 0 {
-                        break;
-                    }
-                    buffer.extend_from_slice(&temp_buf[..n]);
-                }
-                return self.put(key, &buffer);
+                return self.put_stream_inline(key, stream, size);
             }
-        } else {
-            // No size hint, use default implementation
-            return MutableTable::put_stream(self, key, stream);
         }
-
-        // Large value: stream to overflow pages
-        let mut buffer = Vec::new();
-        let mut temp_buf = vec![0u8; 8192];
-        loop {
-            let n = stream.read(&mut temp_buf)?;
-            if n == 0 {
-                break;
+        
+        // Strategy 2: Known large value - stream directly
+        if let Some(size) = size_hint {
+            if size > max_inline as u64 {
+                return self.put_stream_external(key, stream, Some(size));
             }
-            buffer.extend_from_slice(&temp_buf[..n]);
         }
-
-        // For now, allocate overflow chain during flush
-        // Store the full value in pending_changes
-        // TODO: Optimize to stream directly during flush
-        self.pending_changes
-            .push((key.to_vec(), Some(buffer.clone())));
-
-        Ok((key.len() + buffer.len() + 16) as u64)
+        
+        // Strategy 3: Unknown size - start inline, switch if needed
+        self.put_stream_adaptive(key, stream, max_inline)
     }
+
 
     fn delete(&mut self, key: &[u8]) -> TableResult<bool> {
         // Check if key exists
         let exists = self.table.get_internal(key, self.snapshot_lsn)?.is_some();
         if exists {
-            self.pending_changes.push((key.to_vec(), None));
+            self.pending_changes.push(PendingChange::Delete {
+                key: key.to_vec(),
+            });
         }
         Ok(exists)
     }
@@ -1875,7 +2143,9 @@ impl<'a, FS: FileSystem> MutableTable for PagedBTreeWriter<'a, FS> {
             }
 
             if let Some(key) = cursor.key() {
-                self.pending_changes.push((key.to_vec(), None));
+                self.pending_changes.push(PendingChange::Delete {
+                    key: key.to_vec(),
+                });
                 deleted_count += 1;
             }
 
@@ -1942,11 +2212,25 @@ impl<'a, FS: FileSystem> Flushable for PagedBTreeWriter<'a, FS> {
             return Ok(());
         }
 
+        // Collect all pending changes first to avoid borrow checker issues
+        let changes: Vec<PendingChange> = self.pending_changes.drain(..).collect();
+
         // Apply all pending changes (versions remain uncommitted)
-        for (key, value_opt) in self.pending_changes.drain(..) {
-            match value_opt {
-                Some(value) => {
-                    // Insert or update (versions left uncommitted)
+        for change in changes {
+            match change {
+                PendingChange::Inline { key, value } => {
+                    // Check if we're replacing an external value
+                    if let Some(old_value) = self.table.get_internal(&key, self.snapshot_lsn)? {
+                        if Self::is_external_value(old_value.as_ref()) {
+                            let value_ref = ValueRef::decode(old_value.as_ref())
+                                .map_err(|e| TableError::InvalidValueRef {
+                                    details: format!("Failed to decode ValueRef: {:?}", e)
+                                })?;
+                            self.free_value_ref(&value_ref)?;
+                        }
+                    }
+                    
+                    // Insert or update with inline value (versions left uncommitted)
                     self.table.insert_internal(
                         key,
                         value,
@@ -1954,7 +2238,41 @@ impl<'a, FS: FileSystem> Flushable for PagedBTreeWriter<'a, FS> {
                         LogSequenceNumber::from(0),
                     )?;
                 }
-                None => {
+                PendingChange::External { key, value_ref } => {
+                    // Check if we're replacing an external value
+                    if let Some(old_value) = self.table.get_internal(&key, self.snapshot_lsn)? {
+                        if Self::is_external_value(old_value.as_ref()) {
+                            let old_ref = ValueRef::decode(old_value.as_ref())
+                                .map_err(|e| TableError::InvalidValueRef {
+                                    details: format!("Failed to decode ValueRef: {:?}", e)
+                                })?;
+                            self.free_value_ref(&old_ref)?;
+                        }
+                    }
+                    
+                    // Insert or update with external value (overflow pages already allocated)
+                    // The value_ref points to the overflow chain that was written during put_stream
+                    // Serialize the ValueRef and store it as the value
+                    let value_bytes = value_ref.encode();
+                    self.table.insert_internal(
+                        key,
+                        value_bytes,
+                        self.tx_id,
+                        LogSequenceNumber::from(0),
+                    )?;
+                }
+                PendingChange::Delete { key } => {
+                    // Check if we're deleting an external value
+                    if let Some(old_value) = self.table.get_internal(&key, self.snapshot_lsn)? {
+                        if Self::is_external_value(old_value.as_ref()) {
+                            let value_ref = ValueRef::decode(old_value.as_ref())
+                                .map_err(|e| TableError::InvalidValueRef {
+                                    details: format!("Failed to decode ValueRef: {:?}", e)
+                                })?;
+                            self.free_value_ref(&value_ref)?;
+                        }
+                    }
+                    
                     // Delete (versions left uncommitted)
                     self.table
                         .delete_internal(&key, self.tx_id, LogSequenceNumber::from(0))?;
@@ -1973,6 +2291,250 @@ impl<'a, FS: FileSystem> PagedBTreeWriter<'a, FS> {
     /// The commit_lsn is obtained from the WAL after writing the COMMIT record.
     pub fn commit_versions(&self, commit_lsn: LogSequenceNumber) -> TableResult<()> {
         self.table.commit_versions_for_tx(self.tx_id, commit_lsn)
+    }
+
+    /// Check if a value is stored externally (in overflow pages).
+    ///
+    /// External values are encoded with specific formats:
+    /// - SinglePage: [0x01][page_id: u32][offset: u16][length: u32] (11 bytes)
+    /// - OverflowChain: [0x02][first_page_id: u32][total_length: u64][page_count: u32] (17 bytes)
+    ///
+    /// We check both the tag byte AND the expected length to avoid false positives
+    /// with inline values that happen to start with 0x01 or 0x02.
+    fn is_external_value(value: &[u8]) -> bool {
+        match value.first() {
+            Some(&0x01) => value.len() == 11,  // SinglePage
+            Some(&0x02) => value.len() == 17,  // OverflowChain
+            _ => false,
+        }
+    }
+
+    /// Free overflow pages referenced by a ValueRef.
+    ///
+    /// This is called when deleting or replacing values to prevent orphaned pages.
+    fn free_value_ref(&self, value_ref: &ValueRef) -> TableResult<()> {
+        match value_ref {
+            ValueRef::Inline => {
+                // No pages to free
+                Ok(())
+            }
+            ValueRef::SinglePage { page_id, .. } => {
+                // Free single page
+                self.table.pager.free_page(PageId::from(*page_id as u64))?;
+                Ok(())
+            }
+            ValueRef::OverflowChain { first_page_id, .. } => {
+                // Free entire overflow chain
+                self.table.pager.free_overflow_chain(PageId::from(*first_page_id as u64))?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Stream a small value inline (buffer in memory)
+    fn put_stream_inline(
+        &mut self,
+        key: &[u8],
+        stream: &mut dyn crate::table::ValueStream,
+        expected_size: u64,
+    ) -> TableResult<u64> {
+        let mut buffer = Vec::with_capacity(expected_size as usize);
+        let mut temp_buf = vec![0u8; 8192];
+        
+        loop {
+            let n = stream.read(&mut temp_buf)?;
+            if n == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&temp_buf[..n]);
+        }
+        
+        let total_size = buffer.len();
+        self.pending_changes.push(PendingChange::Inline {
+            key: key.to_vec(),
+            value: buffer,
+        });
+        
+        Ok((key.len() + total_size + 16) as u64)
+    }
+
+    /// Stream a large value directly to overflow pages
+    fn put_stream_external(
+        &mut self,
+        key: &[u8],
+        stream: &mut dyn crate::table::ValueStream,
+        _size_hint: Option<u64>,
+    ) -> TableResult<u64> {
+        use crate::pager::OverflowPageHeader;
+        
+        // Calculate page data capacity
+        let page_size = self.table.pager.page_size().data_size();
+        let usable_size = page_size - OverflowPageHeader::SIZE;
+        
+        // Initialize streaming context
+        let mut ctx = StreamingContext::new();
+        
+        let mut temp_buf = vec![0u8; 8192];
+        let mut page_buffer = Vec::with_capacity(usable_size);
+        let mut first_page_id: Option<PageId> = None;
+        let mut prev_page_id: Option<PageId> = None;
+        
+        // Stream data chunk by chunk
+        loop {
+            let n = match stream.read(&mut temp_buf) {
+                Ok(n) => n,
+                Err(e) => {
+                    // Rollback: free all allocated pages
+                    for page_id in ctx.allocated_pages.iter() {
+                        let _ = self.table.pager.free_page(*page_id);
+                    }
+                    return Err(e);
+                }
+            };
+            
+            if n == 0 {
+                // Flush final partial page if any
+                if !page_buffer.is_empty() {
+                    match self.write_overflow_chunk(&mut ctx, &page_buffer, None, &mut first_page_id, &mut prev_page_id) {
+                        Ok(_) => {},
+                        Err(e) => {
+                            for page_id in ctx.allocated_pages.iter() {
+                                let _ = self.table.pager.free_page(*page_id);
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
+                break;
+            }
+            
+            let mut offset = 0;
+            
+            while offset < n {
+                let remaining_in_page = usable_size - page_buffer.len();
+                let to_copy = (n - offset).min(remaining_in_page);
+                
+                page_buffer.extend_from_slice(&temp_buf[offset..offset + to_copy]);
+                offset += to_copy;
+                
+                // Page full? Write it
+                if page_buffer.len() >= usable_size {
+                    match self.write_overflow_chunk(&mut ctx, &page_buffer, None, &mut first_page_id, &mut prev_page_id) {
+                        Ok(_) => {},
+                        Err(e) => {
+                            for page_id in ctx.allocated_pages.iter() {
+                                let _ = self.table.pager.free_page(*page_id);
+                            }
+                            return Err(e);
+                        }
+                    }
+                    page_buffer.clear();
+                }
+            }
+        }
+        
+        // Get committed pages and total length
+        let (pages, total_len) = ctx.commit();
+        
+        if pages.is_empty() {
+            // Empty stream - store as inline empty value
+            self.pending_changes.push(PendingChange::Inline {
+                key: key.to_vec(),
+                value: Vec::new(),
+            });
+            return Ok((key.len() + 16) as u64);
+        }
+        
+        // Create ValueRef based on page count
+        let value_ref = if pages.len() == 1 {
+            ValueRef::SinglePage {
+                page_id: pages[0].as_u64() as u32,
+                offset: OverflowPageHeader::SIZE as u16,
+                length: total_len as u32,
+            }
+        } else {
+            ValueRef::OverflowChain {
+                first_page_id: pages[0].as_u64() as u32,
+                total_length: total_len,
+                page_count: pages.len() as u32,
+            }
+        };
+        
+        // Store in pending changes
+        self.pending_changes.push(PendingChange::External {
+            key: key.to_vec(),
+            value_ref,
+        });
+        
+        Ok((key.len() + total_len as usize + 16) as u64)
+    }
+
+    /// Write a chunk to an overflow page
+    fn write_overflow_chunk(
+        &mut self,
+        ctx: &mut StreamingContext,
+        data: &[u8],
+        next_page_id: Option<PageId>,
+        first_page_id: &mut Option<PageId>,
+        prev_page_id: &mut Option<PageId>,
+    ) -> TableResult<()> {
+        // Allocate new page
+        let page_id = self.table.pager.allocate_page(PageType::Overflow)
+            .map_err(TableError::Pager)?;
+        ctx.add_page(page_id, data.len());
+        
+        if first_page_id.is_none() {
+            *first_page_id = Some(page_id);
+        }
+        
+        // Link previous page to this one if exists
+        if let Some(prev_id) = *prev_page_id {
+            self.table.pager.link_overflow_pages(prev_id, page_id)
+                .map_err(TableError::Pager)?;
+        }
+        
+        // Write data to page
+        self.table.pager.write_overflow_page(page_id, data, next_page_id)
+            .map_err(TableError::Pager)?;
+        
+        *prev_page_id = Some(page_id);
+        
+        Ok(())
+    }
+
+    /// Adaptive streaming: start inline, switch to external if size exceeds threshold
+    fn put_stream_adaptive(
+        &mut self,
+        key: &[u8],
+        stream: &mut dyn crate::table::ValueStream,
+        max_inline: usize,
+    ) -> TableResult<u64> {
+        let mut buffer = Vec::with_capacity(max_inline);
+        let mut temp_buf = vec![0u8; 8192];
+        
+        // Try to buffer inline first
+        loop {
+            let n = stream.read(&mut temp_buf)?;
+            if n == 0 {
+                // Entire value fits inline
+                let total_size = buffer.len();
+                self.pending_changes.push(PendingChange::Inline {
+                    key: key.to_vec(),
+                    value: buffer,
+                });
+                return Ok((key.len() + total_size + 16) as u64);
+            }
+            
+            // Check if adding this chunk would exceed threshold
+            if buffer.len() + n > max_inline {
+                // Switch to external streaming
+                // Create a composite stream: buffered data + remaining stream
+                let mut composite = CompositeStream::new(buffer, temp_buf[..n].to_vec(), stream);
+                return self.put_stream_external(key, &mut composite, None);
+            }
+            
+            buffer.extend_from_slice(&temp_buf[..n]);
+        }
     }
 }
 
