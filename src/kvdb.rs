@@ -110,6 +110,47 @@ impl VacuumMetrics {
     }
 }
 
+/// Statistics for VACUUM FULL operation.
+///
+/// VACUUM FULL is a blocking operation that compacts the database file by moving
+/// data from high-numbered pages to low-numbered pages, then truncating the file.
+#[derive(Debug, Clone, Default)]
+pub struct VacuumFullStats {
+    /// Number of pages moved during compaction
+    pub pages_moved: u64,
+    /// Number of pages freed and truncated from the end of the file
+    pub pages_truncated: u64,
+    /// Bytes reclaimed from file truncation
+    pub bytes_reclaimed: u64,
+    /// File size before VACUUM FULL (in bytes)
+    pub file_size_before: u64,
+    /// File size after VACUUM FULL (in bytes)
+    pub file_size_after: u64,
+    /// Duration of the operation
+    pub duration: Duration,
+}
+
+impl VacuumFullStats {
+    /// Create a new stats instance with the initial file size
+    pub fn new(file_size_before: u64) -> Self {
+        Self {
+            pages_moved: 0,
+            pages_truncated: 0,
+            bytes_reclaimed: 0,
+            file_size_before,
+            file_size_after: file_size_before,
+            duration: Duration::default(),
+        }
+    }
+
+    /// Calculate bytes reclaimed based on file size difference
+    pub fn calculate_reclaimed(&mut self) {
+        if self.file_size_before > self.file_size_after {
+            self.bytes_reclaimed = self.file_size_before - self.file_size_after;
+        }
+    }
+}
+
 /// Aggregated vacuum statistics over time.
 #[derive(Debug, Clone, Default)]
 pub struct VacuumStats {

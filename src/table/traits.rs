@@ -765,14 +765,23 @@ pub struct CheckpointInfo {
 
 #[derive(Clone, Debug, Default)]
 pub struct VacuumOptions {
+    /// Perform aggressive vacuum (more thorough but slower)
     pub aggressive: bool,
+    /// Maximum number of pages to process (for incremental vacuum)
     pub max_pages: Option<u64>,
+    /// Enable VACUUM FULL mode (compaction + file truncation)
+    /// This is a blocking operation that requires exclusive access
+    pub full: bool,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct VacuumReport {
+    /// Number of pages freed (marked as available for reuse)
     pub pages_freed: u64,
+    /// Bytes reclaimed from removing obsolete versions
     pub bytes_reclaimed: u64,
+    /// VACUUM FULL statistics (only populated when full=true)
+    pub full_stats: Option<crate::kvdb::VacuumFullStats>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
