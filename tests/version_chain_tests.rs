@@ -41,7 +41,7 @@ fn find_visible_version_returns_newest_visible_committed_value() {
     chain.commit(LogSequenceNumber::from(30));
 
     let snap = snapshot(25, vec![]);
-    assert_eq!(chain.find_visible_version(&snap), Some(&b"v2"[..]));
+    assert_eq!(chain.find_visible_inline(&snap), Some(&b"v2"[..]));
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn find_visible_version_skips_uncommitted_head() {
     let chain = chain.prepend(b"pending".to_vec(), TransactionId::from(2));
 
     let snap = snapshot(100, vec![]);
-    assert_eq!(chain.find_visible_version(&snap), Some(&b"stable"[..]));
+    assert_eq!(chain.find_visible_inline(&snap), Some(&b"stable"[..]));
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn find_visible_version_skips_versions_from_active_snapshot_transactions() {
     chain.commit(LogSequenceNumber::from(20));
 
     let snap = snapshot(30, vec![5]);
-    assert_eq!(chain.find_visible_version(&snap), Some(&b"base"[..]));
+    assert_eq!(chain.find_visible_inline(&snap), Some(&b"base"[..]));
 }
 
 #[test]
@@ -88,14 +88,14 @@ fn vacuum_removes_only_obsolete_committed_versions() {
     let mut chain = chain.prepend(b"v4".to_vec(), TransactionId::from(4));
     chain.commit(LogSequenceNumber::from(40));
 
-    let removed = chain.vacuum(LogSequenceNumber::from(35));
+    let (removed, _freed_refs) = chain.vacuum(LogSequenceNumber::from(35));
     assert_eq!(removed, 2);
 
     let snap_new = snapshot(100, vec![]);
-    assert_eq!(chain.find_visible_version(&snap_new), Some(&b"v4"[..]));
+    assert_eq!(chain.find_visible_inline(&snap_new), Some(&b"v4"[..]));
 
     let snap_boundary = snapshot(35, vec![]);
-    assert_eq!(chain.find_visible_version(&snap_boundary), Some(&b"v3"[..]));
+    assert_eq!(chain.find_visible_inline(&snap_boundary), Some(&b"v3"[..]));
 }
 
 #[test]
@@ -109,11 +109,11 @@ fn vacuum_preserves_uncommitted_versions() {
     let chain = chain.prepend(b"pending".to_vec(), TransactionId::from(3));
     let mut chain = chain;
 
-    let removed = chain.vacuum(LogSequenceNumber::from(25));
+    let (removed, _freed_refs) = chain.vacuum(LogSequenceNumber::from(25));
     assert_eq!(removed, 1);
 
     let snap = snapshot(100, vec![]);
-    assert_eq!(chain.find_visible_version(&snap), Some(&b"v2"[..]));
+    assert_eq!(chain.find_visible_inline(&snap), Some(&b"v2"[..]));
 }
 
 // Made with Bob

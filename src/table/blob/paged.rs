@@ -150,9 +150,12 @@ impl<FS: FileSystem> PagedBlob<FS> {
             let mut current = Some(chain);
             while let Some(version) = current {
                 if version.commit_lsn.is_some() {
-                    // Deserialize metadata
+                    // Deserialize metadata from inline value
+                    let metadata_bytes = version.value.as_inline().ok_or_else(|| {
+                        TableError::Other("BlobMetadata must be stored inline".to_string())
+                    })?;
                     let metadata: BlobMetadata =
-                        postcard::from_bytes(&version.value).map_err(|e| {
+                        postcard::from_bytes(metadata_bytes).map_err(|e| {
                             TableError::Other(format!("Failed to deserialize metadata: {}", e))
                         })?;
 
@@ -170,9 +173,12 @@ impl<FS: FileSystem> PagedBlob<FS> {
     pub fn get_snapshot(&self, key: &[u8], snapshot: &Snapshot) -> TableResult<Option<ValueBuf>> {
         let index = self.index.read().unwrap();
         if let Some(chain) = index.get(key) {
-            if let Some(value) = chain.find_visible_version(snapshot) {
-                // Deserialize metadata
-                let metadata: BlobMetadata = postcard::from_bytes(value).map_err(|e| {
+            if let Some(version_value) = chain.find_visible_version(snapshot) {
+                // Deserialize metadata from inline value
+                let metadata_bytes = version_value.as_inline().ok_or_else(|| {
+                    TableError::Other("BlobMetadata must be stored inline".to_string())
+                })?;
+                let metadata: BlobMetadata = postcard::from_bytes(metadata_bytes).map_err(|e| {
                     TableError::Other(format!("Failed to deserialize metadata: {}", e))
                 })?;
 
@@ -372,9 +378,11 @@ impl<FS: FileSystem> PagedBlob<FS> {
                 if let Some(commit_lsn) = version.commit_lsn {
                     if commit_lsn < min_visible_lsn {
                         // This version will be removed, collect its pages
-                        if let Ok(metadata) = postcard::from_bytes::<BlobMetadata>(&version.value) {
-                            if metadata.first_page_id.as_u64() != 0 {
-                                pages_to_free.push(metadata.first_page_id);
+                        if let Some(metadata_bytes) = version.value.as_inline() {
+                            if let Ok(metadata) = postcard::from_bytes::<BlobMetadata>(metadata_bytes) {
+                                if metadata.first_page_id.as_u64() != 0 {
+                                    pages_to_free.push(metadata.first_page_id);
+                                }
                             }
                         }
                     }

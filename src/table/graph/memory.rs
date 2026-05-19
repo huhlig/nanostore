@@ -32,7 +32,7 @@ use crate::table::{
     EdgeCursor, EdgeRef, GraphAdjacency, MemoryHashTable, SpecialtyTableCapabilities,
     SpecialtyTableStats, Table, TableError, TableResult, VerificationReport,
 };
-use crate::txn::{TransactionId, VersionChain};
+use crate::txn::{TransactionId, VersionChain, VersionValue};
 use crate::types::{KeyBuf, TableId};
 use crate::wal::LogSequenceNumber;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -437,28 +437,28 @@ impl GraphAdjacency for MemoryGraphTable {
             let edge_bytes = serde_json::to_vec(&edge)
                 .map_err(|e| TableError::serialization_error("Edge", e.to_string()))?;
 
-            // Store outgoing edge with version chain
+            // Store outgoing edge with version chain (inline value)
             let out_key = (source.to_vec(), label.to_vec(), edge_id.to_vec());
             let prev_version = index
                 .outgoing_edges
                 .get(&out_key)
                 .map(|chain| Box::new(chain.clone()));
             let new_chain = VersionChain {
-                value: edge_bytes.clone(),
+                value: VersionValue::Inline(edge_bytes.clone()),
                 created_by: tx_id,
                 commit_lsn: None, // Uncommitted - will be set by commit_versions()
                 prev_version,
             };
             index.outgoing_edges.insert(out_key, new_chain);
 
-            // Store incoming edge with version chain
+            // Store incoming edge with version chain (inline value)
             let in_key = (target.to_vec(), label.to_vec(), edge_id.to_vec());
             let prev_version = index
                 .incoming_edges
                 .get(&in_key)
                 .map(|chain| Box::new(chain.clone()));
             let new_chain = VersionChain {
-                value: edge_bytes.clone(),
+                value: VersionValue::Inline(edge_bytes.clone()),
                 created_by: tx_id,
                 commit_lsn: None,
                 prev_version,
@@ -482,7 +482,7 @@ impl GraphAdjacency for MemoryGraphTable {
                     .get(&rev_out_key)
                     .map(|chain| Box::new(chain.clone()));
                 let new_chain = VersionChain {
-                    value: rev_edge_bytes.clone(),
+                    value: VersionValue::Inline(rev_edge_bytes.clone()),
                     created_by: tx_id,
                     commit_lsn: None,
                     prev_version,
@@ -495,7 +495,7 @@ impl GraphAdjacency for MemoryGraphTable {
                     .get(&rev_in_key)
                     .map(|chain| Box::new(chain.clone()));
                 let new_chain = VersionChain {
-                    value: rev_edge_bytes,
+                    value: VersionValue::Inline(rev_edge_bytes),
                     created_by: tx_id,
                     commit_lsn: None,
                     prev_version,
@@ -567,11 +567,11 @@ impl GraphAdjacency for MemoryGraphTable {
         if self.config.use_memory_index {
             let mut index = self.index.write().unwrap();
 
-            // Create tombstone for outgoing edge
+            // Create tombstone for outgoing edge (empty inline value)
             let out_key = (source.to_vec(), label.to_vec(), edge_id.to_vec());
             if let Some(chain) = index.outgoing_edges.get(&out_key) {
                 let tombstone = VersionChain {
-                    value: Vec::new(), // Empty value = tombstone
+                    value: VersionValue::Inline(Vec::new()), // Empty value = tombstone
                     created_by: tx_id,
                     commit_lsn: None, // Uncommitted
                     prev_version: Some(Box::new(chain.clone())),
@@ -579,11 +579,11 @@ impl GraphAdjacency for MemoryGraphTable {
                 index.outgoing_edges.insert(out_key, tombstone);
             }
 
-            // Create tombstone for incoming edge
+            // Create tombstone for incoming edge (empty inline value)
             let in_key = (target.to_vec(), label.to_vec(), edge_id.to_vec());
             if let Some(chain) = index.incoming_edges.get(&in_key) {
                 let tombstone = VersionChain {
-                    value: Vec::new(),
+                    value: VersionValue::Inline(Vec::new()),
                     created_by: tx_id,
                     commit_lsn: None,
                     prev_version: Some(Box::new(chain.clone())),
@@ -596,7 +596,7 @@ impl GraphAdjacency for MemoryGraphTable {
                 let rev_out_key = (target.to_vec(), label.to_vec(), edge_id.to_vec());
                 if let Some(chain) = index.outgoing_edges.get(&rev_out_key) {
                     let tombstone = VersionChain {
-                        value: Vec::new(),
+                        value: VersionValue::Inline(Vec::new()),
                         created_by: tx_id,
                         commit_lsn: None,
                         prev_version: Some(Box::new(chain.clone())),
@@ -607,7 +607,7 @@ impl GraphAdjacency for MemoryGraphTable {
                 let rev_in_key = (source.to_vec(), label.to_vec(), edge_id.to_vec());
                 if let Some(chain) = index.incoming_edges.get(&rev_in_key) {
                     let tombstone = VersionChain {
-                        value: Vec::new(),
+                        value: VersionValue::Inline(Vec::new()),
                         created_by: tx_id,
                         commit_lsn: None,
                         prev_version: Some(Box::new(chain.clone())),
@@ -647,11 +647,13 @@ impl GraphAdjacency for MemoryGraphTable {
                     }
 
                     // Check visibility
-                    if let Some(edge_bytes) = chain.find_visible_version(&snapshot) {
+                    if let Some(version_value) = chain.find_visible_version(&snapshot) {
                         // Empty value means tombstone (deleted)
-                        if !edge_bytes.is_empty() {
-                            if let Ok(edge) = serde_json::from_slice::<Edge>(edge_bytes) {
-                                visible_edges.push(edge);
+                        if !version_value.is_empty() {
+                            if let Some(edge_bytes) = version_value.as_inline() {
+                                if let Ok(edge) = serde_json::from_slice::<Edge>(edge_bytes) {
+                                    visible_edges.push(edge);
+                                }
                             }
                         }
                     }
@@ -693,11 +695,13 @@ impl GraphAdjacency for MemoryGraphTable {
                     }
 
                     // Check visibility
-                    if let Some(edge_bytes) = chain.find_visible_version(&snapshot) {
+                    if let Some(version_value) = chain.find_visible_version(&snapshot) {
                         // Empty value means tombstone (deleted)
-                        if !edge_bytes.is_empty() {
-                            if let Ok(edge) = serde_json::from_slice::<Edge>(edge_bytes) {
-                                visible_edges.push(edge);
+                        if !version_value.is_empty() {
+                            if let Some(edge_bytes) = version_value.as_inline() {
+                                if let Ok(edge) = serde_json::from_slice::<Edge>(edge_bytes) {
+                                    visible_edges.push(edge);
+                                }
                             }
                         }
                     }

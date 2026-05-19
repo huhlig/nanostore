@@ -133,9 +133,12 @@ impl MemoryBlob {
             let mut current = Some(chain);
             while let Some(version) = current {
                 if version.commit_lsn.is_some() {
-                    // Deserialize metadata
+                    // Deserialize metadata from inline value
+                    let metadata_bytes = version.value.as_inline().ok_or_else(|| {
+                        TableError::Other("BlobMetadata must be stored inline".to_string())
+                    })?;
                     let metadata: BlobMetadata =
-                        postcard::from_bytes(&version.value).map_err(|e| {
+                        postcard::from_bytes(metadata_bytes).map_err(|e| {
                             TableError::Other(format!("Failed to deserialize metadata: {}", e))
                         })?;
                     return Ok(Some(ValueBuf(metadata.data)));
@@ -150,9 +153,12 @@ impl MemoryBlob {
     pub fn get_snapshot(&self, key: &[u8], snapshot: &Snapshot) -> TableResult<Option<ValueBuf>> {
         let store = self.metadata.read().unwrap();
         if let Some(chain) = store.get(key) {
-            if let Some(value) = chain.find_visible_version(snapshot) {
-                // Deserialize metadata
-                let metadata: BlobMetadata = postcard::from_bytes(value).map_err(|e| {
+            if let Some(version_value) = chain.find_visible_version(snapshot) {
+                // Deserialize metadata from inline value
+                let metadata_bytes = version_value.as_inline().ok_or_else(|| {
+                    TableError::Other("BlobMetadata must be stored inline".to_string())
+                })?;
+                let metadata: BlobMetadata = postcard::from_bytes(metadata_bytes).map_err(|e| {
                     TableError::Other(format!("Failed to deserialize metadata: {}", e))
                 })?;
                 return Ok(Some(ValueBuf(metadata.data)));
@@ -198,8 +204,10 @@ impl MemoryBlob {
                 let mut current = Some(chain);
                 while let Some(version) = current {
                     if version.commit_lsn.is_some() {
-                        if let Ok(meta) = postcard::from_bytes::<BlobMetadata>(&version.value) {
-                            return Some(Self::estimate_entry_size(key, &meta.data));
+                        if let Some(metadata_bytes) = version.value.as_inline() {
+                            if let Ok(meta) = postcard::from_bytes::<BlobMetadata>(metadata_bytes) {
+                                return Some(Self::estimate_entry_size(key, &meta.data));
+                            }
                         }
                     }
                     current = version.prev_version.as_deref();
