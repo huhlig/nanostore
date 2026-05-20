@@ -800,7 +800,8 @@ fn test_concurrent_reads() {
 fn test_concurrent_writes_different_keys() {
     use std::sync::Mutex;
     let fs = MemoryFileSystem::new();
-    let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+    let db =
+        StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
     let table_id = db.create_table("users", default_table_options()).unwrap();
     let db = Arc::new(db);
     let errors = Arc::new(Mutex::new(Vec::new()));
@@ -857,7 +858,10 @@ fn test_update_nonexistent_key_error() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
     let result = db.update(table_id, b"user1", b"Alice");
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::KeyNotFound);
+    assert_eq!(
+        result.unwrap_err().kind,
+        StorageEngineErrorKind::KeyNotFound
+    );
 }
 
 #[test]

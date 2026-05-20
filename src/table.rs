@@ -654,46 +654,51 @@ impl<FS: FileSystem> TableEngineRegistry<FS> {
         match engine {
             TableEngineInstance::PagedBTree(btree) => {
                 // PagedBTree supports vacuum
-                btree
-                    .vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                btree.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::MemoryBTree(btree) => {
                 // MemoryBTree supports vacuum
-                btree
-                    .vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                btree.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::MemoryHashTable(hash) => {
                 // MemoryHashTable supports vacuum
-                hash.vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                hash.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::MemoryART(art) => {
                 // MemoryART supports vacuum
-                art.vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                art.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::LsmTree(lsm) => {
                 // LsmTree supports vacuum
-                lsm.vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                lsm.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::MemoryGraphTable(graph) => {
                 // MemoryGraphTable supports vacuum
-                graph
-                    .vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                graph.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::TimeSeriesTable(ts) => {
                 // TimeSeriesTable supports vacuum
-                ts.vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                ts.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             TableEngineInstance::PagedBlob(blob) => {
                 // PagedBlob supports vacuum
-                blob.vacuum(min_visible_lsn)
-                    .map_err(|e| crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e)))
+                blob.vacuum(min_visible_lsn).map_err(|e| {
+                    crate::kvdb::StorageEngineError::other(format!("Vacuum failed: {}", e))
+                })
             }
             // Engines that don't support vacuum
             TableEngineInstance::AppendLog(_) => {

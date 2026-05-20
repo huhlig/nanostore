@@ -172,9 +172,9 @@ fn test_large_time_range_queries_100k_points() {
 
     // Query different time ranges
     let ranges = vec![
-        (0, year_in_seconds / 4),           // First quarter
+        (0, year_in_seconds / 4),                   // First quarter
         (year_in_seconds / 4, year_in_seconds / 2), // Second quarter
-        (0, year_in_seconds),               // Full year
+        (0, year_in_seconds),                       // Full year
     ];
 
     for (start, end) in ranges {

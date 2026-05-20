@@ -285,9 +285,7 @@ fn test_clustered_vectors_15k() {
         for i in 0..5_000 {
             let id = format!("cluster_{}_vec_{}", cluster, i);
             let vector: Vec<f32> = (0..64)
-                .map(|j| {
-                    base_value + ((i * 17 + j * 23) % 1000) as f32 / 10000.0
-                })
+                .map(|j| base_value + ((i * 17 + j * 23) % 1000) as f32 / 10000.0)
                 .collect();
 
             hnsw.insert_vector(id.as_bytes(), &vector, tx_id, lsn)

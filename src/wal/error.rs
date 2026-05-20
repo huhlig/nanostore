@@ -128,6 +128,14 @@ pub enum WalError {
     #[error("Missing encryption key for {encryption_type}")]
     MissingEncryptionKey { encryption_type: String },
 
+    /// Commit notification error
+    #[error("Commit notification failed for transaction {txn_id} at LSN {lsn}: {details}")]
+    CommitNotificationError {
+        txn_id: TransactionId,
+        lsn: LogSequenceNumber,
+        details: String,
+    },
+
     /// Internal error
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -273,6 +281,19 @@ impl WalError {
     pub fn missing_encryption_key(encryption_type: impl Into<String>) -> Self {
         Self::MissingEncryptionKey {
             encryption_type: encryption_type.into(),
+        }
+    }
+
+    /// Create a commit notification error
+    pub fn commit_notification_error(
+        txn_id: TransactionId,
+        lsn: LogSequenceNumber,
+        details: impl Into<String>,
+    ) -> Self {
+        Self::CommitNotificationError {
+            txn_id,
+            lsn,
+            details: details.into(),
         }
     }
 }

@@ -140,8 +140,7 @@ fn test_table_info_metadata_serialization() {
     let json = serde_json::to_string(&table_info).expect("Failed to serialize");
 
     // Deserialize from JSON
-    let deserialized: TableInfo =
-        serde_json::from_str(&json).expect("Failed to deserialize");
+    let deserialized: TableInfo = serde_json::from_str(&json).expect("Failed to deserialize");
 
     // Verify metadata is preserved
     assert_eq!(deserialized.id, table_info.id);

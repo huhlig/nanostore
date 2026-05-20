@@ -62,14 +62,19 @@ fn create_test_infrastructure() -> (
 ) {
     let fs = Arc::new(MemoryFileSystem::new());
     let conflict_detector = Arc::new(Mutex::new(ConflictDetector::new()));
-    let wal = Arc::new(
-        WalWriter::create(&*fs, "test.wal", WalWriterConfig::default()).unwrap(),
-    );
+    let wal = Arc::new(WalWriter::create(&*fs, "test.wal", WalWriterConfig::default()).unwrap());
     let pager = Arc::new(Pager::create(&*fs, "test.db", PagerConfig::default()).unwrap());
     let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
     let current_lsn = Arc::new(RwLock::new(LogSequenceNumber::from(100)));
 
-    (fs, conflict_detector, wal, pager, engine_registry, current_lsn)
+    (
+        fs,
+        conflict_detector,
+        wal,
+        pager,
+        engine_registry,
+        current_lsn,
+    )
 }
 
 /// Create a transaction with the given parameters
@@ -182,7 +187,7 @@ proptest! {
         );
 
         let result = tx2.put(table_id, &key, &value2);
-        
+
         // All isolation levels should detect write-write conflicts
         prop_assert!(result.is_err(), "Write-write conflict should be detected");
 
@@ -501,7 +506,7 @@ proptest! {
         let table_id = TableId::from(1);
 
         let mut transactions = Vec::new();
-        
+
         // Create transactions with non-overlapping keys
         for i in 0..num_txns {
             let mut tx = create_transaction(

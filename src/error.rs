@@ -488,6 +488,12 @@ impl ErrorTelemetry for WalError {
                 "missing_encryption_key",
                 ErrorSeverity::Error,
             ),
+            WalError::CommitNotificationError { .. } => classification(
+                "wal",
+                "commit",
+                "commit_notification_error",
+                ErrorSeverity::Error,
+            ),
             WalError::InternalError(_) => {
                 classification("wal", "internal", "internal_error", ErrorSeverity::Critical)
             }

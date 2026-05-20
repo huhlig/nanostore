@@ -113,9 +113,15 @@ fn test_concurrent_transactions_multiple_tables() {
 
                 // Write to all tables in the same transaction
                 let mut all_ok = true;
-                all_ok &= tx.put(users_id, user_key.as_bytes(), value.as_bytes()).is_ok();
-                all_ok &= tx.put(logs_id, log_key.as_bytes(), value.as_bytes()).is_ok();
-                all_ok &= tx.put(cache_id, cache_key.as_bytes(), value.as_bytes()).is_ok();
+                all_ok &= tx
+                    .put(users_id, user_key.as_bytes(), value.as_bytes())
+                    .is_ok();
+                all_ok &= tx
+                    .put(logs_id, log_key.as_bytes(), value.as_bytes())
+                    .is_ok();
+                all_ok &= tx
+                    .put(cache_id, cache_key.as_bytes(), value.as_bytes())
+                    .is_ok();
 
                 // Commit transaction
                 if all_ok && tx.commit().is_ok() {
@@ -225,8 +231,7 @@ fn test_concurrent_readers_and_writers() {
                 for i in 0..5 {
                     let key = format!("key_{:04}", (writer_id * 20 + i) % 100);
                     let value = format!("writer_{}_{}", writer_id, op_count);
-                    tx.put(table_id, key.as_bytes(), value.as_bytes())
-                        .unwrap();
+                    tx.put(table_id, key.as_bytes(), value.as_bytes()).unwrap();
                 }
 
                 if tx.commit().is_ok() {
@@ -380,7 +385,9 @@ fn test_oltp_workload() {
 
     // Create tables for OLTP workload
     let accounts_id = db.create_table("accounts", btree_table_options()).unwrap();
-    let transactions_id = db.create_table("transactions", lsm_table_options()).unwrap();
+    let transactions_id = db
+        .create_table("transactions", lsm_table_options())
+        .unwrap();
 
     // Initialize accounts
     {
@@ -426,9 +433,11 @@ fn test_oltp_workload() {
                         // Log transaction
                         let tx_key = format!("tx_{}_{}", thread_id, op_id);
                         let tx_data = format!("transfer_{}_{}", from_account, to_account);
-                        
+
                         let mut all_ok = true;
-                        all_ok &= tx.put(transactions_id, tx_key.as_bytes(), tx_data.as_bytes()).is_ok();
+                        all_ok &= tx
+                            .put(transactions_id, tx_key.as_bytes(), tx_data.as_bytes())
+                            .is_ok();
 
                         // Update accounts (simplified - not checking balances)
                         let from_key = format!("account_{:04}", from_account);
@@ -480,8 +489,7 @@ fn test_analytics_workload() {
         for i in 0..1000 {
             let key = format!("event_{:06}", i);
             let value = format!("data_{}", i);
-            tx.put(events_id, key.as_bytes(), value.as_bytes())
-                .unwrap();
+            tx.put(events_id, key.as_bytes(), value.as_bytes()).unwrap();
         }
         tx.commit().unwrap();
     }
@@ -539,8 +547,7 @@ fn test_analytics_workload() {
                 for i in 0..10 {
                     let key = format!("new_event_{}_{}", writer_id, op_count * 10 + i);
                     let value = format!("new_data_{}", op_count);
-                    tx.put(events_id, key.as_bytes(), value.as_bytes())
-                        .unwrap();
+                    tx.put(events_id, key.as_bytes(), value.as_bytes()).unwrap();
                 }
 
                 if tx.commit().is_ok() {
@@ -566,10 +573,7 @@ fn test_analytics_workload() {
     let scans = scan_count.load(Ordering::Relaxed);
     let writes = write_count.load(Ordering::Relaxed);
 
-    println!(
-        "Analytics workload: {} scans, {} writes",
-        scans, writes
-    );
+    println!("Analytics workload: {} scans, {} writes", scans, writes);
 
     assert!(scans > 10, "Should complete multiple analytical scans");
     assert!(writes > 5, "Should complete ongoing writes");
@@ -867,10 +871,7 @@ fn test_timeseries_ingestion_pattern() {
     let writes = write_count.load(Ordering::Relaxed);
     let reads = read_count.load(Ordering::Relaxed);
 
-    println!(
-        "Time-series pattern: {} writes, {} reads",
-        writes, reads
-    );
+    println!("Time-series pattern: {} writes, {} reads", writes, reads);
 
     assert!(writes > 1000, "Should achieve high write throughput");
     assert!(reads > 10, "Should complete periodic reads");

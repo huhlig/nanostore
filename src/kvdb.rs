@@ -247,8 +247,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         // Create pager for database file with default config
         let pager_config = PagerConfig::default();
-        let pager = Pager::create(fs, db_path, pager_config)
-            .map_err(|e| StorageEngineError::pager_failed(format!("Failed to create pager: {}", e)))?;
+        let pager = Pager::create(fs, db_path, pager_config).map_err(|e| {
+            StorageEngineError::pager_failed(format!("Failed to create pager: {}", e))
+        })?;
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
@@ -292,8 +293,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let current_lsn = wal.current_lsn();
 
         // Open pager for database file
-        let pager = Pager::open(fs, db_path)
-            .map_err(|e| StorageEngineError::pager_failed(format!("Failed to open pager: {}", e)))?;
+        let pager = Pager::open(fs, db_path).map_err(|e| {
+            StorageEngineError::pager_failed(format!("Failed to open pager: {}", e))
+        })?;
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
@@ -406,7 +408,10 @@ impl<FS: FileSystem> StorageEngine<FS> {
     }
 
     /// Begin a write transaction with the requested durability policy.
-    pub fn begin_write(&self, durability: Durability) -> Result<Transaction<FS>, StorageEngineError> {
+    pub fn begin_write(
+        &self,
+        durability: Durability,
+    ) -> Result<Transaction<FS>, StorageEngineError> {
         let txn_id = self.allocate_txn_id();
         let snapshot_lsn = *self.current_lsn.read().unwrap();
 
@@ -450,7 +455,10 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// This is useful for reading from named snapshots or implementing
     /// time-travel queries. Returns an error if the LSN is not available
     /// (e.g., too old and already garbage collected).
-    pub fn begin_read_at(&self, lsn: LogSequenceNumber) -> Result<Transaction<FS>, StorageEngineError> {
+    pub fn begin_read_at(
+        &self,
+        lsn: LogSequenceNumber,
+    ) -> Result<Transaction<FS>, StorageEngineError> {
         self.validate_snapshot_lsn(lsn)?;
         let txn_id = self.allocate_txn_id();
 
@@ -507,8 +515,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let tables: Vec<TableInfo> = catalog.values().cloned().collect();
 
         // Serialize to JSON
-        let json_data = serde_json::to_vec(&tables)
-            .map_err(|e| StorageEngineError::other(format!("Failed to serialize catalog: {}", e)))?;
+        let json_data = serde_json::to_vec(&tables).map_err(|e| {
+            StorageEngineError::other(format!("Failed to serialize catalog: {}", e))
+        })?;
 
         // Catalog page is always page 2 (page 0 = header, page 1 = superblock, page 2 = catalog)
         // We use a fixed page ID rather than allocating to ensure consistency
@@ -571,8 +580,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         // Deserialize JSON data
         let json_data = &page.data[8..];
-        let tables: Vec<TableInfo> = serde_json::from_slice(json_data)
-            .map_err(|e| StorageEngineError::other(format!("Failed to deserialize catalog: {}", e)))?;
+        let tables: Vec<TableInfo> = serde_json::from_slice(json_data).map_err(|e| {
+            StorageEngineError::other(format!("Failed to deserialize catalog: {}", e))
+        })?;
 
         // Validate count
         if tables.len() != count as usize {
@@ -665,7 +675,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let (engine, root_page_id) = self
             .engine_registry
             .create_engine(table_id, name.to_string(), &options)
-            .map_err(|e| StorageEngineError::other(format!("Failed to create storage engine: {}", e)))?;
+            .map_err(|e| {
+                StorageEngineError::other(format!("Failed to create storage engine: {}", e))
+            })?;
 
         // Register the engine
         self.engine_registry.register(engine).map_err(|e| {
@@ -744,7 +756,10 @@ impl<FS: FileSystem> StorageEngine<FS> {
     }
 
     /// Get table or index info by name.
-    pub fn get_object_info_by_name(&self, name: &str) -> Result<Option<TableInfo>, StorageEngineError> {
+    pub fn get_object_info_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<TableInfo>, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.get(name).cloned())
     }
@@ -900,7 +915,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
     ///     println!("Table {}: removed {} versions", table_id, removed);
     /// }
     /// ```
-    pub fn vacuum_all(&self) -> Result<std::collections::HashMap<TableId, usize>, StorageEngineError> {
+    pub fn vacuum_all(
+        &self,
+    ) -> Result<std::collections::HashMap<TableId, usize>, StorageEngineError> {
         let mut results = std::collections::HashMap::new();
 
         // Get all tables
@@ -1131,7 +1148,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// - The key already exists (use `upsert` for update-or-insert)
     /// - Index maintenance fails
     /// - Transaction commit fails
-    pub fn insert(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
+    pub fn insert(
+        &self,
+        table: TableId,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
             return Err(StorageEngineError::not_a_table(table));
@@ -1164,7 +1186,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// - The key does not exist (use `upsert` for insert-or-update)
     /// - Index maintenance fails
     /// - Transaction commit fails
-    pub fn update(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
+    pub fn update(
+        &self,
+        table: TableId,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
             return Err(StorageEngineError::not_a_table(table));
@@ -1192,7 +1219,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
     ///
     /// This is a convenience method that inserts if the key doesn't exist,
     /// or updates if it does.
-    pub fn upsert(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<bool, StorageEngineError> {
+    pub fn upsert(
+        &self,
+        table: TableId,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<bool, StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
             return Err(StorageEngineError::not_a_table(table));

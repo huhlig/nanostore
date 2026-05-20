@@ -18,8 +18,8 @@
 
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use nanostore::pager::{Pager, PagerConfig};
-use nanostore::table::{TimeSeries, TimeSeriesCursor};
 use nanostore::table::timeseries::{TimeSeriesAggregation, TimeSeriesConfig, TimeSeriesTable};
+use nanostore::table::{TimeSeries, TimeSeriesCursor};
 use nanostore::txn::TransactionId;
 use nanostore::types::TableId;
 use nanostore::vfs::MemoryFileSystem;
@@ -311,11 +311,13 @@ fn bench_scan_series_ranges(c: &mut Criterion) {
         });
 
         // Benchmark just creating the cursor (setup cost)
-        group.bench_with_input(BenchmarkId::new("cursor_create", name), range_size, |b, _| {
-            b.iter(|| {
-                black_box(table.scan_series(series_key, 0, end_ts).unwrap())
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("cursor_create", name),
+            range_size,
+            |b, _| {
+                b.iter(|| black_box(table.scan_series(series_key, 0, end_ts).unwrap()));
+            },
+        );
     }
 
     group.finish();
@@ -339,17 +341,13 @@ fn bench_latest_before(c: &mut Criterion) {
 
     for (name, timestamp) in positions.iter() {
         group.bench_with_input(BenchmarkId::new("query", name), timestamp, |b, &ts| {
-            b.iter(|| {
-                black_box(table.latest_before(series_key, ts).unwrap())
-            });
+            b.iter(|| black_box(table.latest_before(series_key, ts).unwrap()));
         });
     }
 
     // Benchmark query for non-existent series
     group.bench_function("nonexistent_series", |b| {
-        b.iter(|| {
-            black_box(table.latest_before(b"nonexistent", 50000).unwrap())
-        });
+        b.iter(|| black_box(table.latest_before(b"nonexistent", 50000).unwrap()));
     });
 
     group.finish();
@@ -374,13 +372,8 @@ fn bench_bucket_sizes(c: &mut Criterion) {
         let fs = MemoryFileSystem::new();
         let pager = Arc::new(Pager::create(&fs, "bench.db", PagerConfig::default()).unwrap());
         let config = TimeSeriesConfig::default().with_bucket_size(*bucket_size);
-        let mut table = TimeSeriesTable::new(
-            TableId::from(1),
-            "metrics".to_string(),
-            pager,
-            config,
-        )
-        .unwrap();
+        let mut table =
+            TimeSeriesTable::new(TableId::from(1), "metrics".to_string(), pager, config).unwrap();
 
         // Insert data
         let tx_id = TransactionId::from(1);
@@ -410,11 +403,13 @@ fn bench_bucket_sizes(c: &mut Criterion) {
         });
 
         // Benchmark latest_before
-        group.bench_with_input(BenchmarkId::new("latest_before", name), bucket_size, |b, _| {
-            b.iter(|| {
-                black_box(table.latest_before(series_key, end_ts / 2).unwrap())
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("latest_before", name),
+            bucket_size,
+            |b, _| {
+                b.iter(|| black_box(table.latest_before(series_key, end_ts / 2).unwrap()));
+            },
+        );
     }
 
     group.finish();
@@ -434,9 +429,7 @@ fn bench_memory_usage(c: &mut Criterion) {
 
         // Benchmark cursor creation (measures initial allocation)
         group.bench_with_input(BenchmarkId::new("cursor_alloc", size), size, |b, _| {
-            b.iter(|| {
-                black_box(table.scan_series(series_key, 0, end_ts).unwrap())
-            });
+            b.iter(|| black_box(table.scan_series(series_key, 0, end_ts).unwrap()));
         });
 
         // Benchmark full iteration (measures total memory footprint)
@@ -472,7 +465,7 @@ fn bench_multiple_series(c: &mut Criterion) {
 
     let num_series = 10;
     let points_per_series = 1_000;
-    
+
     let fs = MemoryFileSystem::new();
     let pager = Arc::new(Pager::create(&fs, "bench.db", PagerConfig::default()).unwrap());
     let mut table = TimeSeriesTable::new(
@@ -497,7 +490,9 @@ fn bench_multiple_series(c: &mut Criterion) {
     }
 
     let end_ts = (points_per_series as i64) * 1000;
-    group.throughput(Throughput::Elements((num_series * points_per_series) as u64));
+    group.throughput(Throughput::Elements(
+        (num_series * points_per_series) as u64,
+    ));
 
     // Benchmark scanning a single series
     group.bench_function("single_series_scan", |b| {
@@ -517,9 +512,7 @@ fn bench_multiple_series(c: &mut Criterion) {
     // Benchmark latest_before on a single series
     group.bench_function("single_series_latest", |b| {
         let series_key = b"sensor-5";
-        b.iter(|| {
-            black_box(table.latest_before(series_key, end_ts / 2).unwrap())
-        });
+        b.iter(|| black_box(table.latest_before(series_key, end_ts / 2).unwrap()));
     });
 
     // Benchmark aggregation on a single series

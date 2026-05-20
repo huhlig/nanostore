@@ -80,7 +80,10 @@ fn test_insert_10k_grid_points() {
         max: GeoPoint { x: 75.0, y: 75.0 },
     };
     let results = rtree.intersects(query, 5000).unwrap();
-    assert!(results.len() >= 2500, "Should find at least 2500 points in 50x50 region");
+    assert!(
+        results.len() >= 2500,
+        "Should find at least 2500 points in 50x50 region"
+    );
 }
 
 /// Test inserting 25,000 random points
@@ -142,7 +145,12 @@ fn test_insert_5k_overlapping_boxes() {
             y: y + 10.0,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::BoundingBox { min, max }, tx_id, lsn)
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::BoundingBox { min, max },
+                tx_id,
+                lsn,
+            )
             .unwrap();
     }
 
@@ -413,7 +421,12 @@ fn test_large_bounding_boxes_1k() {
             y: y + 50.0,
         };
         rtree
-            .insert_geometry(id.as_bytes(), GeometryRef::BoundingBox { min, max }, tx_id, lsn)
+            .insert_geometry(
+                id.as_bytes(),
+                GeometryRef::BoundingBox { min, max },
+                tx_id,
+                lsn,
+            )
             .unwrap();
     }
 
@@ -426,7 +439,10 @@ fn test_large_bounding_boxes_1k() {
         max: GeoPoint { x: 75.0, y: 75.0 },
     };
     let results = rtree.intersects(query, 2000).unwrap();
-    assert!(results.len() > 100, "Should find many overlapping large boxes");
+    assert!(
+        results.len() > 100,
+        "Should find many overlapping large boxes"
+    );
 }
 
 /// Test spatial queries at boundaries
@@ -497,9 +513,13 @@ fn test_persistence_with_5k_points() {
 
     // Create and populate tree
     {
-        let mut rtree =
-            PagedRTree::new(TableId::from(1), "persist_rtree".to_string(), pager.clone(), config.clone())
-                .unwrap();
+        let mut rtree = PagedRTree::new(
+            TableId::from(1),
+            "persist_rtree".to_string(),
+            pager.clone(),
+            config.clone(),
+        )
+        .unwrap();
 
         root_page_id = rtree.root_page_id();
 

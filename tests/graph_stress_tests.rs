@@ -81,7 +81,9 @@ fn test_large_graph_10k_vertices_50k_edges() {
     // Verify random vertices have edges
     for i in [0, 1000, 5000, 9999] {
         let vertex = format!("vertex_{}", i);
-        let cursor = graph.outgoing(vertex.as_bytes(), Some(b"connects")).unwrap();
+        let cursor = graph
+            .outgoing(vertex.as_bytes(), Some(b"connects"))
+            .unwrap();
         let edges = cursor.collect_all().unwrap();
         assert_eq!(edges.len(), 5, "Vertex {} should have 5 edges", i);
     }
@@ -122,7 +124,9 @@ fn test_dense_graph_1k_vertices_100k_edges() {
     // Verify dense connectivity
     for i in [0, 250, 500, 750, 999] {
         let vertex = format!("vertex_{}", i);
-        let cursor = graph.outgoing(vertex.as_bytes(), Some(b"connects")).unwrap();
+        let cursor = graph
+            .outgoing(vertex.as_bytes(), Some(b"connects"))
+            .unwrap();
         let edges = cursor.collect_all().unwrap();
         assert_eq!(edges.len(), 100, "Vertex {} should have 100 edges", i);
     }
@@ -337,7 +341,11 @@ fn test_complex_graph_with_cycles_5k_vertices() {
         })
         .unwrap();
 
-    assert_eq!(visited.len(), 5_000, "Should visit each vertex exactly once");
+    assert_eq!(
+        visited.len(),
+        5_000,
+        "Should visit each vertex exactly once"
+    );
 }
 
 /// Test graph with many disconnected components
@@ -488,7 +496,9 @@ fn test_edge_deletions_10k_edges() {
     // Verify remaining edges
     for i in [0, 500, 1000, 1500, 1999] {
         let vertex = format!("vertex_{}", i);
-        let cursor = graph.outgoing(vertex.as_bytes(), Some(b"connects")).unwrap();
+        let cursor = graph
+            .outgoing(vertex.as_bytes(), Some(b"connects"))
+            .unwrap();
         let edges = cursor.collect_all().unwrap();
         assert_eq!(edges.len(), 2, "Vertex {} should have 2 remaining edges", i);
     }

@@ -78,7 +78,8 @@ fn test_catalog_persistence() {
 
     // Phase 1: Create StorageEngine and tables
     {
-        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+        let db =
+            StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         // Create tables with different engines
         let users_id = db
@@ -105,7 +106,8 @@ fn test_catalog_persistence() {
 
     // Phase 2: Reopen StorageEngine and verify catalog
     {
-        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
+        let db =
+            StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         // Verify tables still exist in catalog
         let tables = db.list_tables().unwrap();
@@ -135,7 +137,8 @@ fn test_index_catalog_persistence() {
 
     // Phase 1: Create StorageEngine and table
     {
-        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+        let db =
+            StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let _users_id = db
             .create_table("users", memory_table_options())
@@ -148,7 +151,8 @@ fn test_index_catalog_persistence() {
 
     // Phase 2: Reopen and verify table persists
     {
-        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
+        let db =
+            StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         // Verify table exists
         let all_objects = db.list_all_objects().unwrap();
@@ -171,7 +175,8 @@ fn test_drop_table_persistence() {
 
     // Phase 1: Create and drop table
     {
-        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+        let db =
+            StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let table1_id = db.create_table("table1", memory_table_options()).unwrap();
         let table2_id = db.create_table("table2", memory_table_options()).unwrap();
@@ -188,7 +193,8 @@ fn test_drop_table_persistence() {
 
     // Phase 2: Reopen and verify drop persisted
     {
-        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
+        let db =
+            StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let tables = db.list_tables().unwrap();
         assert_eq!(tables.len(), 2, "Dropped table should not reappear");
@@ -211,7 +217,8 @@ fn test_data_persistence_btree_table() {
 
     // Phase 1: Create StorageEngine and insert data
     {
-        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+        let db =
+            StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let users_id = db
             .create_table(
@@ -241,7 +248,8 @@ fn test_data_persistence_btree_table() {
 
     // Phase 2: Reopen and verify data persisted
     {
-        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
+        let db =
+            StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let users_id = db.open_table("users").unwrap().expect("Table should exist");
 
@@ -269,7 +277,8 @@ fn test_data_persistence_lsm_table() {
 
     // Phase 1: Create and populate LSM table
     {
-        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+        let db =
+            StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let logs_id = db
             .create_table("logs", lsm_table_options())
@@ -290,7 +299,8 @@ fn test_data_persistence_lsm_table() {
 
     // Phase 2: Reopen and verify LSM data
     {
-        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
+        let db =
+            StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let logs_id = db.open_table("logs").unwrap().expect("Table should exist");
 
@@ -314,7 +324,8 @@ fn test_mixed_operations_with_persistence() {
 
     // Phase 1: Create StorageEngine with multiple tables and mixed operations
     {
-        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
+        let db =
+            StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         // Create different table types - use BTree for users (read-optimized)
         let users_id = db
@@ -352,7 +363,8 @@ fn test_mixed_operations_with_persistence() {
 
     // Phase 2: Reopen and verify all operations persisted
     {
-        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
+        let db =
+            StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let users_id = db.open_table("users").unwrap().unwrap();
         let logs_id = db.open_table("logs").unwrap().unwrap();

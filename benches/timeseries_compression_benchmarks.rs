@@ -117,7 +117,8 @@ fn bench_delta_of_delta_compression(c: &mut Criterion) {
             |b, &size| {
                 let timestamps = generate_regular_timestamps(size, 1_000_000, 10);
                 b.iter(|| {
-                    let compressed = compress_timestamps_delta_of_delta(black_box(&timestamps)).unwrap();
+                    let compressed =
+                        compress_timestamps_delta_of_delta(black_box(&timestamps)).unwrap();
                     black_box(compressed);
                 });
             },
@@ -130,7 +131,8 @@ fn bench_delta_of_delta_compression(c: &mut Criterion) {
             |b, &size| {
                 let timestamps = generate_irregular_timestamps(size, 1_000_000, 10);
                 b.iter(|| {
-                    let compressed = compress_timestamps_delta_of_delta(black_box(&timestamps)).unwrap();
+                    let compressed =
+                        compress_timestamps_delta_of_delta(black_box(&timestamps)).unwrap();
                     black_box(compressed);
                 });
             },
@@ -152,7 +154,8 @@ fn bench_delta_of_delta_decompression(c: &mut Criterion) {
                 let timestamps = generate_regular_timestamps(size, 1_000_000, 10);
                 let compressed = compress_timestamps_delta_of_delta(&timestamps).unwrap();
                 b.iter(|| {
-                    let decompressed = decompress_timestamps_delta_of_delta(black_box(&compressed), size).unwrap();
+                    let decompressed =
+                        decompress_timestamps_delta_of_delta(black_box(&compressed), size).unwrap();
                     black_box(decompressed);
                 });
             },
@@ -166,7 +169,8 @@ fn bench_delta_of_delta_decompression(c: &mut Criterion) {
                 let timestamps = generate_irregular_timestamps(size, 1_000_000, 10);
                 let compressed = compress_timestamps_delta_of_delta(&timestamps).unwrap();
                 b.iter(|| {
-                    let decompressed = decompress_timestamps_delta_of_delta(black_box(&compressed), size).unwrap();
+                    let decompressed =
+                        decompress_timestamps_delta_of_delta(black_box(&compressed), size).unwrap();
                     black_box(decompressed);
                 });
             },
@@ -186,21 +190,19 @@ fn bench_delta_of_delta_ratios(c: &mut Criterion) {
         let compressed = compress_timestamps_delta_of_delta(&timestamps).unwrap();
         let original_size = timestamps.len() * 8; // 8 bytes per i64
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("regular_intervals_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("regular_intervals_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
 
         // Irregular intervals
         let timestamps = generate_irregular_timestamps(size, 1_000_000, 10);
         let compressed = compress_timestamps_delta_of_delta(&timestamps).unwrap();
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("irregular_intervals_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("irregular_intervals_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
     }
 
     group.finish();
@@ -241,17 +243,13 @@ fn bench_gorilla_compression(c: &mut Criterion) {
         );
 
         // Low variance values (very good case)
-        group.bench_with_input(
-            BenchmarkId::new("low_variance", size),
-            &size,
-            |b, &size| {
-                let values = generate_slowly_changing_values(size, 100.0, 0.01);
-                b.iter(|| {
-                    let compressed = compress_values_gorilla(black_box(&values)).unwrap();
-                    black_box(compressed);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("low_variance", size), &size, |b, &size| {
+            let values = generate_slowly_changing_values(size, 100.0, 0.01);
+            b.iter(|| {
+                let compressed = compress_values_gorilla(black_box(&values)).unwrap();
+                black_box(compressed);
+            });
+        });
     }
 
     group.finish();
@@ -269,7 +267,8 @@ fn bench_gorilla_decompression(c: &mut Criterion) {
                 let values = generate_slowly_changing_values(size, 100.0, 0.1);
                 let compressed = compress_values_gorilla(&values).unwrap();
                 b.iter(|| {
-                    let decompressed = decompress_values_gorilla(black_box(&compressed), size).unwrap();
+                    let decompressed =
+                        decompress_values_gorilla(black_box(&compressed), size).unwrap();
                     black_box(decompressed);
                 });
             },
@@ -283,25 +282,22 @@ fn bench_gorilla_decompression(c: &mut Criterion) {
                 let values = generate_high_variance_values(size, 100.0, 50.0);
                 let compressed = compress_values_gorilla(&values).unwrap();
                 b.iter(|| {
-                    let decompressed = decompress_values_gorilla(black_box(&compressed), size).unwrap();
+                    let decompressed =
+                        decompress_values_gorilla(black_box(&compressed), size).unwrap();
                     black_box(decompressed);
                 });
             },
         );
 
         // Low variance values
-        group.bench_with_input(
-            BenchmarkId::new("low_variance", size),
-            &size,
-            |b, &size| {
-                let values = generate_slowly_changing_values(size, 100.0, 0.01);
-                let compressed = compress_values_gorilla(&values).unwrap();
-                b.iter(|| {
-                    let decompressed = decompress_values_gorilla(black_box(&compressed), size).unwrap();
-                    black_box(decompressed);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("low_variance", size), &size, |b, &size| {
+            let values = generate_slowly_changing_values(size, 100.0, 0.01);
+            let compressed = compress_values_gorilla(&values).unwrap();
+            b.iter(|| {
+                let decompressed = decompress_values_gorilla(black_box(&compressed), size).unwrap();
+                black_box(decompressed);
+            });
+        });
     }
 
     group.finish();
@@ -318,31 +314,28 @@ fn bench_gorilla_ratios(c: &mut Criterion) {
         let values = generate_slowly_changing_values(size, 100.0, 0.1);
         let compressed = compress_values_gorilla(&values).unwrap();
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("slowly_changing_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("slowly_changing_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
 
         // High variance values
         let values = generate_high_variance_values(size, 100.0, 50.0);
         let compressed = compress_values_gorilla(&values).unwrap();
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("high_variance_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("high_variance_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
 
         // Low variance values
         let values = generate_slowly_changing_values(size, 100.0, 0.01);
         let compressed = compress_values_gorilla(&values).unwrap();
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("low_variance_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("low_variance_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
     }
 
     group.finish();
@@ -357,30 +350,22 @@ fn bench_delta_compression(c: &mut Criterion) {
 
     for size in [100, 1000, 10000] {
         // Monotonic values (best case)
-        group.bench_with_input(
-            BenchmarkId::new("monotonic", size),
-            &size,
-            |b, &size| {
-                let values = generate_monotonic_integers(size, 1000, 5);
-                b.iter(|| {
-                    let compressed = compress_values_delta(black_box(&values)).unwrap();
-                    black_box(compressed);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("monotonic", size), &size, |b, &size| {
+            let values = generate_monotonic_integers(size, 1000, 5);
+            b.iter(|| {
+                let compressed = compress_values_delta(black_box(&values)).unwrap();
+                black_box(compressed);
+            });
+        });
 
         // Random walk values (realistic case)
-        group.bench_with_input(
-            BenchmarkId::new("random_walk", size),
-            &size,
-            |b, &size| {
-                let values = generate_random_walk_integers(size, 1000);
-                b.iter(|| {
-                    let compressed = compress_values_delta(black_box(&values)).unwrap();
-                    black_box(compressed);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("random_walk", size), &size, |b, &size| {
+            let values = generate_random_walk_integers(size, 1000);
+            b.iter(|| {
+                let compressed = compress_values_delta(black_box(&values)).unwrap();
+                black_box(compressed);
+            });
+        });
     }
 
     group.finish();
@@ -391,32 +376,24 @@ fn bench_delta_decompression(c: &mut Criterion) {
 
     for size in [100, 1000, 10000] {
         // Monotonic values
-        group.bench_with_input(
-            BenchmarkId::new("monotonic", size),
-            &size,
-            |b, &size| {
-                let values = generate_monotonic_integers(size, 1000, 5);
-                let compressed = compress_values_delta(&values).unwrap();
-                b.iter(|| {
-                    let decompressed = decompress_values_delta(black_box(&compressed), size).unwrap();
-                    black_box(decompressed);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("monotonic", size), &size, |b, &size| {
+            let values = generate_monotonic_integers(size, 1000, 5);
+            let compressed = compress_values_delta(&values).unwrap();
+            b.iter(|| {
+                let decompressed = decompress_values_delta(black_box(&compressed), size).unwrap();
+                black_box(decompressed);
+            });
+        });
 
         // Random walk values
-        group.bench_with_input(
-            BenchmarkId::new("random_walk", size),
-            &size,
-            |b, &size| {
-                let values = generate_random_walk_integers(size, 1000);
-                let compressed = compress_values_delta(&values).unwrap();
-                b.iter(|| {
-                    let decompressed = decompress_values_delta(black_box(&compressed), size).unwrap();
-                    black_box(decompressed);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("random_walk", size), &size, |b, &size| {
+            let values = generate_random_walk_integers(size, 1000);
+            let compressed = compress_values_delta(&values).unwrap();
+            b.iter(|| {
+                let decompressed = decompress_values_delta(black_box(&compressed), size).unwrap();
+                black_box(decompressed);
+            });
+        });
     }
 
     group.finish();
@@ -433,21 +410,19 @@ fn bench_delta_ratios(c: &mut Criterion) {
         let values = generate_monotonic_integers(size, 1000, 5);
         let compressed = compress_values_delta(&values).unwrap();
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("monotonic_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("monotonic_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
 
         // Random walk values
         let values = generate_random_walk_integers(size, 1000);
         let compressed = compress_values_delta(&values).unwrap();
         let ratio = compression_ratio(original_size, compressed.len());
-        
-        group.bench_function(
-            BenchmarkId::new("random_walk_ratio", size),
-            |b| b.iter(|| black_box(ratio)),
-        );
+
+        group.bench_function(BenchmarkId::new("random_walk_ratio", size), |b| {
+            b.iter(|| black_box(ratio))
+        });
     }
 
     group.finish();
@@ -466,7 +441,7 @@ fn bench_combined_compression(c: &mut Criterion) {
     group.bench_function("regular_timestamps_slowly_changing_values", |b| {
         let timestamps = generate_regular_timestamps(size, 1_000_000, 10);
         let values = generate_slowly_changing_values(size, 100.0, 0.1);
-        
+
         b.iter(|| {
             let ts_compressed = compress_timestamps_delta_of_delta(black_box(&timestamps)).unwrap();
             let val_compressed = compress_values_gorilla(black_box(&values)).unwrap();
@@ -477,7 +452,7 @@ fn bench_combined_compression(c: &mut Criterion) {
     group.bench_function("irregular_timestamps_high_variance_values", |b| {
         let timestamps = generate_irregular_timestamps(size, 1_000_000, 10);
         let values = generate_high_variance_values(size, 100.0, 50.0);
-        
+
         b.iter(|| {
             let ts_compressed = compress_timestamps_delta_of_delta(black_box(&timestamps)).unwrap();
             let val_compressed = compress_values_gorilla(black_box(&values)).unwrap();
@@ -513,10 +488,7 @@ criterion_group!(
     bench_delta_ratios
 );
 
-criterion_group!(
-    combined_benches,
-    bench_combined_compression
-);
+criterion_group!(combined_benches, bench_combined_compression);
 
 criterion_main!(
     delta_of_delta_benches,

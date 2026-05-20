@@ -368,9 +368,13 @@ impl GroupCommitCoordinator {
         // Wait for notification
         match receiver.recv() {
             Ok(CommitResult::Success) => Ok(()),
-            Ok(CommitResult::Error(msg)) => Err(crate::wal::WalError::InternalError(msg)),
-            Err(_) => Err(crate::wal::WalError::InternalError(
-                "Commit notification failed".to_string(),
+            Ok(CommitResult::Error(msg)) => Err(crate::wal::WalError::commit_notification_error(
+                txn_id, lsn, msg,
+            )),
+            Err(_) => Err(crate::wal::WalError::commit_notification_error(
+                txn_id,
+                lsn,
+                "Commit notification channel closed",
             )),
         }
     }

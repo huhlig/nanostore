@@ -195,7 +195,9 @@ fn test_heavy_updates_5k_keys() {
     let reader = lsm.reader(LogSequenceNumber::from(5)).unwrap();
     for i in [0, 1000, 2500, 4999] {
         let key = format!("key_{:04}", i);
-        let result = reader.get(key.as_bytes(), LogSequenceNumber::from(5)).unwrap();
+        let result = reader
+            .get(key.as_bytes(), LogSequenceNumber::from(5))
+            .unwrap();
         assert!(result.is_some());
         let value = result.unwrap().0;
         let expected = format!("value_v5_{}", i);
@@ -240,14 +242,18 @@ fn test_heavy_deletions_10k_keys() {
     let reader = lsm.reader(LogSequenceNumber::from(2)).unwrap();
     for i in [0, 100, 5000, 9998] {
         let key = format!("key_{:05}", i);
-        let result = reader.get(key.as_bytes(), LogSequenceNumber::from(2)).unwrap();
+        let result = reader
+            .get(key.as_bytes(), LogSequenceNumber::from(2))
+            .unwrap();
         assert!(result.is_none(), "Key {} should be deleted", key);
     }
 
     // Verify non-deleted keys still exist
     for i in [1, 101, 5001, 9999] {
         let key = format!("key_{:05}", i);
-        let result = reader.get(key.as_bytes(), LogSequenceNumber::from(2)).unwrap();
+        let result = reader
+            .get(key.as_bytes(), LogSequenceNumber::from(2))
+            .unwrap();
         assert!(result.is_some(), "Key {} should exist", key);
     }
 }
@@ -372,8 +378,14 @@ fn test_many_small_transactions_1000() {
     let reader = lsm.reader(LogSequenceNumber::from(1000)).unwrap();
     for tx_num in [0, 100, 500, 999] {
         let key = format!("tx_{:04}_key_00", tx_num);
-        let result = reader.get(key.as_bytes(), LogSequenceNumber::from(1000)).unwrap();
-        assert!(result.is_some(), "Key from transaction {} should exist", tx_num);
+        let result = reader
+            .get(key.as_bytes(), LogSequenceNumber::from(1000))
+            .unwrap();
+        assert!(
+            result.is_some(),
+            "Key from transaction {} should exist",
+            tx_num
+        );
     }
 }
 
@@ -439,7 +451,11 @@ fn test_memtable_overflow_behavior() {
     for i in [0, 2500, 5000, 7500, 9999] {
         let key = format!("key_{:05}", i);
         let result = reader.get(key.as_bytes(), lsn).unwrap();
-        assert!(result.is_some(), "Key {} should exist after memtable flushes", key);
+        assert!(
+            result.is_some(),
+            "Key {} should exist after memtable flushes",
+            key
+        );
     }
 }
 

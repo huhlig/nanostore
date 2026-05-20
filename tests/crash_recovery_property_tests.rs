@@ -92,11 +92,26 @@ use std::io::{Read, Seek, SeekFrom, Write};
 /// Represents a database operation
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum DbOperation {
-    BeginTxn { txn_id: u64 },
-    Put { txn_id: u64, table_id: u64, key: Vec<u8>, value: Vec<u8> },
-    Delete { txn_id: u64, table_id: u64, key: Vec<u8> },
-    CommitTxn { txn_id: u64 },
-    RollbackTxn { txn_id: u64 },
+    BeginTxn {
+        txn_id: u64,
+    },
+    Put {
+        txn_id: u64,
+        table_id: u64,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    },
+    Delete {
+        txn_id: u64,
+        table_id: u64,
+        key: Vec<u8>,
+    },
+    CommitTxn {
+        txn_id: u64,
+    },
+    RollbackTxn {
+        txn_id: u64,
+    },
     Checkpoint,
 }
 
@@ -162,7 +177,12 @@ fn execute_with_crash(
                 active_txns.insert(*txn_id);
                 txn_writes.insert(*txn_id, Vec::new());
             }
-            DbOperation::Put { txn_id, table_id, key, value } => {
+            DbOperation::Put {
+                txn_id,
+                table_id,
+                key,
+                value,
+            } => {
                 writer
                     .write_operation(
                         TransactionId::from(*txn_id),
@@ -176,7 +196,11 @@ fn execute_with_crash(
                     writes.push((*table_id, key.clone(), Some(value.clone())));
                 }
             }
-            DbOperation::Delete { txn_id, table_id, key } => {
+            DbOperation::Delete {
+                txn_id,
+                table_id,
+                key,
+            } => {
                 writer
                     .write_operation(
                         TransactionId::from(*txn_id),
@@ -199,7 +223,9 @@ fn execute_with_crash(
                 if let Some(writes) = txn_writes.get(txn_id) {
                     for (table_id, key, value_opt) in writes {
                         if let Some(value) = value_opt {
-                            expected.committed_data.insert((*table_id, key.clone()), value.clone());
+                            expected
+                                .committed_data
+                                .insert((*table_id, key.clone()), value.clone());
                         } else {
                             expected.committed_data.remove(&(*table_id, key.clone()));
                         }
@@ -310,15 +336,25 @@ fn table_id_strategy() -> impl Strategy<Value = u64> {
 fn db_operation_strategy() -> impl Strategy<Value = DbOperation> {
     prop_oneof![
         txn_id_strategy().prop_map(|txn_id| DbOperation::BeginTxn { txn_id }),
-        (txn_id_strategy(), table_id_strategy(), key_strategy(), value_strategy())
+        (
+            txn_id_strategy(),
+            table_id_strategy(),
+            key_strategy(),
+            value_strategy()
+        )
             .prop_map(|(txn_id, table_id, key, value)| DbOperation::Put {
                 txn_id,
                 table_id,
                 key,
                 value
             }),
-        (txn_id_strategy(), table_id_strategy(), key_strategy())
-            .prop_map(|(txn_id, table_id, key)| DbOperation::Delete { txn_id, table_id, key }),
+        (txn_id_strategy(), table_id_strategy(), key_strategy()).prop_map(
+            |(txn_id, table_id, key)| DbOperation::Delete {
+                txn_id,
+                table_id,
+                key
+            }
+        ),
         txn_id_strategy().prop_map(|txn_id| DbOperation::CommitTxn { txn_id }),
         txn_id_strategy().prop_map(|txn_id| DbOperation::RollbackTxn { txn_id }),
         Just(DbOperation::Checkpoint),
@@ -477,7 +513,7 @@ proptest! {
         if let Ok(result) = WalRecovery::recover(&fs, &wal_path) {
             // Group recovered writes by transaction
             let mut txn_writes: HashMap<u64, Vec<&RecoveredWrite>> = HashMap::new();
-            
+
             // We need to track which transactions were committed
             // by examining the operations up to the crash point
             let crash_after = match crash_point {
@@ -660,9 +696,7 @@ fn test_crash_during_multi_transaction_commit() {
 
     // Transaction 2 should be active
     assert_eq!(result.active_transactions.len(), 1);
-    assert!(result
-        .active_transactions
-        .contains(&TransactionId::from(2)));
+    assert!(result.active_transactions.contains(&TransactionId::from(2)));
 }
 
 #[test]
