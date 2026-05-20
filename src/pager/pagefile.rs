@@ -1070,6 +1070,261 @@ impl<FS: FileSystem> Pager<FS> {
 
         Ok(total_freed)
     }
+
+    // =========================================================================
+    // VACUUM FULL Methods - Phase 2: Pager-level compaction
+    // =========================================================================
+
+    /// Find the highest used page in the database.
+    ///
+    /// Scans backward from the end of the file to find the last page that is not free.
+    /// This is used by VACUUM FULL to determine how much the file can be truncated.
+    ///
+    /// # Returns
+    /// * `Ok(Some(PageId))` - The highest used page ID
+    /// * `Ok(None)` - No used pages found (only header and superblock)
+    ///
+    /// # Lock Ordering
+    /// Follows the hierarchy: page_table → file
+    #[instrument(skip(self))]
+    pub fn find_highest_used_page(&self) -> PagerResult<Option<PageId>> {
+        let start = Instant::now();
+        debug!("Finding highest used page");
+
+        let total_pages = self.total_pages();
+
+        // Start from the last page and scan backward
+        // Skip page 0 (header) and page 1 (superblock) as they're always used
+        for page_num in (2..total_pages).rev() {
+            let page_id = PageId::from(page_num);
+
+            // Check if this page is in the free list
+            // If not in free list, it's a used page
+            let page = self.read_page(page_id)?;
+
+            if page.page_type() != PageType::Free && page.page_type() != PageType::FreeList {
+                histogram!("nanostore.pager.vacuum_full.find_highest_used.duration_seconds")
+                    .record(start.elapsed().as_secs_f64());
+                debug!(highest_page = %page_id, "Found highest used page");
+                return Ok(Some(page_id));
+            }
+        }
+
+        // No used pages found beyond header and superblock
+        histogram!("nanostore.pager.vacuum_full.find_highest_used.duration_seconds")
+            .record(start.elapsed().as_secs_f64());
+        debug!("No used pages found beyond header and superblock");
+        Ok(None)
+    }
+
+    /// Move a page from one location to another.
+    ///
+    /// Copies page data from source to destination, updating the page ID in the header.
+    /// This is used by VACUUM FULL to move pages from high page IDs to low page IDs.
+    ///
+    /// # Arguments
+    /// * `from_page_id` - Source page ID to move from
+    /// * `to_page_id` - Destination page ID to move to
+    ///
+    /// # Lock Ordering
+    /// Follows the hierarchy: page_table → file
+    ///
+    /// # Note
+    /// This does NOT update references to the page (e.g., in indexes or overflow chains).
+    /// The caller is responsible for updating all references.
+    #[instrument(skip(self), fields(from = %from_page_id, to = %to_page_id))]
+    pub fn move_page(&self, from_page_id: PageId, to_page_id: PageId) -> PagerResult<()> {
+        let start = Instant::now();
+        debug!("Moving page");
+
+        // Validate page IDs
+        if from_page_id == to_page_id {
+            return Err(PagerError::InternalError(
+                "Cannot move page to itself".to_string(),
+            ));
+        }
+
+        if from_page_id == PageId::from(0) || from_page_id == PageId::from(1) {
+            return Err(PagerError::InvalidPageId(from_page_id));
+        }
+
+        if to_page_id == PageId::from(0) || to_page_id == PageId::from(1) {
+            return Err(PagerError::InvalidPageId(to_page_id));
+        }
+
+        // Read the source page
+        let mut page = self.read_page(from_page_id)?;
+
+        // Update the page ID in the header
+        page.header.page_id = to_page_id;
+
+        // Write to the destination
+        self.write_page_to_disk(&page)?;
+
+        // Mark the source page as free
+        let mut free_page = Page::new(
+            from_page_id,
+            PageType::Free,
+            self.config.page_size.data_size(),
+        );
+        free_page.header.compression = self.config.compression;
+        free_page.header.encryption = self.config.encryption;
+        self.write_page_to_disk(&free_page)?;
+
+        counter!("nanostore.pager.vacuum_full.pages_moved").increment(1);
+        histogram!("nanostore.pager.vacuum_full.move_page.duration_seconds")
+            .record(start.elapsed().as_secs_f64());
+        debug!("Page moved successfully");
+        Ok(())
+    }
+
+    /// Compact the database by moving pages from high to low positions and truncate the file.
+    ///
+    /// This is the main VACUUM FULL algorithm:
+    /// 1. Find the highest used page
+    /// 2. Find free pages below it
+    /// 3. Move pages from high to low
+    /// 4. Truncate the file
+    ///
+    /// # Returns
+    /// Statistics about the compaction operation
+    ///
+    /// # Lock Ordering
+    /// This is a high-level operation that acquires locks as needed for each sub-operation
+    #[instrument(skip(self))]
+    pub fn compact_and_truncate(&self) -> PagerResult<crate::kvdb::VacuumFullStats> {
+        let start = Instant::now();
+        debug!("Starting compact and truncate");
+
+        let page_size = self.config.page_size.to_u32() as u64;
+        let file_size_before = {
+            let file = self.file.read();
+            file.get_size()?
+        };
+
+        let mut stats = crate::kvdb::VacuumFullStats::new(file_size_before);
+
+        // Find the highest used page
+        let highest_used = match self.find_highest_used_page()? {
+            Some(page_id) => page_id,
+            None => {
+                // No pages to compact
+                stats.file_size_after = file_size_before;
+                stats.duration = start.elapsed();
+                debug!("No pages to compact");
+                return Ok(stats);
+            }
+        };
+
+        debug!(highest_used = %highest_used, "Found highest used page");
+
+        // Collect free pages below the highest used page
+        let mut free_pages = Vec::new();
+        for page_num in 2..highest_used.as_u64() {
+            let page_id = PageId::from(page_num);
+            let page = self.read_page(page_id)?;
+
+            if page.page_type() == PageType::Free {
+                free_pages.push(page_id);
+            }
+        }
+
+        free_pages.sort_unstable();
+        debug!(
+            free_page_count = free_pages.len(),
+            "Found free pages to fill"
+        );
+
+        // Move pages from high to low
+        let mut free_page_iter = free_pages.iter();
+        for page_num in (highest_used.as_u64() + 1..self.total_pages()).rev() {
+            let from_page_id = PageId::from(page_num);
+            let page = self.read_page(from_page_id)?;
+
+            // Skip if already free
+            if page.page_type() == PageType::Free || page.page_type() == PageType::FreeList {
+                continue;
+            }
+
+            // Find next free page to move to
+            if let Some(&to_page_id) = free_page_iter.next() {
+                self.move_page(from_page_id, to_page_id)?;
+                stats.pages_moved += 1;
+                debug!(from = %from_page_id, to = %to_page_id, "Moved page");
+            } else {
+                // No more free pages to fill
+                break;
+            }
+        }
+
+        // Calculate new file size (highest used page + 1) * page_size
+        let new_total_pages = highest_used.as_u64() + 1;
+        let new_file_size = new_total_pages * page_size;
+
+        // Truncate the file
+        self.truncate_file(new_file_size)?;
+
+        // Update superblock with new total pages
+        {
+            let mut superblock = self.superblock.write();
+            let old_total = superblock.total_pages;
+            superblock.total_pages = new_total_pages;
+            stats.pages_truncated = old_total - new_total_pages;
+        }
+
+        // Write updated superblock
+        let superblock_snapshot = self.superblock.read().clone();
+        self.write_superblock(&superblock_snapshot)?;
+
+        // Update stats
+        stats.file_size_after = new_file_size;
+        stats.calculate_reclaimed();
+        stats.duration = start.elapsed();
+
+        counter!("nanostore.pager.vacuum_full.completed").increment(1);
+        histogram!("nanostore.pager.vacuum_full.pages_moved").record(stats.pages_moved as f64);
+        histogram!("nanostore.pager.vacuum_full.pages_truncated")
+            .record(stats.pages_truncated as f64);
+        histogram!("nanostore.pager.vacuum_full.bytes_reclaimed")
+            .record(stats.bytes_reclaimed as f64);
+        histogram!("nanostore.pager.vacuum_full.duration_seconds")
+            .record(stats.duration.as_secs_f64());
+
+        debug!(
+            pages_moved = stats.pages_moved,
+            pages_truncated = stats.pages_truncated,
+            bytes_reclaimed = stats.bytes_reclaimed,
+            duration_ms = stats.duration.as_millis(),
+            "Compact and truncate completed"
+        );
+
+        Ok(stats)
+    }
+
+    /// Truncate the database file to the specified size.
+    ///
+    /// This physically shrinks the file by calling the VFS set_size() method.
+    ///
+    /// # Arguments
+    /// * `new_size` - New file size in bytes
+    ///
+    /// # Lock Ordering
+    /// Follows the hierarchy: file
+    #[instrument(skip(self), fields(new_size))]
+    pub fn truncate_file(&self, new_size: u64) -> PagerResult<()> {
+        let start = Instant::now();
+        debug!("Truncating file");
+
+        let mut file = self.file.write();
+        file.set_size(new_size)?;
+        file.sync_all()?;
+
+        counter!("nanostore.pager.vacuum_full.file_truncated").increment(1);
+        histogram!("nanostore.pager.vacuum_full.truncate.duration_seconds")
+            .record(start.elapsed().as_secs_f64());
+        debug!(new_size, "File truncated successfully");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
