@@ -520,10 +520,10 @@ fn test_free_list_contention() {
     );
 }
 
-/// Test concurrent new page allocation (database growth)
+/// Test concurrent new page allocation (StorageEngine growth)
 ///
 /// This test specifically targets the race condition in Superblock::allocate_new_page()
-/// by ensuring the free list is empty, forcing all allocations to grow the database
+/// by ensuring the free list is empty, forcing all allocations to grow the StorageEngine
 /// using the atomic next_page_id counter.
 #[test]
 fn test_concurrent_new_page_allocation_race_condition() {

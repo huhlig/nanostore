@@ -14,23 +14,23 @@
 // limitations under the License.
 //
 
-//! Integration tests for Phase 4: Database & Table Handle APIs
+//! Integration tests for Phase 4: StorageEngine & Table Handle APIs
 //!
-//! Tests the high-level Database API with:
+//! Tests the high-level StorageEngine API with:
 //! - Table management (create, drop, list)
 //! - CRUD operations (insert, update, upsert, get, delete)
 //! - Table handle wrapper
 //! - Error handling
 
-use nanostore::kvdb::{Database, DatabaseErrorKind};
+use nanostore::kvdb::{StorageEngine, StorageEngineErrorKind};
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::{KeyEncoding, TableId};
 use nanostore::vfs::{FileSystem, MemoryFileSystem};
 
-/// Helper to create a test database
-fn create_test_db() -> Database<MemoryFileSystem> {
+/// Helper to create a test StorageEngine
+fn create_test_db() -> StorageEngine<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
-    Database::new(&fs, "test.wal", "test.db").expect("Failed to create database")
+    StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine")
 }
 
 /// Helper to create default table options
@@ -74,7 +74,7 @@ fn test_create_duplicate_table() {
     assert!(result.is_err());
 
     let err = result.unwrap_err();
-    assert_eq!(err.kind, DatabaseErrorKind::TableAlreadyExists);
+    assert_eq!(err.kind, StorageEngineErrorKind::TableAlreadyExists);
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn test_insert_duplicate_key() {
     assert!(result.is_err());
 
     let err = result.unwrap_err();
-    assert_eq!(err.kind, DatabaseErrorKind::KeyAlreadyExists);
+    assert_eq!(err.kind, StorageEngineErrorKind::KeyAlreadyExists);
 
     // Verify original value unchanged
     let value = db.get(table_id, b"user1").unwrap().unwrap();
@@ -201,7 +201,7 @@ fn test_update_nonexistent_key() {
     assert!(result.is_err());
 
     let err = result.unwrap_err();
-    assert_eq!(err.kind, DatabaseErrorKind::KeyNotFound);
+    assert_eq!(err.kind, StorageEngineErrorKind::KeyNotFound);
 }
 
 #[test]
@@ -349,11 +349,11 @@ fn test_operation_on_nonexistent_table() {
     // Try operations on non-existent table
     let result = db.insert(fake_table_id, b"key", b"value");
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, DatabaseErrorKind::NotATable);
+    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
 
     let result = db.get(fake_table_id, b"key");
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, DatabaseErrorKind::NotATable);
+    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
 }
 
 // =============================================================================
@@ -415,8 +415,8 @@ fn test_btree_table_persists_root_and_reopens_after_restart() {
     };
 
     let table_id = {
-        let db = Database::new(&fs, "btree_restart.wal", "btree_restart.db")
-            .expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "btree_restart.wal", "btree_restart.db")
+            .expect("Failed to create StorageEngine");
         let table_id = db
             .create_table("users", options.clone())
             .expect("Failed to create BTree table");
@@ -431,8 +431,8 @@ fn test_btree_table_persists_root_and_reopens_after_restart() {
 
     assert!(fs.exists("btree_restart.db").unwrap());
 
-    let reopened = Database::open(&fs, "btree_restart.wal", "btree_restart.db")
-        .expect("Failed to reopen database");
+    let reopened = StorageEngine::open(&fs, "btree_restart.wal", "btree_restart.db")
+        .expect("Failed to reopen StorageEngine");
 
     assert!(reopened.is_table(table_id).unwrap());
     assert_eq!(

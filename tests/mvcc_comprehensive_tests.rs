@@ -24,15 +24,15 @@
 //! 5. Vacuum with active snapshots
 //! 6. Cross-table transaction visibility
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::{Durability, KeyEncoding};
 use nanostore::vfs::MemoryFileSystem;
 
-/// Helper to create a test database
-fn create_test_db() -> Database<MemoryFileSystem> {
+/// Helper to create a test StorageEngine
+fn create_test_db() -> StorageEngine<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
-    Database::new(&fs, "test.wal", "test.db").expect("Failed to create database")
+    StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine")
 }
 
 /// Helper to create table options for a specific engine

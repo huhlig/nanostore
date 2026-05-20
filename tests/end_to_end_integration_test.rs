@@ -14,32 +14,32 @@
 // limitations under the License.
 //
 
-//! End-to-end integration tests for nanostore database.
+//! End-to-end integration tests for nanostore StorageEngine.
 //!
-//! These tests validate the complete database lifecycle including:
-//! - Creating database files
+//! These tests validate the complete StorageEngine lifecycle including:
+//! - Creating StorageEngine files
 //! - Creating tables with different storage engines (BTree, LSM, Memory)
 //! - Populating tables with data
 //! - Creating indexes
 //! - Performing mixed operations
-//! - Closing and reopening the database
+//! - Closing and reopening the StorageEngine
 //! - Verifying data persistence
 //!
 //! # Implementation Status
 //!
-//! ✅ **Catalog persistence** - Table metadata persists across database restarts
+//! ✅ **Catalog persistence** - Table metadata persists across StorageEngine restarts
 //! ✅ **BTree engine** - Fully integrated with data persistence
 //! ✅ **LSM engine** - Fully integrated with automatic memtable flush on close
 //! ⚠️  **Memory tables** - Intentionally non-persistent (by design)
 //!
 //! # LSM Memtable Persistence
 //!
-//! LSM trees now automatically flush memtables when the database is closed via:
+//! LSM trees now automatically flush memtables when the StorageEngine is closed via:
 //! - Drop trait implementation on LsmTree that flushes active memtable to SSTable
-//! - Explicit Database::close() method for controlled shutdown with error handling
-//! - Data in memtables is persisted to SSTables before the database is destroyed
+//! - Explicit StorageEngine::close() method for controlled shutdown with error handling
+//! - Data in memtables is persisted to SSTables before the StorageEngine is destroyed
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::KeyEncoding;
 use nanostore::vfs::MemoryFileSystem;
@@ -68,7 +68,7 @@ fn lsm_table_options() -> TableOptions {
 // Catalog Persistence Tests
 // =============================================================================
 
-/// Test that table catalog persists across database close/reopen.
+/// Test that table catalog persists across StorageEngine close/reopen.
 ///
 /// This validates that table definitions (metadata) are correctly saved
 /// and recovered from disk.
@@ -76,9 +76,9 @@ fn lsm_table_options() -> TableOptions {
 fn test_catalog_persistence() {
     let fs = MemoryFileSystem::new();
 
-    // Phase 1: Create database and tables
+    // Phase 1: Create StorageEngine and tables
     {
-        let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         // Create tables with different engines
         let users_id = db
@@ -100,12 +100,12 @@ fn test_catalog_persistence() {
         let tables = db.list_tables().unwrap();
         assert_eq!(tables.len(), 3);
 
-        // Database is dropped here, triggering cleanup
+        // StorageEngine is dropped here, triggering cleanup
     }
 
-    // Phase 2: Reopen database and verify catalog
+    // Phase 2: Reopen StorageEngine and verify catalog
     {
-        let db = Database::open(&fs, "test.wal", "test.db").expect("Failed to open database");
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         // Verify tables still exist in catalog
         let tables = db.list_tables().unwrap();
@@ -133,9 +133,9 @@ fn test_catalog_persistence() {
 fn test_index_catalog_persistence() {
     let fs = MemoryFileSystem::new();
 
-    // Phase 1: Create database and table
+    // Phase 1: Create StorageEngine and table
     {
-        let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let _users_id = db
             .create_table("users", memory_table_options())
@@ -148,7 +148,7 @@ fn test_index_catalog_persistence() {
 
     // Phase 2: Reopen and verify table persists
     {
-        let db = Database::open(&fs, "test.wal", "test.db").expect("Failed to open database");
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         // Verify table exists
         let all_objects = db.list_all_objects().unwrap();
@@ -171,7 +171,7 @@ fn test_drop_table_persistence() {
 
     // Phase 1: Create and drop table
     {
-        let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let table1_id = db.create_table("table1", memory_table_options()).unwrap();
         let table2_id = db.create_table("table2", memory_table_options()).unwrap();
@@ -188,7 +188,7 @@ fn test_drop_table_persistence() {
 
     // Phase 2: Reopen and verify drop persisted
     {
-        let db = Database::open(&fs, "test.wal", "test.db").expect("Failed to open database");
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let tables = db.list_tables().unwrap();
         assert_eq!(tables.len(), 2, "Dropped table should not reappear");
@@ -204,14 +204,14 @@ fn test_drop_table_persistence() {
 // Data Persistence Tests (Currently Failing - Blocked by nanostore-ni6)
 // =============================================================================
 
-/// Test BTree data persistence across database close/reopen.
+/// Test BTree data persistence across StorageEngine close/reopen.
 #[test]
 fn test_data_persistence_btree_table() {
     let fs = MemoryFileSystem::new();
 
-    // Phase 1: Create database and insert data
+    // Phase 1: Create StorageEngine and insert data
     {
-        let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let users_id = db
             .create_table(
@@ -241,7 +241,7 @@ fn test_data_persistence_btree_table() {
 
     // Phase 2: Reopen and verify data persisted
     {
-        let db = Database::open(&fs, "test.wal", "test.db").expect("Failed to open database");
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let users_id = db.open_table("users").unwrap().expect("Table should exist");
 
@@ -269,7 +269,7 @@ fn test_data_persistence_lsm_table() {
 
     // Phase 1: Create and populate LSM table
     {
-        let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         let logs_id = db
             .create_table("logs", lsm_table_options())
@@ -290,7 +290,7 @@ fn test_data_persistence_lsm_table() {
 
     // Phase 2: Reopen and verify LSM data
     {
-        let db = Database::open(&fs, "test.wal", "test.db").expect("Failed to open database");
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let logs_id = db.open_table("logs").unwrap().expect("Table should exist");
 
@@ -312,9 +312,9 @@ fn test_data_persistence_lsm_table() {
 fn test_mixed_operations_with_persistence() {
     let fs = MemoryFileSystem::new();
 
-    // Phase 1: Create database with multiple tables and mixed operations
+    // Phase 1: Create StorageEngine with multiple tables and mixed operations
     {
-        let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
 
         // Create different table types - use BTree for users (read-optimized)
         let users_id = db
@@ -352,7 +352,7 @@ fn test_mixed_operations_with_persistence() {
 
     // Phase 2: Reopen and verify all operations persisted
     {
-        let db = Database::open(&fs, "test.wal", "test.db").expect("Failed to open database");
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").expect("Failed to open StorageEngine");
 
         let users_id = db.open_table("users").unwrap().unwrap();
         let logs_id = db.open_table("logs").unwrap().unwrap();
@@ -388,29 +388,29 @@ fn test_mixed_operations_with_persistence() {
 fn test_multiple_reopen_cycles() {
     let fs = MemoryFileSystem::new();
 
-    // Cycle 1: Create database
+    // Cycle 1: Create StorageEngine
     {
-        let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
         db.create_table("table1", memory_table_options()).unwrap();
     }
 
     // Cycle 2: Reopen and add table
     {
-        let db = Database::open(&fs, "test.wal", "test.db").unwrap();
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").unwrap();
         assert_eq!(db.list_tables().unwrap().len(), 1);
         db.create_table("table2", lsm_table_options()).unwrap();
     }
 
     // Cycle 3: Reopen and verify both tables
     {
-        let db = Database::open(&fs, "test.wal", "test.db").unwrap();
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").unwrap();
         assert_eq!(db.list_tables().unwrap().len(), 2);
         db.create_table("table3", memory_table_options()).unwrap();
     }
 
     // Cycle 4: Final verification
     {
-        let db = Database::open(&fs, "test.wal", "test.db").unwrap();
+        let db = StorageEngine::open(&fs, "test.wal", "test.db").unwrap();
         let tables = db.list_tables().unwrap();
         assert_eq!(tables.len(), 3);
 
@@ -421,7 +421,7 @@ fn test_multiple_reopen_cycles() {
     }
 }
 
-/// Test that database can be opened multiple times concurrently.
+/// Test that StorageEngine can be opened multiple times concurrently.
 ///
 /// Note: This tests the API, not actual file locking which would
 /// require a real filesystem.
@@ -429,16 +429,16 @@ fn test_multiple_reopen_cycles() {
 fn test_concurrent_database_instances() {
     let fs = MemoryFileSystem::new();
 
-    // Create initial database
+    // Create initial StorageEngine
     {
-        let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+        let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
         db.create_table("shared_table", memory_table_options())
             .unwrap();
     }
 
     // Open two instances (in memory filesystem allows this)
-    let db1 = Database::open(&fs, "test.wal", "test.db").unwrap();
-    let db2 = Database::open(&fs, "test.wal", "test.db").unwrap();
+    let db1 = StorageEngine::open(&fs, "test.wal", "test.db").unwrap();
+    let db2 = StorageEngine::open(&fs, "test.wal", "test.db").unwrap();
 
     // Both should see the same catalog
     assert_eq!(db1.list_tables().unwrap().len(), 1);
@@ -449,43 +449,43 @@ fn test_concurrent_database_instances() {
 // Error Handling Tests
 // =============================================================================
 
-/// Test opening non-existent database fails appropriately.
+/// Test opening non-existent StorageEngine fails appropriately.
 #[test]
 fn test_open_nonexistent_database() {
     let fs = MemoryFileSystem::new();
 
-    // Try to open database that doesn't exist
-    let result = Database::open(&fs, "nonexistent.wal", "nonexistent.db");
+    // Try to open StorageEngine that doesn't exist
+    let result = StorageEngine::open(&fs, "nonexistent.wal", "nonexistent.db");
 
     // Should fail (exact error depends on implementation)
     assert!(result.is_err());
 }
 
-/// Test creating database over existing one.
+/// Test creating StorageEngine over existing one.
 ///
-/// Note: In the current implementation, Database::new() fails if files already exist.
-/// This is the expected behavior - use Database::open() for existing databases.
+/// Note: In the current implementation, StorageEngine::new() fails if files already exist.
+/// This is the expected behavior - use StorageEngine::open() for existing databases.
 #[test]
 fn test_create_over_existing() {
     let fs = MemoryFileSystem::new();
 
-    // Create initial database
+    // Create initial StorageEngine
     {
-        let db = Database::new(&fs, "test_create_over.wal", "test_create_over.db").unwrap();
+        let db = StorageEngine::new(&fs, "test_create_over.wal", "test_create_over.db").unwrap();
         db.create_table("table1", memory_table_options()).unwrap();
     }
 
     // Try to create again - should fail because files exist
     {
-        let result = Database::new(&fs, "test_create_over.wal", "test_create_over.db");
+        let result = StorageEngine::new(&fs, "test_create_over.wal", "test_create_over.db");
         assert!(
             result.is_err(),
-            "Creating over existing database should fail"
+            "Creating over existing StorageEngine should fail"
         );
 
         // Should use open() instead
-        let db = Database::open(&fs, "test_create_over.wal", "test_create_over.db").unwrap();
-        // Existing database should have the table
+        let db = StorageEngine::open(&fs, "test_create_over.wal", "test_create_over.db").unwrap();
+        // Existing StorageEngine should have the table
         assert_eq!(db.list_tables().unwrap().len(), 1);
     }
 }

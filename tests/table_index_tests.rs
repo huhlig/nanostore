@@ -16,7 +16,7 @@
 
 //! Comprehensive integration tests for table and index operations.
 
-use nanostore::kvdb::{Database, DatabaseErrorKind};
+use nanostore::kvdb::{StorageEngine, StorageEngineErrorKind};
 use nanostore::pager::{Pager, PagerConfig};
 use nanostore::table::TimeSeriesCursor;
 use nanostore::table::fulltext::FullTextConfig;
@@ -39,9 +39,9 @@ use rand::Rng;
 use std::sync::Arc;
 use std::time::Instant;
 
-fn create_test_db() -> Database<MemoryFileSystem> {
+fn create_test_db() -> StorageEngine<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
-    Database::new(&fs, "test.wal", "test.db").expect("Failed to create database")
+    StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine")
 }
 
 fn create_test_pager() -> Arc<Pager<MemoryFileSystem>> {
@@ -800,7 +800,7 @@ fn test_concurrent_reads() {
 fn test_concurrent_writes_different_keys() {
     use std::sync::Mutex;
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").expect("Failed to create StorageEngine");
     let table_id = db.create_table("users", default_table_options()).unwrap();
     let db = Arc::new(db);
     let errors = Arc::new(Mutex::new(Vec::new()));
@@ -847,7 +847,7 @@ fn test_insert_duplicate_key_error() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().kind,
-        DatabaseErrorKind::KeyAlreadyExists
+        StorageEngineErrorKind::KeyAlreadyExists
     );
 }
 
@@ -857,7 +857,7 @@ fn test_update_nonexistent_key_error() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
     let result = db.update(table_id, b"user1", b"Alice");
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, DatabaseErrorKind::KeyNotFound);
+    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::KeyNotFound);
 }
 
 #[test]
@@ -865,7 +865,7 @@ fn test_operation_on_nonexistent_table() {
     let db = create_test_db();
     let result = db.insert(TableId::from(999), b"key", b"value");
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, DatabaseErrorKind::NotATable);
+    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
 }
 
 #[test]

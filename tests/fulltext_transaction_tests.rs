@@ -25,7 +25,7 @@
 //! here focus on transaction-layer integration: WAL logging, write set tracking,
 //! and the trait interface.
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{FullTextSearch, TableEngineKind, TableOptions, TextField, TextQuery};
 use nanostore::txn::TransactionId;
 use nanostore::types::{Durability, KeyEncoding};
@@ -51,7 +51,7 @@ fn default_table_options() -> TableOptions {
 #[test]
 fn test_fulltext_index_document_in_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -88,7 +88,7 @@ fn test_fulltext_write_set_tracking() {
     // Actual write-set visibility for search requires additional implementation
     // to check the fulltext_write_set during search operations.
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -117,7 +117,7 @@ fn test_fulltext_write_set_tracking() {
 #[test]
 fn test_fulltext_update_document_in_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -161,7 +161,7 @@ fn test_fulltext_update_document_in_transaction() {
 #[test]
 fn test_fulltext_delete_document_in_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -194,7 +194,7 @@ fn test_fulltext_delete_document_in_transaction() {
 #[test]
 fn test_fulltext_rollback_discards_changes() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -240,7 +240,7 @@ fn test_fulltext_rollback_discards_changes() {
 #[test]
 fn test_fulltext_multiple_operations_in_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -299,7 +299,7 @@ fn test_fulltext_multiple_operations_in_transaction() {
 #[test]
 fn test_fulltext_capabilities() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -316,7 +316,7 @@ fn test_fulltext_capabilities() {
 #[test]
 fn test_fulltext_table_id_and_name() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let fulltext_id = db
         .create_table("my_fulltext", fulltext_table_options())
         .unwrap();
@@ -336,7 +336,7 @@ fn test_fulltext_table_id_and_name() {
 #[test]
 fn test_fulltext_operations_on_non_fulltext_table_fails() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let memory_id = db.create_table("memory", default_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -351,7 +351,7 @@ fn test_fulltext_operations_on_non_fulltext_table_fails() {
 #[test]
 fn test_fulltext_operations_without_table_context() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let _fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();
@@ -371,7 +371,7 @@ fn test_fulltext_operations_without_table_context() {
 #[test]
 fn test_fulltext_operations_after_rollback_fails() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let _fulltext_id = db
         .create_table("fulltext", fulltext_table_options())
         .unwrap();

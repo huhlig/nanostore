@@ -19,7 +19,7 @@
 //! These tests verify that transactions correctly integrate with the WAL
 //! for durability and crash recovery.
 
-use nanostore::kvdb::{Database, DatabaseErrorKind};
+use nanostore::kvdb::{StorageEngine, StorageEngineErrorKind};
 use nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanostore::txn::TransactionId;
 use nanostore::types::{Bound, Durability, KeyBuf, KeyEncoding, ScanBounds};
@@ -44,7 +44,7 @@ fn bloom_table_options() -> TableOptions {
 #[test]
 fn test_transaction_basic_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -73,7 +73,7 @@ fn test_transaction_basic_commit() {
 #[test]
 fn test_transaction_rollback() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -101,7 +101,7 @@ fn test_transaction_rollback() {
 #[test]
 fn test_transaction_read_uncommitted_changes() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -125,7 +125,7 @@ fn test_transaction_read_uncommitted_changes() {
 #[test]
 fn test_transaction_delete() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -156,7 +156,7 @@ fn test_transaction_delete() {
 #[test]
 fn test_transaction_update() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -186,7 +186,7 @@ fn test_transaction_update() {
 #[test]
 fn test_multi_table_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create multiple tables first
     let table1 = db.create_table("table1", default_table_options()).unwrap();
@@ -218,7 +218,7 @@ fn test_multi_table_transaction() {
 #[test]
 fn test_transaction_isolation() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -252,7 +252,7 @@ fn test_transaction_isolation() {
 #[test]
 fn test_transaction_delete_nonexistent_key() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -270,7 +270,7 @@ fn test_transaction_delete_nonexistent_key() {
 #[test]
 fn test_transaction_multiple_operations_same_key() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -298,7 +298,7 @@ fn test_transaction_multiple_operations_same_key() {
 #[test]
 fn test_transaction_put_delete_put() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -326,7 +326,7 @@ fn test_transaction_put_delete_put() {
 #[test]
 fn test_empty_transaction_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Empty transaction should commit successfully
     let txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -337,7 +337,7 @@ fn test_empty_transaction_commit() {
 #[test]
 fn test_empty_transaction_rollback() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Empty transaction should rollback successfully
     let txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -347,7 +347,7 @@ fn test_empty_transaction_rollback() {
 #[test]
 fn test_sequential_transactions() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     // Create a table first
     let table_id = db
@@ -387,7 +387,7 @@ fn test_sequential_transactions() {
 #[test]
 fn test_transaction_range_delete_commit_multi_table() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let table1 = db.create_table("table1", default_table_options()).unwrap();
     let table2 = db.create_table("table2", default_table_options()).unwrap();
@@ -422,7 +422,7 @@ fn test_transaction_range_delete_commit_multi_table() {
 #[test]
 fn test_transaction_range_delete_rollback() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let table_id = db
         .create_table("test_table", default_table_options())
@@ -465,7 +465,7 @@ fn test_transaction_range_delete_rollback() {
 #[test]
 fn test_snapshot_lifecycle_create_list_release() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let snapshot = db.create_snapshot("backup-1").unwrap();
     assert_eq!(snapshot.name, "backup-1");
@@ -482,18 +482,18 @@ fn test_snapshot_lifecycle_create_list_release() {
 #[test]
 fn test_snapshot_duplicate_name_rejected() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     db.create_snapshot("backup").unwrap();
     let err = db.create_snapshot("backup").unwrap_err();
-    assert_eq!(err.kind, DatabaseErrorKind::InvalidOperation);
+    assert_eq!(err.kind, StorageEngineErrorKind::InvalidOperation);
     assert!(err.message.contains("already exists"));
 }
 
 #[test]
 fn test_begin_read_at_named_snapshot_is_allowed_while_pinned() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let table_id = db
         .create_table("test_table", default_table_options())
@@ -528,7 +528,7 @@ fn test_begin_read_at_named_snapshot_is_allowed_while_pinned() {
 #[test]
 fn test_begin_read_at_unpinned_lsn_rejected_after_snapshot_release() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let table_id = db
         .create_table("test_table", default_table_options())
@@ -547,7 +547,7 @@ fn test_begin_read_at_unpinned_lsn_rejected_after_snapshot_release() {
         Ok(_) => panic!("expected released snapshot LSN to be rejected"),
         Err(err) => err,
     };
-    assert_eq!(err.kind, DatabaseErrorKind::InvalidOperation);
+    assert_eq!(err.kind, StorageEngineErrorKind::InvalidOperation);
     assert!(err.message.contains("not pinned"));
 
     let current_txn = db.begin_read().unwrap();
@@ -560,20 +560,20 @@ fn test_begin_read_at_unpinned_lsn_rejected_after_snapshot_release() {
 #[test]
 fn test_begin_read_at_future_lsn_rejected() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let err = match db.begin_read_at(1_u64.into()) {
         Ok(_) => panic!("expected future LSN to be rejected"),
         Err(err) => err,
     };
-    assert_eq!(err.kind, DatabaseErrorKind::InvalidOperation);
+    assert_eq!(err.kind, StorageEngineErrorKind::InvalidOperation);
     assert!(err.message.contains("not yet committed"));
 }
 
 #[test]
 fn test_transaction_bloom_insert_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let bloom_id = db
         .create_table("bloom_table", bloom_table_options())
@@ -605,7 +605,7 @@ fn test_transaction_bloom_insert_commit() {
 #[test]
 fn test_transaction_bloom_insert_rollback() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let bloom_id = db
         .create_table("bloom_table", bloom_table_options())
@@ -638,7 +638,7 @@ fn test_transaction_bloom_insert_rollback() {
 #[test]
 fn test_transaction_mixed_kv_and_bloom_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
 
     let table_id = db
         .create_table("test_table", default_table_options())

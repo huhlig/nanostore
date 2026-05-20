@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{AppendLogConfig, TableEngineKind, TableOptions};
 use nanostore::types::KeyEncoding;
 use nanostore::vfs::MemoryFileSystem;
@@ -34,7 +34,7 @@ fn test_appendlog_table_reopens_with_persisted_rows() {
     let expected_root_page;
 
     {
-        let db = Database::new(&fs, "appendlog-persist.wal", "appendlog-persist.db").unwrap();
+        let db = StorageEngine::new(&fs, "appendlog-persist.wal", "appendlog-persist.db").unwrap();
         table_id = db
             .create_table("events", appendlog_table_options())
             .unwrap();
@@ -54,7 +54,7 @@ fn test_appendlog_table_reopens_with_persisted_rows() {
 
     {
         let reopened =
-            Database::open(&fs, "appendlog-persist.wal", "appendlog-persist.db").unwrap();
+            StorageEngine::open(&fs, "appendlog-persist.wal", "appendlog-persist.db").unwrap();
         let reopened_id = reopened.open_table("events").unwrap().unwrap();
         assert_eq!(reopened_id, table_id);
 
@@ -96,7 +96,7 @@ fn test_appendlog_table_reopens_with_flushed_segment_rows() {
     let table_id;
 
     {
-        let db = Database::new(
+        let db = StorageEngine::new(
             &fs,
             "appendlog-flush-persist.wal",
             "appendlog-flush-persist.db",
@@ -113,7 +113,7 @@ fn test_appendlog_table_reopens_with_flushed_segment_rows() {
     }
 
     {
-        let reopened = Database::open(
+        let reopened = StorageEngine::open(
             &fs,
             "appendlog-flush-persist.wal",
             "appendlog-flush-persist.db",

@@ -776,7 +776,7 @@ pub struct CommitInfo {
 ///
 /// Both tables and indexes are treated uniformly at the transaction layer using ObjectId.
 /// The transaction layer does NOT automatically maintain indexes - that responsibility
-/// belongs to the API consumer (e.g., the Database layer or query engine).
+/// belongs to the API consumer (e.g., the StorageEngine layer or query engine).
 ///
 /// This design:
 /// - Keeps the transaction layer simple and focused on ACID properties
@@ -852,7 +852,7 @@ impl TransactionState {
     }
 }
 
-/// Transaction struct for managing database transactions.
+/// Transaction struct for managing storage engine transactions.
 pub struct Transaction<FS: FileSystem> {
     // Core transaction identity and isolation
     txn_id: TransactionId,
@@ -902,7 +902,7 @@ pub struct Transaction<FS: FileSystem> {
     // Engine registry for reading/writing to actual storage engines
     engine_registry: Arc<TableEngineRegistry<FS>>,
 
-    // Current LSN (shared with Database)
+    // Current LSN (shared with StorageEngine)
     current_lsn: Arc<RwLock<LogSequenceNumber>>,
 
     // Current table context for specialty table operations

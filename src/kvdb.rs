@@ -14,16 +14,16 @@
 // limitations under the License.
 //
 
-//! Top-level embedded database implementation.
+//! Top-level embedded storage engine implementation.
 //!
-//! This module provides the main `Database` struct that owns the catalog, file allocation,
+//! This module provides the main `StorageEngine` struct that owns the catalog, file allocation,
 //! transaction manager, WAL, and registered table/index engines. ACID semantics are coordinated
 //! at this layer.
 //!
-//! # Phase 4: Core API - Database & Table Handles
+//! # Phase 4: Core API - StorageEngine & Table Handles
 //!
 //! This implementation provides:
-//! - Database-level CRUD operations with automatic index maintenance
+//! - Storage engine-level CRUD operations with automatic index maintenance
 //! - Table handle wrapper for ergonomic access
 //! - Proper error handling and validation
 //! - Support for both persistent and memory tables
@@ -33,7 +33,7 @@
 //! Following ADR-007 and ADR-011, this implementation treats indexes as specialty tables:
 //! - Both tables and indexes use TableId at the storage layer
 //! - Transaction layer treats them uniformly
-//! - Database layer maintains semantic distinction and handles index maintenance
+//! - StorageEngine layer maintains semantic distinction and handles index maintenance
 //! - Index updates are explicit and visible in transaction write sets
 
 use crate::pager::{Page, PageId, PageType, Pager, PagerConfig};
@@ -186,13 +186,13 @@ impl VacuumStats {
     }
 }
 
-/// Top-level embedded database.
+/// Top-level embedded storage engine.
 ///
 /// This struct owns the catalog, file allocation, transaction manager, WAL,
 /// and registered table/index engines. ACID semantics should be coordinated at
 /// this layer rather than by independently stacking transactional wrappers around
 /// individual tables.
-pub struct Database<FS: FileSystem> {
+pub struct StorageEngine<FS: FileSystem> {
     // Transaction management
     /// Shared conflict detector for coordinating transactions
     conflict_detector: Arc<Mutex<ConflictDetector>>,
@@ -238,17 +238,17 @@ pub struct Database<FS: FileSystem> {
     vacuum_thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 
-impl<FS: FileSystem> Database<FS> {
-    /// Create a new database instance with the given filesystem, WAL path, and database path.
-    pub fn new(fs: &FS, wal_path: &str, db_path: &str) -> Result<Self, DatabaseError> {
+impl<FS: FileSystem> StorageEngine<FS> {
+    /// Create a new storage engine instance with the given filesystem, WAL path, and database path.
+    pub fn new(fs: &FS, wal_path: &str, db_path: &str) -> Result<Self, StorageEngineError> {
         let wal_config = WalWriterConfig::default();
         let wal = WalWriter::create(fs, wal_path, wal_config)
-            .map_err(|e| DatabaseError::wal_failed(format!("Failed to create WAL: {}", e)))?;
+            .map_err(|e| StorageEngineError::wal_failed(format!("Failed to create WAL: {}", e)))?;
 
         // Create pager for database file with default config
         let pager_config = PagerConfig::default();
         let pager = Pager::create(fs, db_path, pager_config)
-            .map_err(|e| DatabaseError::pager_failed(format!("Failed to create pager: {}", e)))?;
+            .map_err(|e| StorageEngineError::pager_failed(format!("Failed to create pager: {}", e)))?;
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
@@ -282,18 +282,18 @@ impl<FS: FileSystem> Database<FS> {
         Ok(db)
     }
 
-    /// Open an existing database instance.
-    pub fn open(fs: &FS, wal_path: &str, db_path: &str) -> Result<Self, DatabaseError> {
+    /// Open an existing storage engine instance.
+    pub fn open(fs: &FS, wal_path: &str, db_path: &str) -> Result<Self, StorageEngineError> {
         let wal_config = WalWriterConfig::default();
         let wal = WalWriter::open(fs, wal_path, wal_config)
-            .map_err(|e| DatabaseError::wal_failed(format!("Failed to open WAL: {}", e)))?;
+            .map_err(|e| StorageEngineError::wal_failed(format!("Failed to open WAL: {}", e)))?;
 
         // Get current LSN from WAL
         let current_lsn = wal.current_lsn();
 
         // Open pager for database file
         let pager = Pager::open(fs, db_path)
-            .map_err(|e| DatabaseError::pager_failed(format!("Failed to open pager: {}", e)))?;
+            .map_err(|e| StorageEngineError::pager_failed(format!("Failed to open pager: {}", e)))?;
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
@@ -342,11 +342,11 @@ impl<FS: FileSystem> Database<FS> {
         *self.current_lsn.read().unwrap()
     }
 
-    fn validate_snapshot_lsn(&self, lsn: LogSequenceNumber) -> Result<(), DatabaseError> {
+    fn validate_snapshot_lsn(&self, lsn: LogSequenceNumber) -> Result<(), StorageEngineError> {
         let latest_readable_lsn = self.current_snapshot_lsn();
 
         if lsn > latest_readable_lsn {
-            return Err(DatabaseError::invalid_operation(format!(
+            return Err(StorageEngineError::invalid_operation(format!(
                 "Snapshot LSN {} is not yet committed; latest readable LSN is {}",
                 lsn, latest_readable_lsn
             )));
@@ -361,7 +361,7 @@ impl<FS: FileSystem> Database<FS> {
         drop(snapshots);
 
         if !is_pinned {
-            return Err(DatabaseError::invalid_operation(format!(
+            return Err(StorageEngineError::invalid_operation(format!(
                 "Snapshot LSN {} is not pinned by an active named snapshot",
                 lsn
             )));
@@ -371,7 +371,7 @@ impl<FS: FileSystem> Database<FS> {
     }
 
     /// Begin a read-only transaction using the latest stable snapshot.
-    pub fn begin_read(&self) -> Result<Transaction<FS>, DatabaseError> {
+    pub fn begin_read(&self) -> Result<Transaction<FS>, StorageEngineError> {
         let txn_id = self.allocate_txn_id();
         let snapshot_lsn = self.current_snapshot_lsn();
 
@@ -390,7 +390,7 @@ impl<FS: FileSystem> Database<FS> {
     pub fn begin_read_with_isolation(
         &self,
         isolation: IsolationLevel,
-    ) -> Result<Transaction<FS>, DatabaseError> {
+    ) -> Result<Transaction<FS>, StorageEngineError> {
         let txn_id = self.allocate_txn_id();
         let snapshot_lsn = self.current_snapshot_lsn();
 
@@ -406,7 +406,7 @@ impl<FS: FileSystem> Database<FS> {
     }
 
     /// Begin a write transaction with the requested durability policy.
-    pub fn begin_write(&self, durability: Durability) -> Result<Transaction<FS>, DatabaseError> {
+    pub fn begin_write(&self, durability: Durability) -> Result<Transaction<FS>, StorageEngineError> {
         let txn_id = self.allocate_txn_id();
         let snapshot_lsn = *self.current_lsn.read().unwrap();
 
@@ -428,7 +428,7 @@ impl<FS: FileSystem> Database<FS> {
         &self,
         durability: Durability,
         isolation: IsolationLevel,
-    ) -> Result<Transaction<FS>, DatabaseError> {
+    ) -> Result<Transaction<FS>, StorageEngineError> {
         let txn_id = self.allocate_txn_id();
         let snapshot_lsn = *self.current_lsn.read().unwrap();
 
@@ -450,7 +450,7 @@ impl<FS: FileSystem> Database<FS> {
     /// This is useful for reading from named snapshots or implementing
     /// time-travel queries. Returns an error if the LSN is not available
     /// (e.g., too old and already garbage collected).
-    pub fn begin_read_at(&self, lsn: LogSequenceNumber) -> Result<Transaction<FS>, DatabaseError> {
+    pub fn begin_read_at(&self, lsn: LogSequenceNumber) -> Result<Transaction<FS>, StorageEngineError> {
         self.validate_snapshot_lsn(lsn)?;
         let txn_id = self.allocate_txn_id();
 
@@ -474,7 +474,7 @@ impl<FS: FileSystem> Database<FS> {
         &self,
         lsn: LogSequenceNumber,
         isolation: IsolationLevel,
-    ) -> Result<Transaction<FS>, DatabaseError> {
+    ) -> Result<Transaction<FS>, StorageEngineError> {
         self.validate_snapshot_lsn(lsn)?;
         let txn_id = self.allocate_txn_id();
 
@@ -500,7 +500,7 @@ impl<FS: FileSystem> Database<FS> {
     /// - Version (u32): Catalog format version
     /// - Count (u32): Number of tables
     /// - JSON data: Serialized Vec<TableInfo>
-    fn persist_catalog(&self) -> Result<(), DatabaseError> {
+    fn persist_catalog(&self) -> Result<(), StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
 
         // Collect all table info into a vector
@@ -508,7 +508,7 @@ impl<FS: FileSystem> Database<FS> {
 
         // Serialize to JSON
         let json_data = serde_json::to_vec(&tables)
-            .map_err(|e| DatabaseError::other(format!("Failed to serialize catalog: {}", e)))?;
+            .map_err(|e| StorageEngineError::other(format!("Failed to serialize catalog: {}", e)))?;
 
         // Catalog page is always page 2 (page 0 = header, page 1 = superblock, page 2 = catalog)
         // We use a fixed page ID rather than allocating to ensure consistency
@@ -533,7 +533,7 @@ impl<FS: FileSystem> Database<FS> {
 
         // Write to catalog page
         self.pager.write_page(&page).map_err(|e| {
-            DatabaseError::pager_failed(format!("Failed to write catalog page: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to write catalog page: {}", e))
         })?;
 
         Ok(())
@@ -543,13 +543,13 @@ impl<FS: FileSystem> Database<FS> {
     ///
     /// Reads the catalog page and deserializes the table metadata.
     /// Also reopens all storage engines for the recovered tables.
-    fn recover_catalog(&self) -> Result<(), DatabaseError> {
+    fn recover_catalog(&self) -> Result<(), StorageEngineError> {
         // Catalog page is always page 2 (page 0 = header, page 1 = superblock, page 2 = catalog)
         let catalog_page_id = PageId::from(2);
 
         // Read catalog page
         let page = self.pager.read_page(catalog_page_id).map_err(|e| {
-            DatabaseError::pager_failed(format!("Failed to read catalog page: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to read catalog page: {}", e))
         })?;
 
         // Check if page is empty (new database)
@@ -563,7 +563,7 @@ impl<FS: FileSystem> Database<FS> {
 
         // Validate version
         if version != 1 {
-            return Err(DatabaseError::other(format!(
+            return Err(StorageEngineError::other(format!(
                 "Unsupported catalog version: {}",
                 version
             )));
@@ -572,11 +572,11 @@ impl<FS: FileSystem> Database<FS> {
         // Deserialize JSON data
         let json_data = &page.data[8..];
         let tables: Vec<TableInfo> = serde_json::from_slice(json_data)
-            .map_err(|e| DatabaseError::other(format!("Failed to deserialize catalog: {}", e)))?;
+            .map_err(|e| StorageEngineError::other(format!("Failed to deserialize catalog: {}", e)))?;
 
         // Validate count
         if tables.len() != count as usize {
-            return Err(DatabaseError::other(format!(
+            return Err(StorageEngineError::other(format!(
                 "Catalog count mismatch: expected {}, got {}",
                 count,
                 tables.len()
@@ -600,7 +600,7 @@ impl<FS: FileSystem> Database<FS> {
                         root_location.page_id,
                     )
                     .map_err(|e| {
-                        DatabaseError::other(format!(
+                        StorageEngineError::other(format!(
                             "Failed to reopen storage engine for table '{}': {}",
                             table_info.name, e
                         ))
@@ -608,7 +608,7 @@ impl<FS: FileSystem> Database<FS> {
 
                 // Register the reopened engine
                 self.engine_registry.register(engine).map_err(|e| {
-                    DatabaseError::other(format!(
+                    StorageEngineError::other(format!(
                         "Failed to register storage engine for table '{}': {}",
                         table_info.name, e
                     ))
@@ -619,14 +619,14 @@ impl<FS: FileSystem> Database<FS> {
                     .engine_registry
                     .create_engine(table_info.id, table_info.name.clone(), &table_info.options)
                     .map_err(|e| {
-                        DatabaseError::other(format!(
+                        StorageEngineError::other(format!(
                             "Failed to create storage engine for table '{}': {}",
                             table_info.name, e
                         ))
                     })?;
 
                 self.engine_registry.register(engine).map_err(|e| {
-                    DatabaseError::other(format!(
+                    StorageEngineError::other(format!(
                         "Failed to register storage engine for table '{}': {}",
                         table_info.name, e
                     ))
@@ -647,12 +647,12 @@ impl<FS: FileSystem> Database<FS> {
         &self,
         name: &str,
         options: TableOptions,
-    ) -> Result<TableId, DatabaseError> {
+    ) -> Result<TableId, StorageEngineError> {
         let mut catalog = self.table_catalog.write().unwrap();
 
         // Check if table already exists
         if catalog.contains_key(name) {
-            return Err(DatabaseError::table_already_exists(name));
+            return Err(StorageEngineError::table_already_exists(name));
         }
 
         // Allocate new table ID
@@ -665,11 +665,11 @@ impl<FS: FileSystem> Database<FS> {
         let (engine, root_page_id) = self
             .engine_registry
             .create_engine(table_id, name.to_string(), &options)
-            .map_err(|e| DatabaseError::other(format!("Failed to create storage engine: {}", e)))?;
+            .map_err(|e| StorageEngineError::other(format!("Failed to create storage engine: {}", e)))?;
 
         // Register the engine
         self.engine_registry.register(engine).map_err(|e| {
-            DatabaseError::other(format!("Failed to register storage engine: {}", e))
+            StorageEngineError::other(format!("Failed to register storage engine: {}", e))
         })?;
 
         // Create table info with root page location
@@ -704,7 +704,7 @@ impl<FS: FileSystem> Database<FS> {
     ///
     /// This operation is transactional - the table becomes invisible only after
     /// the current LSN advances (simulating a commit).
-    pub fn drop_table(&self, table: TableId) -> Result<(), DatabaseError> {
+    pub fn drop_table(&self, table: TableId) -> Result<(), StorageEngineError> {
         let mut catalog = self.table_catalog.write().unwrap();
 
         // Find and remove the table
@@ -727,42 +727,42 @@ impl<FS: FileSystem> Database<FS> {
 
             Ok(())
         } else {
-            Err(DatabaseError::not_found(table))
+            Err(StorageEngineError::not_found(table))
         }
     }
 
     /// Open an existing table by name.
-    pub fn open_table(&self, name: &str) -> Result<Option<TableId>, DatabaseError> {
+    pub fn open_table(&self, name: &str) -> Result<Option<TableId>, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.get(name).map(|info| info.id))
     }
 
     /// Get table or index info by TableId.
-    pub fn get_object_info(&self, id: TableId) -> Result<Option<TableInfo>, DatabaseError> {
+    pub fn get_object_info(&self, id: TableId) -> Result<Option<TableInfo>, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.values().find(|info| info.id == id).cloned())
     }
 
     /// Get table or index info by name.
-    pub fn get_object_info_by_name(&self, name: &str) -> Result<Option<TableInfo>, DatabaseError> {
+    pub fn get_object_info_by_name(&self, name: &str) -> Result<Option<TableInfo>, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.get(name).cloned())
     }
 
     /// Check if a TableId refers to a table.
-    pub fn is_table(&self, id: TableId) -> Result<bool, DatabaseError> {
+    pub fn is_table(&self, id: TableId) -> Result<bool, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.values().any(|info| info.id == id))
     }
 
     /// Return all tables in the catalog.
-    pub fn list_tables(&self) -> Result<Vec<TableInfo>, DatabaseError> {
+    pub fn list_tables(&self) -> Result<Vec<TableInfo>, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.values().cloned().collect())
     }
 
     /// Return all catalog objects (alias for list_tables since indexes are just tables).
-    pub fn list_all_objects(&self) -> Result<Vec<TableInfo>, DatabaseError> {
+    pub fn list_all_objects(&self) -> Result<Vec<TableInfo>, StorageEngineError> {
         self.list_tables()
     }
 
@@ -771,17 +771,17 @@ impl<FS: FileSystem> Database<FS> {
     /// The snapshot pins necessary pages/segments to enable consistent reads
     /// at the snapshot LSN. Snapshots must be explicitly released to free
     /// resources.
-    pub fn create_snapshot(&self, name: &str) -> Result<Snapshot, DatabaseError> {
+    pub fn create_snapshot(&self, name: &str) -> Result<Snapshot, StorageEngineError> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(DatabaseError::invalid_operation(
+            return Err(StorageEngineError::invalid_operation(
                 "Snapshot name cannot be empty".to_string(),
             ));
         }
 
         let mut snapshots = self.snapshots.write().unwrap();
         if snapshots.values().any(|snapshot| snapshot.name == name) {
-            return Err(DatabaseError::invalid_operation(format!(
+            return Err(StorageEngineError::invalid_operation(format!(
                 "Snapshot '{}' already exists",
                 name
             )));
@@ -793,7 +793,7 @@ impl<FS: FileSystem> Database<FS> {
             self.current_snapshot_lsn(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .map_err(|e| DatabaseError::other(format!("System time error: {}", e)))?
+                .map_err(|e| StorageEngineError::other(format!("System time error: {}", e)))?
                 .as_secs() as i64,
             0,
             self.wal.active_transactions(),
@@ -804,7 +804,7 @@ impl<FS: FileSystem> Database<FS> {
     }
 
     /// List all active snapshots.
-    pub fn list_snapshots(&self) -> Result<Vec<Snapshot>, DatabaseError> {
+    pub fn list_snapshots(&self) -> Result<Vec<Snapshot>, StorageEngineError> {
         let mut snapshots: Vec<_> = self.snapshots.read().unwrap().values().cloned().collect();
         snapshots.sort_by_key(|snapshot| snapshot.id);
         Ok(snapshots)
@@ -813,12 +813,12 @@ impl<FS: FileSystem> Database<FS> {
     /// Release a snapshot, allowing its resources to be reclaimed.
     ///
     /// After releasing, the snapshot LSN may no longer be available for reads.
-    pub fn release_snapshot(&self, snapshot_id: SnapshotId) -> Result<(), DatabaseError> {
+    pub fn release_snapshot(&self, snapshot_id: SnapshotId) -> Result<(), StorageEngineError> {
         let removed = self.snapshots.write().unwrap().remove(&snapshot_id);
         if removed.is_some() {
             Ok(())
         } else {
-            Err(DatabaseError::invalid_operation(format!(
+            Err(StorageEngineError::invalid_operation(format!(
                 "Snapshot {} not found",
                 snapshot_id
             )))
@@ -861,7 +861,7 @@ impl<FS: FileSystem> Database<FS> {
     /// let removed = db.vacuum_table(table_id)?;
     /// println!("Removed {} obsolete versions", removed);
     /// ```
-    pub fn vacuum_table(&self, table_id: TableId) -> Result<usize, DatabaseError> {
+    pub fn vacuum_table(&self, table_id: TableId) -> Result<usize, StorageEngineError> {
         // Get minimum visible LSN
         let min_visible_lsn = match self.min_visible_lsn() {
             Some(lsn) => lsn,
@@ -875,14 +875,14 @@ impl<FS: FileSystem> Database<FS> {
         // Get table info to determine engine type
         let table_info = self
             .get_object_info(table_id)?
-            .ok_or_else(|| DatabaseError::not_found(table_id))?;
+            .ok_or_else(|| StorageEngineError::not_found(table_id))?;
 
         // Vacuum the table through the engine registry
         let registry = self.engine_registry.clone();
         registry.vacuum_table(table_id, min_visible_lsn)
     }
 
-    /// Vacuum all tables in the database.
+    /// Vacuum all tables in the storage engine.
     ///
     /// This is a convenience method that vacuums all tables that support it.
     /// Tables that don't support vacuuming are skipped.
@@ -900,7 +900,7 @@ impl<FS: FileSystem> Database<FS> {
     ///     println!("Table {}: removed {} versions", table_id, removed);
     /// }
     /// ```
-    pub fn vacuum_all(&self) -> Result<std::collections::HashMap<TableId, usize>, DatabaseError> {
+    pub fn vacuum_all(&self) -> Result<std::collections::HashMap<TableId, usize>, StorageEngineError> {
         let mut results = std::collections::HashMap::new();
 
         // Get all tables
@@ -928,7 +928,7 @@ impl<FS: FileSystem> Database<FS> {
     ///
     /// This is an internal method that collects detailed metrics during vacuum.
     /// Used by both manual triggers and the background vacuum thread.
-    fn vacuum_all_with_metrics(&self) -> Result<VacuumMetrics, DatabaseError> {
+    fn vacuum_all_with_metrics(&self) -> Result<VacuumMetrics, StorageEngineError> {
         let mut metrics = VacuumMetrics::new();
 
         // Get all tables
@@ -971,7 +971,7 @@ impl<FS: FileSystem> Database<FS> {
     ///          metrics.total_versions_removed,
     ///          metrics.duration);
     /// ```
-    pub fn trigger_vacuum(&self) -> Result<VacuumMetrics, DatabaseError> {
+    pub fn trigger_vacuum(&self) -> Result<VacuumMetrics, StorageEngineError> {
         let metrics = self.vacuum_all_with_metrics()?;
 
         // Update stats
@@ -1094,7 +1094,7 @@ impl<FS: FileSystem> Database<FS> {
         }
     }
 
-    /// Get the consistency guarantees provided by this database.
+    /// Get the consistency guarantees provided by this storage engine.
     ///
     /// This documents the ACID properties, isolation levels, and crash
     /// recovery semantics. Query planners and applications can use this
@@ -1131,17 +1131,17 @@ impl<FS: FileSystem> Database<FS> {
     /// - The key already exists (use `upsert` for update-or-insert)
     /// - Index maintenance fails
     /// - Transaction commit fails
-    pub fn insert(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<(), DatabaseError> {
+    pub fn insert(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
-            return Err(DatabaseError::not_a_table(table));
+            return Err(StorageEngineError::not_a_table(table));
         }
 
         let mut txn = self.begin_write(Durability::SyncOnCommit)?;
 
         // Check if key already exists
         if txn.get(table, key)?.is_some() {
-            return Err(DatabaseError::key_already_exists(table, key));
+            return Err(StorageEngineError::key_already_exists(table, key));
         }
 
         // Insert into table
@@ -1149,7 +1149,7 @@ impl<FS: FileSystem> Database<FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            DatabaseError::transaction_failed(format!("Insert commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Insert commit failed: {}", e))
         })?;
 
         Ok(())
@@ -1164,10 +1164,10 @@ impl<FS: FileSystem> Database<FS> {
     /// - The key does not exist (use `upsert` for insert-or-update)
     /// - Index maintenance fails
     /// - Transaction commit fails
-    pub fn update(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<(), DatabaseError> {
+    pub fn update(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
-            return Err(DatabaseError::not_a_table(table));
+            return Err(StorageEngineError::not_a_table(table));
         }
 
         let mut txn = self.begin_write(Durability::SyncOnCommit)?;
@@ -1175,14 +1175,14 @@ impl<FS: FileSystem> Database<FS> {
         // Get old value for index maintenance
         let _old_value = txn
             .get(table, key)?
-            .ok_or_else(|| DatabaseError::key_not_found(table, key))?;
+            .ok_or_else(|| StorageEngineError::key_not_found(table, key))?;
 
         // Update in table
         txn.put(table, key, value)?;
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            DatabaseError::transaction_failed(format!("Update commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Update commit failed: {}", e))
         })?;
 
         Ok(())
@@ -1192,10 +1192,10 @@ impl<FS: FileSystem> Database<FS> {
     ///
     /// This is a convenience method that inserts if the key doesn't exist,
     /// or updates if it does.
-    pub fn upsert(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<bool, DatabaseError> {
+    pub fn upsert(&self, table: TableId, key: &[u8], value: &[u8]) -> Result<bool, StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
-            return Err(DatabaseError::not_a_table(table));
+            return Err(StorageEngineError::not_a_table(table));
         }
 
         let mut txn = self.begin_write(Durability::SyncOnCommit)?;
@@ -1209,7 +1209,7 @@ impl<FS: FileSystem> Database<FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            DatabaseError::transaction_failed(format!("Upsert commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Upsert commit failed: {}", e))
         })?;
 
         Ok(is_update)
@@ -1219,24 +1219,24 @@ impl<FS: FileSystem> Database<FS> {
     ///
     /// This is a convenience method that begins a read transaction and
     /// retrieves the value.
-    pub fn get(&self, table: TableId, key: &[u8]) -> Result<Option<ValueBuf>, DatabaseError> {
+    pub fn get(&self, table: TableId, key: &[u8]) -> Result<Option<ValueBuf>, StorageEngineError> {
         // Validate table exists
         if !self.is_table(table)? {
-            return Err(DatabaseError::not_a_table(table));
+            return Err(StorageEngineError::not_a_table(table));
         }
 
         let txn = self.begin_read()?;
         txn.get(table, key)
-            .map_err(|e| DatabaseError::transaction_failed(format!("Get failed: {}", e)))
+            .map_err(|e| StorageEngineError::transaction_failed(format!("Get failed: {}", e)))
     }
 
     /// Delete a key from a table with automatic index maintenance.
     ///
     /// Returns true if the key existed and was deleted, false if it didn't exist.
-    pub fn delete(&self, table: TableId, key: &[u8]) -> Result<bool, DatabaseError> {
+    pub fn delete(&self, table: TableId, key: &[u8]) -> Result<bool, StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
-            return Err(DatabaseError::not_a_table(table));
+            return Err(StorageEngineError::not_a_table(table));
         }
 
         let mut txn = self.begin_write(Durability::SyncOnCommit)?;
@@ -1253,7 +1253,7 @@ impl<FS: FileSystem> Database<FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            DatabaseError::transaction_failed(format!("Delete commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Delete commit failed: {}", e))
         })?;
 
         Ok(deleted)
@@ -1263,10 +1263,10 @@ impl<FS: FileSystem> Database<FS> {
     ///
     /// Returns a `TableHandle` that provides convenient methods for
     /// working with the table.
-    pub fn table(&self, table: TableId) -> Result<TableHandle<'_, FS>, DatabaseError> {
+    pub fn table(&self, table: TableId) -> Result<TableHandle<'_, FS>, StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
-            return Err(DatabaseError::not_a_table(table));
+            return Err(StorageEngineError::not_a_table(table));
         }
 
         Ok(TableHandle {
@@ -1275,7 +1275,7 @@ impl<FS: FileSystem> Database<FS> {
         })
     }
 
-    /// Explicitly close the database with controlled shutdown.
+    /// Explicitly close the storage engine with controlled shutdown.
     ///
     /// This method provides a controlled shutdown sequence:
     /// 1. Flushes all LSM tree memtables to SSTables
@@ -1292,7 +1292,7 @@ impl<FS: FileSystem> Database<FS> {
     /// - LSM memtable flush fails
     /// - WAL flush fails
     /// - Pager sync fails
-    pub fn close(self) -> Result<(), DatabaseError> {
+    pub fn close(self) -> Result<(), StorageEngineError> {
         // Note: The Drop implementations for LsmTree will automatically
         // flush memtables when the engine registry is dropped.
         // We just need to ensure WAL and pager are flushed.
@@ -1302,12 +1302,12 @@ impl<FS: FileSystem> Database<FS> {
 
         // Step 1: Flush WAL buffer
         self.wal.flush().map_err(|e| {
-            DatabaseError::wal_failed(format!("Failed to flush WAL during close: {}", e))
+            StorageEngineError::wal_failed(format!("Failed to flush WAL during close: {}", e))
         })?;
 
         // Step 2: Sync pager (flushes cache and syncs file)
         self.pager.sync().map_err(|e| {
-            DatabaseError::pager_failed(format!("Failed to sync pager during close: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to sync pager during close: {}", e))
         })?;
 
         // Step 3: Drop self, which will trigger Drop implementations for all engines
@@ -1318,7 +1318,7 @@ impl<FS: FileSystem> Database<FS> {
     }
 }
 
-impl<FS: FileSystem> Drop for Database<FS> {
+impl<FS: FileSystem> Drop for StorageEngine<FS> {
     /// Ensure data durability on clean shutdown.
     ///
     /// This Drop implementation:
@@ -1335,7 +1335,7 @@ impl<FS: FileSystem> Drop for Database<FS> {
         // Step 1: Flush WAL buffer
         if let Err(e) = self.wal.flush() {
             eprintln!(
-                "Warning: Failed to flush WAL during database shutdown: {}",
+                "Warning: Failed to flush WAL during storage engine shutdown: {}",
                 e
             );
         }
@@ -1343,7 +1343,7 @@ impl<FS: FileSystem> Drop for Database<FS> {
         // Step 2: Sync pager (flushes cache and syncs file)
         if let Err(e) = self.pager.sync() {
             eprintln!(
-                "Warning: Failed to sync pager during database shutdown: {}",
+                "Warning: Failed to sync pager during storage engine shutdown: {}",
                 e
             );
         }
@@ -1359,7 +1359,7 @@ impl<FS: FileSystem> Drop for Database<FS> {
 /// Provides convenient methods for CRUD operations without needing to
 /// pass the table ID repeatedly.
 pub struct TableHandle<'db, FS: FileSystem> {
-    db: &'db Database<FS>,
+    db: &'db StorageEngine<FS>,
     table_id: TableId,
 }
 
@@ -1370,51 +1370,51 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
     }
 
     /// Get table metadata.
-    pub fn info(&self) -> Result<Option<TableInfo>, DatabaseError> {
+    pub fn info(&self) -> Result<Option<TableInfo>, StorageEngineError> {
         self.db.get_object_info(self.table_id)
     }
 
     /// Insert a key-value pair.
-    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), DatabaseError> {
+    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
         self.db.insert(self.table_id, key, value)
     }
 
     /// Update an existing key-value pair.
-    pub fn update(&self, key: &[u8], value: &[u8]) -> Result<(), DatabaseError> {
+    pub fn update(&self, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
         self.db.update(self.table_id, key, value)
     }
 
     /// Insert or update a key-value pair.
-    pub fn upsert(&self, key: &[u8], value: &[u8]) -> Result<bool, DatabaseError> {
+    pub fn upsert(&self, key: &[u8], value: &[u8]) -> Result<bool, StorageEngineError> {
         self.db.upsert(self.table_id, key, value)
     }
 
     /// Get a value.
-    pub fn get(&self, key: &[u8]) -> Result<Option<ValueBuf>, DatabaseError> {
+    pub fn get(&self, key: &[u8]) -> Result<Option<ValueBuf>, StorageEngineError> {
         self.db.get(self.table_id, key)
     }
 
     /// Delete a key.
-    pub fn delete(&self, key: &[u8]) -> Result<bool, DatabaseError> {
+    pub fn delete(&self, key: &[u8]) -> Result<bool, StorageEngineError> {
         self.db.delete(self.table_id, key)
     }
 
     /// Check if a key exists.
-    pub fn contains(&self, key: &[u8]) -> Result<bool, DatabaseError> {
+    pub fn contains(&self, key: &[u8]) -> Result<bool, StorageEngineError> {
         Ok(self.get(key)?.is_some())
     }
 }
 
-/// Database error type with enhanced context.
+/// Storage engine error type with enhanced context.
 #[derive(Debug)]
-pub struct DatabaseError {
-    pub kind: DatabaseErrorKind,
+pub struct StorageEngineError {
+    pub kind: StorageEngineErrorKind,
     pub message: String,
 }
 
-/// Database error kinds for better error handling.
+/// Storage engine error kinds for better error handling.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DatabaseErrorKind {
+pub enum StorageEngineErrorKind {
     /// Table or index not found
     NotFound,
     /// Object exists but is not a table
@@ -1443,118 +1443,118 @@ pub enum DatabaseErrorKind {
     Other,
 }
 
-impl DatabaseError {
+impl StorageEngineError {
     pub fn not_found(object: TableId) -> Self {
         Self {
-            kind: DatabaseErrorKind::NotFound,
+            kind: StorageEngineErrorKind::NotFound,
             message: format!("Object {:?} not found", object),
         }
     }
 
     pub fn not_a_table(object: TableId) -> Self {
         Self {
-            kind: DatabaseErrorKind::NotATable,
+            kind: StorageEngineErrorKind::NotATable,
             message: format!("Object {:?} is not a table", object),
         }
     }
 
     pub fn not_an_index(object: TableId) -> Self {
         Self {
-            kind: DatabaseErrorKind::NotAnIndex,
+            kind: StorageEngineErrorKind::NotAnIndex,
             message: format!("Object {:?} is not an index", object),
         }
     }
 
     pub fn key_already_exists(table: TableId, key: &[u8]) -> Self {
         Self {
-            kind: DatabaseErrorKind::KeyAlreadyExists,
+            kind: StorageEngineErrorKind::KeyAlreadyExists,
             message: format!("Key {:?} already exists in table {:?}", key, table),
         }
     }
 
     pub fn key_not_found(table: TableId, key: &[u8]) -> Self {
         Self {
-            kind: DatabaseErrorKind::KeyNotFound,
+            kind: StorageEngineErrorKind::KeyNotFound,
             message: format!("Key {:?} not found in table {:?}", key, table),
         }
     }
 
     pub fn table_already_exists(name: &str) -> Self {
         Self {
-            kind: DatabaseErrorKind::TableAlreadyExists,
+            kind: StorageEngineErrorKind::TableAlreadyExists,
             message: format!("Table '{}' already exists", name),
         }
     }
 
     pub fn index_already_exists(name: &str) -> Self {
         Self {
-            kind: DatabaseErrorKind::IndexAlreadyExists,
+            kind: StorageEngineErrorKind::IndexAlreadyExists,
             message: format!("Index '{}' already exists", name),
         }
     }
 
     pub fn index_maintenance_failed(index: TableId, details: String) -> Self {
         Self {
-            kind: DatabaseErrorKind::IndexMaintenanceFailed,
+            kind: StorageEngineErrorKind::IndexMaintenanceFailed,
             message: format!("Index {:?} maintenance failed: {}", index, details),
         }
     }
 
     pub fn transaction_failed(details: String) -> Self {
         Self {
-            kind: DatabaseErrorKind::TransactionFailed,
+            kind: StorageEngineErrorKind::TransactionFailed,
             message: format!("Transaction failed: {}", details),
         }
     }
 
     pub fn wal_failed(details: String) -> Self {
         Self {
-            kind: DatabaseErrorKind::WalFailed,
+            kind: StorageEngineErrorKind::WalFailed,
             message: format!("WAL operation failed: {}", details),
         }
     }
 
     pub fn pager_failed(details: String) -> Self {
         Self {
-            kind: DatabaseErrorKind::PagerFailed,
+            kind: StorageEngineErrorKind::PagerFailed,
             message: format!("Pager operation failed: {}", details),
         }
     }
 
     pub fn invalid_operation(details: String) -> Self {
         Self {
-            kind: DatabaseErrorKind::InvalidOperation,
+            kind: StorageEngineErrorKind::InvalidOperation,
             message: format!("Invalid operation: {}", details),
         }
     }
 
     pub fn other(message: String) -> Self {
         Self {
-            kind: DatabaseErrorKind::Other,
+            kind: StorageEngineErrorKind::Other,
             message,
         }
     }
 }
 
-impl Default for DatabaseError {
+impl Default for StorageEngineError {
     fn default() -> Self {
         Self {
-            kind: DatabaseErrorKind::Other,
-            message: "Unknown database error".to_string(),
+            kind: StorageEngineErrorKind::Other,
+            message: "Unknown storage engine error".to_string(),
         }
     }
 }
 
-impl std::fmt::Display for DatabaseError {
+impl std::fmt::Display for StorageEngineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
     }
 }
 
-impl std::error::Error for DatabaseError {}
+impl std::error::Error for StorageEngineError {}
 
-impl From<crate::txn::TransactionError> for DatabaseError {
+impl From<crate::txn::TransactionError> for StorageEngineError {
     fn from(err: crate::txn::TransactionError) -> Self {
-        DatabaseError::transaction_failed(err.to_string())
+        StorageEngineError::transaction_failed(err.to_string())
     }
 }

@@ -337,7 +337,7 @@ fn test_persistence_and_recovery_large_database() {
 
     let mut allocated_pages = Vec::new();
 
-    // Phase 1: Create database and allocate pages
+    // Phase 1: Create StorageEngine and allocate pages
     {
         let pager = Pager::create(&fs, db_path, config.clone()).unwrap();
 
@@ -357,7 +357,7 @@ fn test_persistence_and_recovery_large_database() {
         pager.sync().unwrap();
     }
 
-    // Phase 2: Reopen database and verify state
+    // Phase 2: Reopen StorageEngine and verify state
     {
         let pager = Pager::open(&fs, db_path).unwrap();
 
@@ -438,7 +438,7 @@ fn test_memory_usage_stability() {
 
 /// Test page file growth and shrinkage patterns
 ///
-/// This test validates that the database file grows appropriately
+/// This test validates that the StorageEngine file grows appropriately
 /// and that free space is managed efficiently.
 #[test]
 fn test_page_file_growth_patterns() {
@@ -993,7 +993,7 @@ fn test_memory_usage_200k_pages() {
 
     // Verify total pages
     let total_pages = pager.total_pages();
-    println!("Total pages in database: {}", total_pages);
+    println!("Total pages in StorageEngine: {}", total_pages);
     assert!(
         total_pages >= (page_count + 2) as u64,
         "Total pages should be at least {}",
@@ -1159,8 +1159,8 @@ fn test_persistence_recovery_50k_pages() {
 
     let mut allocated_pages = Vec::with_capacity(page_count);
 
-    // Phase 1: Create database and allocate pages
-    println!("Phase 1: Creating database and allocating pages...");
+    // Phase 1: Create StorageEngine and allocate pages
+    println!("Phase 1: Creating StorageEngine and allocating pages...");
     {
         let pager = Pager::create(&fs, db_path, config.clone()).unwrap();
 
@@ -1182,7 +1182,7 @@ fn test_persistence_recovery_50k_pages() {
             pager.write_page(&page).unwrap();
         }
 
-        println!("Syncing database...");
+        println!("Syncing StorageEngine...");
         pager.sync().unwrap();
 
         println!(
@@ -1192,8 +1192,8 @@ fn test_persistence_recovery_50k_pages() {
         );
     }
 
-    // Phase 2: Reopen database and verify state
-    println!("\nPhase 2: Reopening database and verifying state...");
+    // Phase 2: Reopen StorageEngine and verify state
+    println!("\nPhase 2: Reopening StorageEngine and verifying state...");
     {
         let pager = Pager::open(&fs, db_path).unwrap();
 
@@ -1235,7 +1235,7 @@ fn test_persistence_recovery_50k_pages() {
             "Should be able to allocate new pages"
         );
 
-        println!("Database recovery successful!");
+        println!("StorageEngine recovery successful!");
     }
 
     println!("\nTest completed successfully!");
@@ -1424,7 +1424,7 @@ fn test_memory_pressure() {
     println!("Strided access completed in {:?}", stride_duration);
 
     // Phase 4: Sync to ensure all data is persisted
-    println!("Phase 4: Syncing database...");
+    println!("Phase 4: Syncing StorageEngine...");
     let sync_start = std::time::Instant::now();
     pager.sync().unwrap();
     let sync_duration = sync_start.elapsed();
@@ -1499,7 +1499,7 @@ fn test_1m_pages() {
 
     // Verify total pages
     let total_pages = pager.total_pages();
-    println!("Total pages in database: {}", total_pages);
+    println!("Total pages in StorageEngine: {}", total_pages);
     assert!(
         total_pages >= (page_count + 2) as u64,
         "Total pages should be at least {}",
@@ -1511,7 +1511,7 @@ fn test_1m_pages() {
 
 /// Test large page file (multi-GB)
 ///
-/// This test creates a database with enough pages to exceed 1GB in size,
+/// This test creates a StorageEngine with enough pages to exceed 1GB in size,
 /// validating that the pager can handle large files.
 #[test]
 #[ignore] // Run with: cargo test --test pager_stress_tests -- --ignored --nocapture
@@ -1571,7 +1571,7 @@ fn test_large_page_file() {
     println!("Total pages: {}", pager.total_pages());
 
     // Sync to ensure everything is written
-    println!("Syncing database...");
+    println!("Syncing StorageEngine...");
     pager.sync().unwrap();
 
     println!("Large page file test completed successfully!");
@@ -1666,6 +1666,6 @@ fn test_long_running_stability() {
     println!("Total pages allocated: {}", total_allocated);
     println!("Total pages freed: {}", total_freed);
     println!("Final active pages: {}", active_pages.len());
-    println!("Database total pages: {}", pager.total_pages());
-    println!("Database free pages: {}", pager.free_pages());
+    println!("StorageEngine total pages: {}", pager.total_pages());
+    println!("StorageEngine free pages: {}", pager.free_pages());
 }

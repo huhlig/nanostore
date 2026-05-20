@@ -360,10 +360,10 @@ impl ErrorTelemetry for PagerError {
                 "config_error",
                 ErrorSeverity::Error,
             ),
-            PagerError::DatabaseFull => classification(
+            PagerError::StorageFull => classification(
                 "pager",
                 "resource_exhaustion",
-                "database_full",
+                "storage_full",
                 ErrorSeverity::Error,
             ),
             PagerError::PageAlreadyAllocated(_) => classification(
@@ -1003,7 +1003,7 @@ mod tests {
     #[test]
     fn test_error_conversion() {
         // Test that errors convert properly
-        let pager_err = PagerError::DatabaseFull;
+        let pager_err = PagerError::StorageFull;
         let nanostore_err: NanostoreError = pager_err.into();
         assert!(nanostore_err.is_pager());
         assert!(nanostore_err.as_pager().is_some());
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[test]
     fn test_error_extraction() {
-        let pager_err = PagerError::DatabaseFull;
+        let pager_err = PagerError::StorageFull;
         let nanostore_err: NanostoreError = pager_err.into();
 
         assert!(nanostore_err.as_pager().is_some());
@@ -1033,12 +1033,12 @@ mod tests {
 
     #[test]
     fn test_error_classification() {
-        let err: NanostoreError = PagerError::DatabaseFull.into();
+        let err: NanostoreError = PagerError::StorageFull.into();
         let classification = err.classification();
 
         assert_eq!(classification.subsystem, "pager");
         assert_eq!(classification.category, "resource_exhaustion");
-        assert_eq!(classification.variant, "database_full");
+        assert_eq!(classification.variant, "storage_full");
         assert_eq!(classification.severity, ErrorSeverity::Error);
     }
 

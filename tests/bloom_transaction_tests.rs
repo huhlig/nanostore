@@ -21,7 +21,7 @@
 //! write-set visibility, commit/rollback semantics, and error handling
 //! for unsupported generic KV operations on bloom filters.
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanostore::txn::TransactionId;
 use nanostore::types::{Durability, KeyEncoding};
@@ -47,7 +47,7 @@ fn default_table_options() -> TableOptions {
 #[test]
 fn test_bloom_insert_and_might_contain_in_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -70,7 +70,7 @@ fn test_bloom_insert_and_might_contain_in_transaction() {
 #[test]
 fn test_bloom_write_set_visibility_uncommitted() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -100,7 +100,7 @@ fn test_bloom_write_set_visibility_uncommitted() {
 #[test]
 fn test_bloom_multiple_inserts_same_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -136,7 +136,7 @@ fn test_bloom_multiple_inserts_same_transaction() {
 #[test]
 fn test_bloom_rollback_discards_all_inserts() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     // First, insert some keys and commit
@@ -187,7 +187,7 @@ fn test_bloom_rollback_discards_all_inserts() {
 #[test]
 fn test_mixed_kv_and_bloom_atomic_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let kv_id = db.create_table("kv", default_table_options()).unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
@@ -221,7 +221,7 @@ fn test_mixed_kv_and_bloom_atomic_commit() {
 #[test]
 fn test_mixed_kv_and_bloom_atomic_rollback() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let kv_id = db.create_table("kv", default_table_options()).unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
@@ -256,7 +256,7 @@ fn test_mixed_kv_and_bloom_atomic_rollback() {
 #[test]
 fn test_bloom_put_returns_error() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -273,7 +273,7 @@ fn test_bloom_put_returns_error() {
 #[test]
 fn test_bloom_delete_returns_error_at_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -289,7 +289,7 @@ fn test_bloom_delete_returns_error_at_commit() {
 #[test]
 fn test_bloom_range_delete_returns_error() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -315,7 +315,7 @@ fn test_bloom_range_delete_returns_error() {
 #[test]
 fn test_bloom_get_returns_empty_for_present_key() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     // Insert and commit
@@ -343,7 +343,7 @@ fn test_bloom_get_returns_empty_for_present_key() {
 #[test]
 fn test_bloom_get_returns_none_for_absent_key() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     // get() on bloom filter returns None for definitely-absent keys
@@ -357,7 +357,7 @@ fn test_bloom_get_returns_none_for_absent_key() {
 #[test]
 fn test_with_table_sets_context() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -374,7 +374,7 @@ fn test_with_table_sets_context() {
 #[test]
 fn test_clear_table_context() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -389,7 +389,7 @@ fn test_clear_table_context() {
 #[test]
 fn test_current_table_returns_context() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -406,7 +406,7 @@ fn test_current_table_returns_context() {
 #[test]
 fn test_bloom_stats_through_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     // Insert some keys
@@ -438,7 +438,7 @@ fn test_bloom_stats_through_transaction() {
 #[test]
 fn test_bloom_verify_through_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     {
@@ -464,7 +464,7 @@ fn test_bloom_verify_through_transaction() {
 #[test]
 fn test_bloom_capabilities_through_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut read_txn = db.begin_read().unwrap();
@@ -478,7 +478,7 @@ fn test_bloom_capabilities_through_transaction() {
 #[test]
 fn test_bloom_false_positive_rate_through_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     {
@@ -509,7 +509,7 @@ fn test_bloom_false_positive_rate_through_transaction() {
 #[test]
 fn test_multiple_bloom_tables_in_same_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom1_id = db.create_table("bloom1", bloom_table_options()).unwrap();
     let bloom2_id = db.create_table("bloom2", bloom_table_options()).unwrap();
 
@@ -564,7 +564,7 @@ fn test_multiple_bloom_tables_in_same_transaction() {
 #[test]
 fn test_bloom_insert_not_visible_to_other_transaction_before_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn1 = db.begin_write(Durability::WalOnly).unwrap();
@@ -604,7 +604,7 @@ fn test_bloom_insert_not_visible_to_other_transaction_before_commit() {
 #[test]
 fn test_bloom_insert_wal_recorded() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     {
@@ -634,7 +634,7 @@ fn test_bloom_insert_wal_recorded() {
 #[test]
 fn test_bloom_insert_empty_key() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -656,7 +656,7 @@ fn test_bloom_insert_empty_key() {
 #[test]
 fn test_bloom_insert_duplicate_key_same_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -688,7 +688,7 @@ fn test_bloom_insert_duplicate_key_same_transaction() {
 #[test]
 fn test_bloom_insert_large_key() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let large_key = vec![0xAB; 1024];
@@ -716,7 +716,7 @@ fn test_bloom_insert_large_key() {
 #[test]
 fn test_bloom_name_through_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db
         .create_table("my_bloom_filter", bloom_table_options())
         .unwrap();
@@ -729,7 +729,7 @@ fn test_bloom_name_through_transaction() {
 #[test]
 fn test_bloom_table_id_through_transaction() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut read_txn = db.begin_read().unwrap();
@@ -742,7 +742,7 @@ fn test_bloom_table_id_through_transaction() {
 #[test]
 fn test_bloom_operations_fail_after_commit() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();
@@ -756,7 +756,7 @@ fn test_bloom_operations_fail_after_commit() {
 #[test]
 fn test_bloom_operations_fail_after_rollback() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "test.wal", "test.db").unwrap();
+    let db = StorageEngine::new(&fs, "test.wal", "test.db").unwrap();
     let bloom_id = db.create_table("bloom", bloom_table_options()).unwrap();
 
     let mut txn = db.begin_write(Durability::WalOnly).unwrap();

@@ -198,7 +198,7 @@ fn test_recovery_of_encrypted_compressed_database() {
     let wal_path = "recovery.wal";
     let key = [77u8; 32];
 
-    // Create database with compression and encryption
+    // Create StorageEngine with compression and encryption
     let pager_config = PagerConfig::new()
         .with_page_size(PageSize::Size4KB)
         .with_compression(CompressionType::Lz4)

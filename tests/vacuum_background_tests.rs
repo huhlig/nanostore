@@ -16,7 +16,7 @@
 
 //! Tests for background vacuum task and metrics collection.
 
-use nanostore::kvdb::{Database, VacuumConfig};
+use nanostore::kvdb::{StorageEngine, VacuumConfig};
 use nanostore::table::TableOptions;
 use nanostore::types::Durability;
 use nanostore::vfs::MemoryFileSystem;
@@ -42,7 +42,7 @@ fn test_vacuum_config_custom() {
 #[test]
 fn test_manual_vacuum_trigger() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
     // Disable background vacuum for this test
     let mut config = db.vacuum_config();
@@ -85,7 +85,7 @@ fn test_manual_vacuum_trigger() {
 #[test]
 fn test_vacuum_stats_accumulation() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
     // Disable background vacuum for this test
     let mut config = db.vacuum_config();
@@ -122,7 +122,7 @@ fn test_vacuum_stats_accumulation() {
 #[test]
 fn test_vacuum_config_update() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
     // Get initial config
     let initial_config = db.vacuum_config();
@@ -144,7 +144,7 @@ fn test_vacuum_config_update() {
 #[test]
 fn test_vacuum_with_snapshots() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
     // Disable background vacuum for this test
     let mut config = db.vacuum_config();
@@ -195,7 +195,7 @@ fn test_vacuum_with_snapshots() {
 #[test]
 fn test_vacuum_metrics_per_table() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
     // Disable background vacuum for this test
     let mut config = db.vacuum_config();
@@ -237,11 +237,11 @@ fn test_vacuum_metrics_per_table() {
 #[test]
 fn test_database_close_stops_vacuum_thread() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
-    // Database should have vacuum thread running
+    // StorageEngine should have vacuum thread running
     // Close should stop it gracefully
-    db.close().expect("Failed to close database");
+    db.close().expect("Failed to close StorageEngine");
 
     // If we get here without hanging, the vacuum thread was stopped successfully
 }

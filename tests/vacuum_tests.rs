@@ -25,17 +25,17 @@
 //! - vacuum_table() and vacuum_all() APIs
 //! - Different table engines (BTree, Hash, LsmTree, GraphAdjacency, TimeSeries)
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::vfs::MemoryFileSystem;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-/// Helper to create a database with vacuum disabled for manual control
-fn create_test_db() -> Database<MemoryFileSystem> {
+/// Helper to create a StorageEngine with vacuum disabled for manual control
+fn create_test_db() -> StorageEngine<MemoryFileSystem> {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "/test.wal", "/test.db").expect("Failed to create database");
+    let db = StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
     // Disable background vacuum for manual control in tests
     let mut config = db.vacuum_config();

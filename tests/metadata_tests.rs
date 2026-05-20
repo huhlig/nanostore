@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-//! Tests for database and table metadata storage
+//! Tests for StorageEngine and table metadata storage
 
 use nanostore::pager::{CompressionType, EncryptionType, FileHeader, PageSize};
 use nanostore::table::TableInfo;
@@ -33,14 +33,14 @@ fn test_file_header_metadata_operations() {
     // Test setting metadata
     header.set_metadata("version".to_string(), b"1.0.0".to_vec());
     header.set_metadata("author".to_string(), b"test_user".to_vec());
-    header.set_metadata("description".to_string(), b"Test database".to_vec());
+    header.set_metadata("description".to_string(), b"Test StorageEngine".to_vec());
 
     // Test getting metadata
     assert_eq!(header.get_metadata("version"), Some(&b"1.0.0".to_vec()));
     assert_eq!(header.get_metadata("author"), Some(&b"test_user".to_vec()));
     assert_eq!(
         header.get_metadata("description"),
-        Some(&b"Test database".to_vec())
+        Some(&b"Test StorageEngine".to_vec())
     );
     assert_eq!(header.get_metadata("nonexistent"), None);
 

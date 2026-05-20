@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 
-//! End-to-end stress tests for full database operations.
+//! End-to-end stress tests for full StorageEngine operations.
 //!
-//! These tests validate the complete database stack under realistic production
+//! These tests validate the complete StorageEngine stack under realistic production
 //! workloads:
 //! - Concurrent transactions across multiple tables
 //! - Mixed read/write workloads with different isolation levels
@@ -32,7 +32,7 @@
 //! - Resource management (memory, file handles, locks)
 //! - Error handling and recovery
 
-use nanostore::kvdb::Database;
+use nanostore::kvdb::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::{Durability, IsolationLevel};
 use nanostore::vfs::MemoryFileSystem;
@@ -78,7 +78,7 @@ fn memory_table_options() -> TableOptions {
 #[test]
 fn test_concurrent_transactions_multiple_tables() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "stress.wal", "stress.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "stress.wal", "stress.db").unwrap());
 
     // Create multiple tables with different engines
     let users_id = db.create_table("users", btree_table_options()).unwrap();
@@ -156,7 +156,7 @@ fn test_concurrent_transactions_multiple_tables() {
 #[test]
 fn test_concurrent_readers_and_writers() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "stress.wal", "stress.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "stress.wal", "stress.db").unwrap());
 
     let table_id = db.create_table("data", btree_table_options()).unwrap();
 
@@ -276,7 +276,7 @@ fn test_concurrent_readers_and_writers() {
 #[test]
 fn test_concurrent_write_conflicts() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "stress.wal", "stress.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "stress.wal", "stress.db").unwrap());
 
     let table_id = db.create_table("data", btree_table_options()).unwrap();
 
@@ -376,7 +376,7 @@ fn test_concurrent_write_conflicts() {
 #[test]
 fn test_oltp_workload() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "oltp.wal", "oltp.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "oltp.wal", "oltp.db").unwrap());
 
     // Create tables for OLTP workload
     let accounts_id = db.create_table("accounts", btree_table_options()).unwrap();
@@ -470,7 +470,7 @@ fn test_oltp_workload() {
 #[test]
 fn test_analytics_workload() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "analytics.wal", "analytics.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "analytics.wal", "analytics.db").unwrap());
 
     let events_id = db.create_table("events", lsm_table_options()).unwrap();
 
@@ -586,7 +586,7 @@ fn test_analytics_workload() {
 #[test]
 fn test_long_running_snapshot_consistency() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "snapshot.wal", "snapshot.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "snapshot.wal", "snapshot.db").unwrap());
 
     let table_id = db.create_table("data", btree_table_options()).unwrap();
 
@@ -641,7 +641,7 @@ fn test_long_running_snapshot_consistency() {
     }
 }
 
-/// Test database behavior under sustained load.
+/// Test StorageEngine behavior under sustained load.
 ///
 /// Runs a continuous workload for an extended period to validate:
 /// - No memory leaks
@@ -650,7 +650,7 @@ fn test_long_running_snapshot_consistency() {
 #[test]
 fn test_sustained_load() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "sustained.wal", "sustained.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "sustained.wal", "sustained.db").unwrap());
 
     let table_id = db.create_table("data", lsm_table_options()).unwrap();
 
@@ -722,7 +722,7 @@ fn test_sustained_load() {
 #[test]
 fn test_large_values() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "large.wal", "large.db").unwrap();
+    let db = StorageEngine::new(&fs, "large.wal", "large.db").unwrap();
 
     let table_id = db.create_table("data", btree_table_options()).unwrap();
 
@@ -755,7 +755,7 @@ fn test_large_values() {
 #[test]
 fn test_many_small_transactions() {
     let fs = MemoryFileSystem::new();
-    let db = Database::new(&fs, "many.wal", "many.db").unwrap();
+    let db = StorageEngine::new(&fs, "many.wal", "many.db").unwrap();
 
     let table_id = db.create_table("data", memory_table_options()).unwrap();
 
@@ -784,14 +784,14 @@ fn test_many_small_transactions() {
 
 /// Test time-series ingestion pattern.
 ///
-/// Simulates a time-series database workload with:
+/// Simulates a time-series StorageEngine workload with:
 /// - High write throughput
 /// - Append-only writes
 /// - Periodic reads for recent data
 #[test]
 fn test_timeseries_ingestion_pattern() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "timeseries.wal", "timeseries.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "timeseries.wal", "timeseries.db").unwrap());
 
     let metrics_id = db.create_table("metrics", lsm_table_options()).unwrap();
 
@@ -885,7 +885,7 @@ fn test_timeseries_ingestion_pattern() {
 #[test]
 fn test_cache_access_pattern() {
     let fs = MemoryFileSystem::new();
-    let db = Arc::new(Database::new(&fs, "cache.wal", "cache.db").unwrap());
+    let db = Arc::new(StorageEngine::new(&fs, "cache.wal", "cache.db").unwrap());
 
     let cache_id = db.create_table("cache", memory_table_options()).unwrap();
 

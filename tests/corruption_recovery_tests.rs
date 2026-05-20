@@ -16,7 +16,7 @@
 
 //! Corruption recovery scenario tests
 //!
-//! These tests validate the database's ability to detect and handle various
+//! These tests validate the StorageEngine's ability to detect and handle various
 //! corruption scenarios including partial writes, torn pages, checksum failures,
 //! and corrupted metadata structures.
 
@@ -90,7 +90,7 @@ fn test_corrupted_magic_number() {
     // Corrupt the magic number (first 4 bytes)
     corrupt_file_at_offset(&fs, &path, 0, b"XXXX");
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidFileHeader error
@@ -112,7 +112,7 @@ fn test_corrupted_version_number() {
     // Corrupt the version number (bytes 4-5)
     corrupt_file_at_offset(&fs, &path, 4, &[0xFF, 0xFF]);
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidFileHeader error
@@ -134,7 +134,7 @@ fn test_corrupted_page_size() {
     // Corrupt the page size (bytes 8-11) with invalid value
     corrupt_file_at_offset(&fs, &path, 8, &[0x99, 0x99, 0x00, 0x00]);
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidPageSize error
@@ -154,7 +154,7 @@ fn test_corrupted_compression_type() {
     // Corrupt the compression type (byte 12) with invalid value
     corrupt_file_at_offset(&fs, &path, 12, &[0xFF]);
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidFileHeader error
@@ -176,7 +176,7 @@ fn test_corrupted_encryption_type() {
     // Corrupt the encryption type (byte 13) with invalid value
     corrupt_file_at_offset(&fs, &path, 13, &[0xFF]);
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidFileHeader error
@@ -207,7 +207,7 @@ fn test_corrupted_superblock_magic() {
     // Corrupt the superblock magic number (first 8 bytes of superblock data)
     corrupt_file_at_offset(&fs, &path, superblock_offset, &[0xFF; 8]);
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidSuperblock or ChecksumMismatch error
@@ -233,7 +233,7 @@ fn test_corrupted_superblock_version() {
     // Corrupt the superblock version
     corrupt_file_at_offset(&fs, &path, superblock_offset, &[0xFF; 8]);
 
-    // Attempt to open the corrupted database
+    // Attempt to open the corrupted StorageEngine
     let result = Pager::open(&fs, &path);
 
     // Should fail with InvalidSuperblock or ChecksumMismatch error
@@ -347,7 +347,7 @@ fn test_partial_page_write() {
     file.set_size(truncate_size).expect("Failed to truncate");
     drop(file);
 
-    // Attempt to open the database with partial page
+    // Attempt to open the StorageEngine with partial page
     let result = Pager::open(&fs, &path);
 
     // The behavior depends on whether the truncation affects critical pages
@@ -464,7 +464,7 @@ fn test_corrupted_encrypted_page() {
     // Note: Pager::open doesn't accept config, so it will fail to open encrypted DB
     let result = Pager::open(&fs, path);
 
-    // Should fail with MissingEncryptionKey when trying to open encrypted database
+    // Should fail with MissingEncryptionKey when trying to open encrypted StorageEngine
     assert!(result.is_err());
     if let Err(e) = result {
         match e {
@@ -591,7 +591,7 @@ fn test_wal_with_invalid_record_type() {
 
 #[test]
 fn test_recovery_with_checksum_disabled() {
-    // Create a database with checksums disabled
+    // Create a StorageEngine with checksums disabled
     let fs = MemoryFileSystem::new();
     let path = "test_no_checksum.db";
     let mut config = PagerConfig::default();
@@ -613,7 +613,7 @@ fn test_recovery_with_checksum_disabled() {
     corrupt_file_at_offset(&fs, path, page_offset, b"CORRUPTED");
 
     // Open and try to read - with checksums disabled during creation,
-    // the database should still validate checksums on read by default
+    // the StorageEngine should still validate checksums on read by default
     let pager = Pager::open(&fs, path).expect("Failed to open pager");
     let result = pager.read_page(page_id);
 
@@ -634,7 +634,7 @@ fn test_multiple_corrupted_pages() {
         corrupt_file_at_offset(&fs, &path, page_offset, b"CORRUPTED");
     }
 
-    // Open the database
+    // Open the StorageEngine
     let pager = Pager::open(&fs, &path).expect("Failed to open pager");
 
     // All corrupted pages should fail checksum verification
@@ -715,7 +715,7 @@ fn test_superblock_with_inconsistent_counts() {
     // Set total_pages to an impossibly high value
     corrupt_file_at_offset(&fs, &path, superblock_offset, &[0xFF; 8]);
 
-    // Open the database
+    // Open the StorageEngine
     let pager = Pager::open(&fs, &path);
 
     // Should still open (the system may detect inconsistency later during operations)

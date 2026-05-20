@@ -105,9 +105,9 @@ pub enum PagerError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
-    /// Database is full (no free pages)
-    #[error("Database is full (no free pages available)")]
-    DatabaseFull,
+    /// Storage is full (no free pages)
+    #[error("Storage is full (no free pages available)")]
+    StorageFull,
 
     /// Page is already allocated
     #[error("Page {0} is already allocated")]
