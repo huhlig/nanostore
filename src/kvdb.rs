@@ -685,6 +685,7 @@ impl<FS: FileSystem> Database<FS> {
             options,
             root,
             created_lsn,
+            metadata: std::collections::HashMap::new(),
         };
 
         // Add to catalog

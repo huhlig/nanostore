@@ -17,6 +17,7 @@
 //! Database file header
 
 use crate::pager::{CompressionType, EncryptionType, PageSize, PagerError, PagerResult};
+use std::collections::HashMap;
 
 /// Magic number for nanostore database files: "NKDB" in ASCII
 const MAGIC: [u8; 4] = [0x4E, 0x4B, 0x44, 0x42]; // "NKDB"
@@ -70,6 +71,9 @@ pub struct FileHeader {
     pub created_at: [u8; 32],
     /// Last modified timestamp (Unix timestamp as bytes)
     pub modified_at: [u8; 32],
+    /// User-defined metadata (key-value properties)
+    /// Stored separately from the fixed header to allow flexible metadata
+    pub metadata: HashMap<String, String>,
 }
 
 impl FileHeader {
@@ -115,6 +119,7 @@ impl FileHeader {
             database_uuid: uuid,
             created_at: timestamp,
             modified_at: timestamp,
+            metadata: HashMap::new(),
         }
     }
 
@@ -243,6 +248,7 @@ impl FileHeader {
             database_uuid,
             created_at,
             modified_at,
+            metadata: HashMap::new(), // Metadata stored separately, not in fixed header
         })
     }
 
@@ -257,6 +263,39 @@ impl FileHeader {
 
         self.modified_at = [0u8; 32];
         self.modified_at[0..8].copy_from_slice(&now.to_le_bytes());
+    }
+
+    /// Set a metadata property
+    pub fn set_metadata(&mut self, key: String, value: String) {
+        self.metadata.insert(key, value);
+        self.update_modified_timestamp();
+    }
+
+    /// Get a metadata property
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
+    }
+
+    /// Remove a metadata property
+    pub fn remove_metadata(&mut self, key: &str) -> Option<String> {
+        let result = self.metadata.remove(key);
+        if result.is_some() {
+            self.update_modified_timestamp();
+        }
+        result
+    }
+
+    /// Get all metadata properties
+    pub fn metadata(&self) -> &HashMap<String, String> {
+        &self.metadata
+    }
+
+    /// Clear all metadata properties
+    pub fn clear_metadata(&mut self) {
+        if !self.metadata.is_empty() {
+            self.metadata.clear();
+            self.update_modified_timestamp();
+        }
     }
 }
 

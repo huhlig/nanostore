@@ -33,6 +33,7 @@ use crate::types::{
 };
 use crate::wal::LogSequenceNumber;
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 // TableId has been removed - use ObjectId directly throughout the codebase.
 // This completes the type system unification where tables and indexes share
@@ -103,6 +104,35 @@ pub struct TableInfo {
     pub options: TableOptions,
     pub root: Option<PhysicalLocation>,
     pub created_lsn: LogSequenceNumber,
+    /// User-defined metadata (key-value properties)
+    pub metadata: HashMap<String, String>,
+}
+
+impl TableInfo {
+    /// Set a metadata property
+    pub fn set_metadata(&mut self, key: String, value: String) {
+        self.metadata.insert(key, value);
+    }
+
+    /// Get a metadata property
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
+    }
+
+    /// Remove a metadata property
+    pub fn remove_metadata(&mut self, key: &str) -> Option<String> {
+        self.metadata.remove(key)
+    }
+
+    /// Get all metadata properties
+    pub fn metadata(&self) -> &HashMap<String, String> {
+        &self.metadata
+    }
+
+    /// Clear all metadata properties
+    pub fn clear_metadata(&mut self) {
+        self.metadata.clear();
+    }
 }
 
 /// Table engine kind - determines both implementation and capabilities.
