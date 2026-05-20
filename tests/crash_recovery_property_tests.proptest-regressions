@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 300fa2155fb90967c12e64155615d10da4f4a5d30a669e1ed282b02bd4255a48 # shrinks to operations = [Checkpoint, Checkpoint, BeginTxn { txn_id: 1 }, BeginTxn { txn_id: 2 }, BeginTxn { txn_id: 3 }], crash_point = DuringOperation(2)
+cc b4ccccd2962a784ea6021dbda8cd888d87a0493f70f30f231a26e057e2b20db0 # shrinks to operations = [BeginTxn { txn_id: 6 }, Checkpoint, BeginTxn { txn_id: 1 }, CommitTxn { txn_id: 6 }, Checkpoint], crash_point = DuringOperation(2)
