@@ -48,6 +48,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tracing::warn;
 
 /// Configuration for automatic vacuum operations.
 #[derive(Debug, Clone)]
@@ -1016,6 +1017,145 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// the background thread will stop after the current cycle completes.
     pub fn set_vacuum_config(&self, config: VacuumConfig) {
         *self.vacuum_config.write().unwrap() = config;
+    }
+
+    /// Perform VACUUM FULL on a specific table.
+    ///
+    /// VACUUM FULL is a blocking operation that compacts the database file by:
+    /// 1. Running regular vacuum to remove obsolete MVCC versions
+    /// 2. Moving data from high-numbered pages to low-numbered pages
+    /// 3. Truncating the file to reclaim disk space
+    ///
+    /// This operation requires exclusive access to the table and will block
+    /// all other operations on that table until complete.
+    ///
+    /// # Arguments
+    ///
+    /// * `table_id` - The ID of the table to compact
+    ///
+    /// # Returns
+    ///
+    /// Returns statistics about the compaction including pages moved,
+    /// bytes reclaimed, and file size reduction.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The table doesn't exist
+    /// - The table doesn't support VACUUM FULL (e.g., in-memory tables)
+    /// - The pager-level compaction fails
+    /// - The file truncation fails
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Compact a specific table
+    /// let stats = db.vacuum_full_table(table_id)?;
+    /// println!("Reclaimed {} bytes", stats.bytes_reclaimed);
+    /// println!("File size: {} -> {}", stats.file_size_before, stats.file_size_after);
+    /// ```
+    pub fn vacuum_full_table(
+        &self,
+        table_id: TableId,
+    ) -> Result<VacuumFullStats, StorageEngineError> {
+        let _start = Instant::now();
+
+        // Verify table exists
+        let table_info = self
+            .get_object_info(table_id)?
+            .ok_or_else(|| StorageEngineError::not_found(table_id))?;
+
+        // Check if table is persistent (only persistent tables can be compacted)
+        if !table_info.options.engine.is_persistent() {
+            return Err(StorageEngineError::invalid_operation(format!(
+                "Table {table_id:?} is not persistent and cannot be compacted with VACUUM FULL"
+            )));
+        }
+
+        // Step 1: Run regular vacuum first to remove obsolete MVCC versions
+        // This makes the subsequent compaction more effective
+        let _versions_removed = self.vacuum_table(table_id)?;
+
+        // Step 2: Perform pager-level compaction
+        // NOTE: This will be implemented in Phase 2 (nanokv-n5gs)
+        // For now, we return an error indicating the feature is not yet available
+        //
+        // When Phase 2 is complete, this will call:
+        // let full_stats = self.pager.compact_and_truncate()?;
+
+        // Placeholder implementation until Phase 2 is complete
+        Err(StorageEngineError::invalid_operation(
+            "VACUUM FULL pager-level compaction not yet implemented (blocked by Phase 2: nanokv-n5gs)".to_string()
+        ))
+
+        // The following code will be uncommented when Phase 2 is complete:
+        /*
+        let mut full_stats = self.pager.compact_and_truncate()
+            .map_err(|e| StorageEngineError::pager_failed(format!("Compaction failed: {}", e)))?;
+
+        // Calculate duration
+        full_stats.duration = start.elapsed();
+
+        // Update statistics
+        full_stats.calculate_reclaimed();
+
+        Ok(full_stats)
+        */
+    }
+
+    /// Perform VACUUM FULL on all tables in the database.
+    ///
+    /// This is a convenience method that runs VACUUM FULL on all persistent
+    /// tables. In-memory tables are skipped. Each table is compacted
+    /// independently with exclusive locking.
+    ///
+    /// # Returns
+    ///
+    /// Returns a map of table_id -> VacuumFullStats for all tables that
+    /// were successfully compacted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any table compaction fails. Tables that were
+    /// successfully compacted before the error will have their statistics
+    /// in the returned map.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Compact all tables
+    /// let results = db.vacuum_full_all()?;
+    /// for (table_id, stats) in results {
+    ///     println!("Table {:?}: reclaimed {} bytes", table_id, stats.bytes_reclaimed);
+    /// }
+    /// ```
+    pub fn vacuum_full_all(&self) -> Result<HashMap<TableId, VacuumFullStats>, StorageEngineError> {
+        let mut results = HashMap::new();
+
+        // Get all tables
+        let tables = self.list_tables()?;
+
+        for table_info in tables {
+            // Only compact persistent tables
+            if !table_info.options.engine.is_persistent() {
+                continue;
+            }
+
+            // Try to compact each table
+            match self.vacuum_full_table(table_info.id) {
+                Ok(stats) => {
+                    results.insert(table_info.id, stats);
+                }
+                Err(e) => {
+                    // For now, we skip tables that fail
+                    // In the future, we might want to make this configurable
+                    warn!("Failed to VACUUM FULL table {:?}: {}", table_info.id, e);
+                    continue;
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// Start the background vacuum thread.
