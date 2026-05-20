@@ -73,7 +73,8 @@ pub struct FileHeader {
     pub modified_at: [u8; 32],
     /// User-defined metadata (key-value properties)
     /// Stored separately from the fixed header to allow flexible metadata
-    pub metadata: HashMap<String, String>,
+    /// Values are Vec<u8> to support binary data
+    pub metadata: HashMap<String, Vec<u8>>,
 }
 
 impl FileHeader {
@@ -266,18 +267,18 @@ impl FileHeader {
     }
 
     /// Set a metadata property
-    pub fn set_metadata(&mut self, key: String, value: String) {
+    pub fn set_metadata(&mut self, key: String, value: Vec<u8>) {
         self.metadata.insert(key, value);
         self.update_modified_timestamp();
     }
 
     /// Get a metadata property
-    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+    pub fn get_metadata(&self, key: &str) -> Option<&Vec<u8>> {
         self.metadata.get(key)
     }
 
     /// Remove a metadata property
-    pub fn remove_metadata(&mut self, key: &str) -> Option<String> {
+    pub fn remove_metadata(&mut self, key: &str) -> Option<Vec<u8>> {
         let result = self.metadata.remove(key);
         if result.is_some() {
             self.update_modified_timestamp();
@@ -286,7 +287,7 @@ impl FileHeader {
     }
 
     /// Get all metadata properties
-    pub fn metadata(&self) -> &HashMap<String, String> {
+    pub fn metadata(&self) -> &HashMap<String, Vec<u8>> {
         &self.metadata
     }
 

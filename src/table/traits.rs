@@ -105,27 +105,28 @@ pub struct TableInfo {
     pub root: Option<PhysicalLocation>,
     pub created_lsn: LogSequenceNumber,
     /// User-defined metadata (key-value properties)
-    pub metadata: HashMap<String, String>,
+    /// Values are Vec<u8> to support binary data
+    pub metadata: HashMap<String, Vec<u8>>,
 }
 
 impl TableInfo {
     /// Set a metadata property
-    pub fn set_metadata(&mut self, key: String, value: String) {
+    pub fn set_metadata(&mut self, key: String, value: Vec<u8>) {
         self.metadata.insert(key, value);
     }
 
     /// Get a metadata property
-    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+    pub fn get_metadata(&self, key: &str) -> Option<&Vec<u8>> {
         self.metadata.get(key)
     }
 
     /// Remove a metadata property
-    pub fn remove_metadata(&mut self, key: &str) -> Option<String> {
+    pub fn remove_metadata(&mut self, key: &str) -> Option<Vec<u8>> {
         self.metadata.remove(key)
     }
 
     /// Get all metadata properties
-    pub fn metadata(&self) -> &HashMap<String, String> {
+    pub fn metadata(&self) -> &HashMap<String, Vec<u8>> {
         &self.metadata
     }
 

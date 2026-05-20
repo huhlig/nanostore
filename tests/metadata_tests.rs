@@ -31,16 +31,16 @@ fn test_file_header_metadata_operations() {
     );
 
     // Test setting metadata
-    header.set_metadata("version".to_string(), "1.0.0".to_string());
-    header.set_metadata("author".to_string(), "test_user".to_string());
-    header.set_metadata("description".to_string(), "Test database".to_string());
+    header.set_metadata("version".to_string(), b"1.0.0".to_vec());
+    header.set_metadata("author".to_string(), b"test_user".to_vec());
+    header.set_metadata("description".to_string(), b"Test database".to_vec());
 
     // Test getting metadata
-    assert_eq!(header.get_metadata("version"), Some(&"1.0.0".to_string()));
-    assert_eq!(header.get_metadata("author"), Some(&"test_user".to_string()));
+    assert_eq!(header.get_metadata("version"), Some(&b"1.0.0".to_vec()));
+    assert_eq!(header.get_metadata("author"), Some(&b"test_user".to_vec()));
     assert_eq!(
         header.get_metadata("description"),
-        Some(&"Test database".to_string())
+        Some(&b"Test database".to_vec())
     );
     assert_eq!(header.get_metadata("nonexistent"), None);
 
@@ -49,7 +49,7 @@ fn test_file_header_metadata_operations() {
 
     // Test removing metadata
     let removed = header.remove_metadata("author");
-    assert_eq!(removed, Some("test_user".to_string()));
+    assert_eq!(removed, Some(b"test_user".to_vec()));
     assert_eq!(header.get_metadata("author"), None);
     assert_eq!(header.metadata().len(), 2);
 
@@ -68,14 +68,14 @@ fn test_file_header_metadata_persistence() {
     );
 
     // Add metadata
-    header.set_metadata("key1".to_string(), "value1".to_string());
-    header.set_metadata("key2".to_string(), "value2".to_string());
+    header.set_metadata("key1".to_string(), b"value1".to_vec());
+    header.set_metadata("key2".to_string(), b"value2".to_vec());
 
     // Note: The fixed header doesn't serialize metadata (it's stored separately)
     // This test verifies that metadata is maintained in memory
     assert_eq!(header.metadata().len(), 2);
-    assert_eq!(header.get_metadata("key1"), Some(&"value1".to_string()));
-    assert_eq!(header.get_metadata("key2"), Some(&"value2".to_string()));
+    assert_eq!(header.get_metadata("key1"), Some(&b"value1".to_vec()));
+    assert_eq!(header.get_metadata("key2"), Some(&b"value2".to_vec()));
 }
 
 #[test]
@@ -90,19 +90,19 @@ fn test_table_info_metadata_operations() {
     };
 
     // Test setting metadata
-    table_info.set_metadata("schema_version".to_string(), "2".to_string());
-    table_info.set_metadata("owner".to_string(), "admin".to_string());
-    table_info.set_metadata("tags".to_string(), "production,critical".to_string());
+    table_info.set_metadata("schema_version".to_string(), b"2".to_vec());
+    table_info.set_metadata("owner".to_string(), b"admin".to_vec());
+    table_info.set_metadata("tags".to_string(), b"production,critical".to_vec());
 
     // Test getting metadata
     assert_eq!(
         table_info.get_metadata("schema_version"),
-        Some(&"2".to_string())
+        Some(&b"2".to_vec())
     );
-    assert_eq!(table_info.get_metadata("owner"), Some(&"admin".to_string()));
+    assert_eq!(table_info.get_metadata("owner"), Some(&b"admin".to_vec()));
     assert_eq!(
         table_info.get_metadata("tags"),
-        Some(&"production,critical".to_string())
+        Some(&b"production,critical".to_vec())
     );
     assert_eq!(table_info.get_metadata("nonexistent"), None);
 
@@ -111,7 +111,7 @@ fn test_table_info_metadata_operations() {
 
     // Test removing metadata
     let removed = table_info.remove_metadata("owner");
-    assert_eq!(removed, Some("admin".to_string()));
+    assert_eq!(removed, Some(b"admin".to_vec()));
     assert_eq!(table_info.get_metadata("owner"), None);
     assert_eq!(table_info.metadata().len(), 2);
 
@@ -133,8 +133,8 @@ fn test_table_info_metadata_serialization() {
     };
 
     // Add metadata
-    table_info.set_metadata("created_by".to_string(), "system".to_string());
-    table_info.set_metadata("purpose".to_string(), "user_management".to_string());
+    table_info.set_metadata("created_by".to_string(), b"system".to_vec());
+    table_info.set_metadata("purpose".to_string(), b"user_management".to_vec());
 
     // Serialize to JSON
     let json = serde_json::to_string(&table_info).expect("Failed to serialize");
@@ -149,11 +149,11 @@ fn test_table_info_metadata_serialization() {
     assert_eq!(deserialized.metadata.len(), 2);
     assert_eq!(
         deserialized.get_metadata("created_by"),
-        Some(&"system".to_string())
+        Some(&b"system".to_vec())
     );
     assert_eq!(
         deserialized.get_metadata("purpose"),
-        Some(&"user_management".to_string())
+        Some(&b"user_management".to_vec())
     );
 }
 
@@ -165,15 +165,15 @@ fn test_metadata_empty_values() {
         EncryptionType::None,
     );
 
-    // Test empty string values
-    header.set_metadata("empty_key".to_string(), "".to_string());
-    assert_eq!(header.get_metadata("empty_key"), Some(&"".to_string()));
+    // Test empty byte array values
+    header.set_metadata("empty_key".to_string(), vec![]);
+    assert_eq!(header.get_metadata("empty_key"), Some(&vec![]));
 
     // Test overwriting values
-    header.set_metadata("key".to_string(), "value1".to_string());
-    assert_eq!(header.get_metadata("key"), Some(&"value1".to_string()));
-    header.set_metadata("key".to_string(), "value2".to_string());
-    assert_eq!(header.get_metadata("key"), Some(&"value2".to_string()));
+    header.set_metadata("key".to_string(), b"value1".to_vec());
+    assert_eq!(header.get_metadata("key"), Some(&b"value1".to_vec()));
+    header.set_metadata("key".to_string(), b"value2".to_vec());
+    assert_eq!(header.get_metadata("key"), Some(&b"value2".to_vec()));
 }
 
 #[test]
@@ -188,29 +188,29 @@ fn test_metadata_special_characters() {
     };
 
     // Test special characters in keys and values
-    table_info.set_metadata("key-with-dashes".to_string(), "value".to_string());
-    table_info.set_metadata("key.with.dots".to_string(), "value".to_string());
-    table_info.set_metadata("key_with_underscores".to_string(), "value".to_string());
+    table_info.set_metadata("key-with-dashes".to_string(), b"value".to_vec());
+    table_info.set_metadata("key.with.dots".to_string(), b"value".to_vec());
+    table_info.set_metadata("key_with_underscores".to_string(), b"value".to_vec());
     table_info.set_metadata(
         "unicode_key".to_string(),
-        "值 with 中文 characters".to_string(),
+        "值 with 中文 characters".as_bytes().to_vec(),
     );
 
     assert_eq!(
         table_info.get_metadata("key-with-dashes"),
-        Some(&"value".to_string())
+        Some(&b"value".to_vec())
     );
     assert_eq!(
         table_info.get_metadata("key.with.dots"),
-        Some(&"value".to_string())
+        Some(&b"value".to_vec())
     );
     assert_eq!(
         table_info.get_metadata("key_with_underscores"),
-        Some(&"value".to_string())
+        Some(&b"value".to_vec())
     );
     assert_eq!(
         table_info.get_metadata("unicode_key"),
-        Some(&"值 with 中文 characters".to_string())
+        Some(&"值 with 中文 characters".as_bytes().to_vec())
     );
 }
 
@@ -223,9 +223,33 @@ fn test_metadata_large_values() {
     );
 
     // Test large metadata values
-    let large_value = "x".repeat(10000);
+    let large_value = vec![b'x'; 10000];
     header.set_metadata("large_key".to_string(), large_value.clone());
     assert_eq!(header.get_metadata("large_key"), Some(&large_value));
+}
+
+#[test]
+fn test_metadata_binary_values() {
+    let mut table_info = TableInfo {
+        id: TableId::from(1),
+        name: "test".to_string(),
+        options: Default::default(),
+        root: None,
+        created_lsn: LogSequenceNumber::from(0),
+        metadata: HashMap::new(),
+    };
+
+    // Test binary data (not valid UTF-8)
+    let binary_data = vec![0xFF, 0xFE, 0xFD, 0xFC, 0x00, 0x01, 0x02];
+    table_info.set_metadata("binary_key".to_string(), binary_data.clone());
+    assert_eq!(table_info.get_metadata("binary_key"), Some(&binary_data));
+
+    // Test storing serialized data (e.g., a u64)
+    let number: u64 = 42;
+    table_info.set_metadata("number".to_string(), number.to_le_bytes().to_vec());
+    let retrieved = table_info.get_metadata("number").unwrap();
+    let decoded = u64::from_le_bytes(retrieved.as_slice().try_into().unwrap());
+    assert_eq!(decoded, 42);
 }
 
 #[test]
@@ -240,9 +264,9 @@ fn test_metadata_iteration() {
     };
 
     // Add multiple metadata entries
-    table_info.set_metadata("key1".to_string(), "value1".to_string());
-    table_info.set_metadata("key2".to_string(), "value2".to_string());
-    table_info.set_metadata("key3".to_string(), "value3".to_string());
+    table_info.set_metadata("key1".to_string(), b"value1".to_vec());
+    table_info.set_metadata("key2".to_string(), b"value2".to_vec());
+    table_info.set_metadata("key3".to_string(), b"value3".to_vec());
 
     // Iterate over metadata
     let metadata = table_info.metadata();
