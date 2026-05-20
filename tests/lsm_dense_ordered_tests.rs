@@ -85,7 +85,8 @@ fn test_lsm_dense_ordered_insert_and_scan() {
     }
 
     // Should be in sorted order by index_key
-    assert_eq!(entries.len(), 4);
+    // We inserted 4 entries but age:25 was inserted twice, so we expect 3 unique entries
+    assert_eq!(entries.len(), 3);
     assert_eq!(entries[0], (b"age:25".to_vec(), b"user:3".to_vec())); // Latest version
     assert_eq!(entries[1], (b"age:30".to_vec(), b"user:2".to_vec()));
     assert_eq!(entries[2], (b"age:35".to_vec(), b"user:4".to_vec()));

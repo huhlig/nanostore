@@ -172,7 +172,12 @@ pub struct MemtableIterator {
 
 impl MemtableIterator {
     /// Create a new memtable iterator.
-    pub fn new(memtable: &Memtable, direction: Direction, priority: usize) -> TableResult<Self> {
+    pub fn new(
+        memtable: &Memtable,
+        direction: Direction,
+        priority: usize,
+        snapshot_lsn: LogSequenceNumber,
+    ) -> TableResult<Self> {
         // Get all entries from the memtable
         // Note: This requires the memtable to be immutable
         let entries = if memtable.is_immutable() {
@@ -181,12 +186,13 @@ impl MemtableIterator {
             // For mutable memtables, we need to take a snapshot
             // This is a simplified approach - in production, you'd want
             // a more efficient snapshot mechanism
-            let snapshot_lsn = LogSequenceNumber::from(u64::MAX);
             memtable
                 .scan(None, None, snapshot_lsn)?
                 .into_iter()
                 .map(|(k, v)| {
-                    let chain = VersionChain::new(v, crate::txn::TransactionId::from(0));
+                    let mut chain = VersionChain::new(v, crate::txn::TransactionId::from(0));
+                    // Mark as committed at the snapshot LSN so it's visible
+                    chain.commit(snapshot_lsn);
                     (k, chain)
                 })
                 .collect()
@@ -931,7 +937,13 @@ mod tests {
 
         memtable.make_immutable();
 
-        let mut iter = MemtableIterator::new(&memtable, Direction::Forward, 0).unwrap();
+        let mut iter = MemtableIterator::new(
+            &memtable,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
 
         // Check forward iteration
         let mut count = 0;
@@ -959,7 +971,13 @@ mod tests {
 
         memtable.make_immutable();
 
-        let mut iter = MemtableIterator::new(&memtable, Direction::Backward, 0).unwrap();
+        let mut iter = MemtableIterator::new(
+            &memtable,
+            Direction::Backward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
 
         // Check backward iteration
         let mut count = 4;
@@ -990,7 +1008,13 @@ mod tests {
 
         memtable.make_immutable();
 
-        let mut iter = MemtableIterator::new(&memtable, Direction::Forward, 0).unwrap();
+        let mut iter = MemtableIterator::new(
+            &memtable,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
 
         // Seek to key05
         iter.seek(b"key05").unwrap();
@@ -1018,7 +1042,13 @@ mod tests {
 
         memtable.make_immutable();
 
-        let iter = MemtableIterator::new(&memtable, Direction::Forward, 0).unwrap();
+        let iter = MemtableIterator::new(
+            &memtable,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
         let iterators: Vec<Box<dyn LsmIterator>> = vec![Box::new(iter)];
 
         let mut merge_iter =
@@ -1064,8 +1094,20 @@ mod tests {
         memtable2.make_immutable();
 
         // Memtable2 has higher priority (newer)
-        let iter1 = MemtableIterator::new(&memtable1, Direction::Forward, 1).unwrap();
-        let iter2 = MemtableIterator::new(&memtable2, Direction::Forward, 0).unwrap();
+        let iter1 = MemtableIterator::new(
+            &memtable1,
+            Direction::Forward,
+            1,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
+        let iter2 = MemtableIterator::new(
+            &memtable2,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
         let iterators: Vec<Box<dyn LsmIterator>> = vec![Box::new(iter2), Box::new(iter1)];
 
         let mut merge_iter =
@@ -1119,8 +1161,20 @@ mod tests {
         memtable1.make_immutable();
         memtable2.make_immutable();
 
-        let iter1 = MemtableIterator::new(&memtable1, Direction::Forward, 1).unwrap();
-        let iter2 = MemtableIterator::new(&memtable2, Direction::Forward, 0).unwrap();
+        let iter1 = MemtableIterator::new(
+            &memtable1,
+            Direction::Forward,
+            1,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
+        let iter2 = MemtableIterator::new(
+            &memtable2,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
         let iterators: Vec<Box<dyn LsmIterator>> = vec![Box::new(iter2), Box::new(iter1)];
 
         let mut merge_iter =
@@ -1164,7 +1218,13 @@ mod tests {
         memtable.make_immutable();
 
         // Iterator with snapshot at LSN 150 should see old value
-        let iter = MemtableIterator::new(&memtable, Direction::Forward, 0).unwrap();
+        let iter = MemtableIterator::new(
+            &memtable,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
         let iterators: Vec<Box<dyn LsmIterator>> = vec![Box::new(iter)];
         let merge_iter =
             MergeIterator::new(iterators, Direction::Forward, create_lsn(150)).unwrap();
@@ -1175,7 +1235,13 @@ mod tests {
 
         // Iterator with snapshot at LSN 200 should see new value
         let memtable_clone = memtable.clone();
-        let iter = MemtableIterator::new(&memtable_clone, Direction::Forward, 0).unwrap();
+        let iter = MemtableIterator::new(
+            &memtable_clone,
+            Direction::Forward,
+            0,
+            LogSequenceNumber::from(u64::MAX),
+        )
+        .unwrap();
         let iterators: Vec<Box<dyn LsmIterator>> = vec![Box::new(iter)];
         let merge_iter =
             MergeIterator::new(iterators, Direction::Forward, create_lsn(200)).unwrap();

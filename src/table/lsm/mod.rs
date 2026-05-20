@@ -522,7 +522,7 @@ impl<FS: FileSystem> LsmTree<FS> {
     fn create_iterators(
         &self,
         direction: Direction,
-        _snapshot_lsn: LogSequenceNumber,
+        snapshot_lsn: LogSequenceNumber,
     ) -> TableResult<Vec<Box<dyn LsmIterator>>> {
         let mut iterators: Vec<Box<dyn LsmIterator>> = Vec::new();
         let mut priority = 0;
@@ -530,7 +530,7 @@ impl<FS: FileSystem> LsmTree<FS> {
         // Active memtable (highest priority)
         {
             let memtable = self.active_memtable.read().unwrap();
-            let iter = MemtableIterator::new(&memtable, direction, priority)?;
+            let iter = MemtableIterator::new(&memtable, direction, priority, snapshot_lsn)?;
             iterators.push(Box::new(iter));
             priority += 1;
         }
@@ -539,7 +539,7 @@ impl<FS: FileSystem> LsmTree<FS> {
         {
             let immutable = self.immutable_memtables.read().unwrap();
             for memtable in immutable.iter().rev() {
-                let iter = MemtableIterator::new(memtable, direction, priority)?;
+                let iter = MemtableIterator::new(memtable, direction, priority, snapshot_lsn)?;
                 iterators.push(Box::new(iter));
                 priority += 1;
             }
@@ -924,7 +924,7 @@ impl<'a, FS: FileSystem> LsmCursor<'a, FS> {
         bounds: ScanBounds,
         snapshot_lsn: LogSequenceNumber,
     ) -> TableResult<Self> {
-        Ok(Self {
+        let mut cursor = Self {
             tree,
             snapshot_lsn,
             bounds,
@@ -933,7 +933,12 @@ impl<'a, FS: FileSystem> LsmCursor<'a, FS> {
             current_value: None,
             exhausted: false,
             initialized: false,
-        })
+        };
+
+        // Initialize the cursor eagerly so valid() works immediately
+        cursor.ensure_initialized()?;
+
+        Ok(cursor)
     }
 
     fn is_in_bounds(&self, key: &[u8]) -> bool {
@@ -1091,7 +1096,8 @@ impl<FS: FileSystem> DenseOrdered for LsmTree<FS> {
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
         // For a secondary index, we store: index_key -> primary_key
-        // This allows lookups by the indexed field to find the primary key
+        // This creates a unique mapping where each index_key maps to one primary_key.
+        // Multiple inserts with the same index_key create a version chain (MVCC).
         self.insert_internal(
             index_key.to_vec(),
             primary_key.to_vec(),
