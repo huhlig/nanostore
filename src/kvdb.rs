@@ -1058,7 +1058,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         &self,
         table_id: TableId,
     ) -> Result<VacuumFullStats, StorageEngineError> {
-        let _start = Instant::now();
+        let start = Instant::now();
 
         // Verify table exists
         let table_info = self
@@ -1077,30 +1077,15 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let _versions_removed = self.vacuum_table(table_id)?;
 
         // Step 2: Perform pager-level compaction
-        // NOTE: This will be implemented in Phase 2 (nanokv-n5gs)
-        // For now, we return an error indicating the feature is not yet available
-        //
-        // When Phase 2 is complete, this will call:
-        // let full_stats = self.pager.compact_and_truncate()?;
-
-        // Placeholder implementation until Phase 2 is complete
-        Err(StorageEngineError::invalid_operation(
-            "VACUUM FULL pager-level compaction not yet implemented (blocked by Phase 2: nanokv-n5gs)".to_string()
-        ))
-
-        // The following code will be uncommented when Phase 2 is complete:
-        /*
+        // Phase 2 (nanokv-n5gs) is now complete, so we can call the pager methods
         let mut full_stats = self.pager.compact_and_truncate()
             .map_err(|e| StorageEngineError::pager_failed(format!("Compaction failed: {}", e)))?;
 
-        // Calculate duration
+        // Update duration to include the vacuum step
         full_stats.duration = start.elapsed();
 
-        // Update statistics
-        full_stats.calculate_reclaimed();
-
+        // Statistics are already calculated by compact_and_truncate
         Ok(full_stats)
-        */
     }
 
     /// Perform VACUUM FULL on all tables in the database.
