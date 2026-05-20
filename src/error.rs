@@ -390,6 +390,42 @@ impl ErrorTelemetry for PagerError {
                 "invalid_page_type",
                 ErrorSeverity::Error,
             ),
+            PagerError::InvalidCompressionType(_) => classification(
+                "pager",
+                "validation",
+                "invalid_compression_type",
+                ErrorSeverity::Error,
+            ),
+            PagerError::InvalidEncryptionType(_) => classification(
+                "pager",
+                "validation",
+                "invalid_encryption_type",
+                ErrorSeverity::Error,
+            ),
+            PagerError::InsufficientBuffer { .. } => classification(
+                "pager",
+                "validation",
+                "insufficient_buffer",
+                ErrorSeverity::Error,
+            ),
+            PagerError::InvalidDataLength { .. } => classification(
+                "pager",
+                "validation",
+                "invalid_data_length",
+                ErrorSeverity::Error,
+            ),
+            PagerError::InvalidMagic { .. } => classification(
+                "pager",
+                "corruption",
+                "invalid_magic",
+                ErrorSeverity::Critical,
+            ),
+            PagerError::FreeListFull => classification(
+                "pager",
+                "resource_exhaustion",
+                "freelist_full",
+                ErrorSeverity::Error,
+            ),
             PagerError::IoError(_) => {
                 classification("pager", "io", "io_error", ErrorSeverity::Error)
             }

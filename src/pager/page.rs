@@ -218,9 +218,11 @@ impl PageHeader {
     /// Deserialize the header from bytes
     pub fn from_bytes(bytes: &[u8]) -> PagerResult<Self> {
         if bytes.len() < Self::SIZE {
-            return Err(PagerError::InternalError(
-                "Insufficient bytes for page header".to_string(),
-            ));
+            return Err(PagerError::InsufficientBuffer {
+                structure: "page header".to_string(),
+                expected: Self::SIZE,
+                actual: bytes.len(),
+            });
         }
 
         let page_id = PageId::from(u64::from_le_bytes(bytes[0..8].try_into().unwrap()));
@@ -228,13 +230,11 @@ impl PageHeader {
         let page_type =
             PageType::from_u8(bytes[8]).ok_or_else(|| PagerError::InvalidPageType(bytes[8]))?;
 
-        let compression = CompressionType::from_u8(bytes[9]).ok_or_else(|| {
-            PagerError::InternalError(format!("Invalid compression type: {}", bytes[9]))
-        })?;
+        let compression = CompressionType::from_u8(bytes[9])
+            .ok_or_else(|| PagerError::InvalidCompressionType(bytes[9]))?;
 
-        let encryption = EncryptionType::from_u8(bytes[10]).ok_or_else(|| {
-            PagerError::InternalError(format!("Invalid encryption type: {}", bytes[10]))
-        })?;
+        let encryption = EncryptionType::from_u8(bytes[10])
+            .ok_or_else(|| PagerError::InvalidEncryptionType(bytes[10]))?;
 
         let flags = bytes[11];
 
@@ -398,9 +398,11 @@ impl Page {
         encryption_key: Option<&[u8; 32]>,
     ) -> PagerResult<Self> {
         if bytes.len() < PageHeader::SIZE + Self::CHECKSUM_SIZE {
-            return Err(PagerError::InternalError(
-                "Insufficient bytes for page".to_string(),
-            ));
+            return Err(PagerError::InsufficientBuffer {
+                structure: "page".to_string(),
+                expected: PageHeader::SIZE + Self::CHECKSUM_SIZE,
+                actual: bytes.len(),
+            });
         }
 
         // Parse header
@@ -413,18 +415,28 @@ impl Page {
         let data_end = data_start + compressed_len;
 
         if data_end > bytes.len() - Self::CHECKSUM_SIZE {
-            return Err(PagerError::InternalError(
-                "Invalid compressed data length in header".to_string(),
-            ));
+            return Err(PagerError::InvalidDataLength {
+                page_id,
+                details: format!(
+                    "compressed data length {} exceeds available space {}",
+                    compressed_len,
+                    bytes.len() - PageHeader::SIZE - Self::CHECKSUM_SIZE
+                ),
+            });
         }
 
         let encrypted_data = &bytes[data_start..data_end];
 
         // Extract checksum
         let checksum_start = bytes.len() - Self::CHECKSUM_SIZE;
-        let checksum: [u8; 32] = bytes[checksum_start..]
-            .try_into()
-            .map_err(|_| PagerError::InternalError("Invalid checksum size".to_string()))?;
+        let checksum: [u8; 32] =
+            bytes[checksum_start..]
+                .try_into()
+                .map_err(|_| PagerError::InsufficientBuffer {
+                    structure: "page checksum".to_string(),
+                    expected: Self::CHECKSUM_SIZE,
+                    actual: bytes.len() - checksum_start,
+                })?;
 
         // Verify checksum on encrypted data if requested
         if verify_checksum {
@@ -592,18 +604,20 @@ impl OverflowPageHeader {
     /// Deserialize the header from bytes
     pub fn from_bytes(bytes: &[u8]) -> PagerResult<Self> {
         if bytes.len() < Self::SIZE {
-            return Err(PagerError::InternalError(
-                "Insufficient bytes for overflow page header".to_string(),
-            ));
+            return Err(PagerError::InsufficientBuffer {
+                structure: "overflow page header".to_string(),
+                expected: Self::SIZE,
+                actual: bytes.len(),
+            });
         }
 
         let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
         if magic != Self::MAGIC {
-            return Err(PagerError::InternalError(format!(
-                "Invalid overflow page magic: expected 0x{:08X}, got 0x{:08X}",
-                Self::MAGIC,
-                magic
-            )));
+            return Err(PagerError::InvalidMagic {
+                structure: "overflow page header".to_string(),
+                expected: Self::MAGIC,
+                found: magic,
+            });
         }
 
         let next_page_id = u32::from_le_bytes(bytes[4..8].try_into().unwrap());

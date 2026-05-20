@@ -125,6 +125,40 @@ pub enum PagerError {
     #[error("Invalid page type: {0}")]
     InvalidPageType(u8),
 
+    /// Invalid compression type
+    #[error("Invalid compression type: {0}")]
+    InvalidCompressionType(u8),
+
+    /// Invalid encryption type
+    #[error("Invalid encryption type: {0}")]
+    InvalidEncryptionType(u8),
+
+    /// Insufficient buffer for deserialization
+    #[error(
+        "Insufficient buffer for {structure}: expected at least {expected} bytes, got {actual} bytes"
+    )]
+    InsufficientBuffer {
+        structure: String,
+        expected: usize,
+        actual: usize,
+    },
+
+    /// Invalid data length in page
+    #[error("Invalid data length for page {page_id}: {details}")]
+    InvalidDataLength { page_id: PageId, details: String },
+
+    /// Invalid magic number
+    #[error("Invalid magic number for {structure}: expected 0x{expected:08X}, got 0x{found:08X}")]
+    InvalidMagic {
+        structure: String,
+        expected: u32,
+        found: u32,
+    },
+
+    /// Free list capacity exceeded
+    #[error("Free list page is full: cannot add more entries")]
+    FreeListFull,
+
     /// IO error
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),

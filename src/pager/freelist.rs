@@ -63,9 +63,7 @@ impl FreeListPage {
     /// Add a free page ID to this list
     pub fn add_page(&mut self, page_id: PageId, page_data_size: usize) -> PagerResult<()> {
         if self.is_full(page_data_size) {
-            return Err(PagerError::InternalError(
-                "Free list page is full".to_string(),
-            ));
+            return Err(PagerError::FreeListFull);
         }
         self.free_pages.push(page_id);
         Ok(())
@@ -107,9 +105,11 @@ impl FreeListPage {
     /// Deserialize the free list page from bytes
     pub fn from_bytes(bytes: &[u8]) -> PagerResult<Self> {
         if bytes.len() < Self::HEADER_SIZE {
-            return Err(PagerError::InternalError(
-                "Insufficient bytes for free list page".to_string(),
-            ));
+            return Err(PagerError::InsufficientBuffer {
+                structure: "free list page header".to_string(),
+                expected: Self::HEADER_SIZE,
+                actual: bytes.len(),
+            });
         }
 
         let next_page = PageId::from(u64::from_le_bytes(bytes[0..8].try_into().unwrap()));
@@ -120,9 +120,11 @@ impl FreeListPage {
 
         for _ in 0..count {
             if offset + 8 > bytes.len() {
-                return Err(PagerError::InternalError(
-                    "Insufficient bytes for free page entries".to_string(),
-                ));
+                return Err(PagerError::InsufficientBuffer {
+                    structure: "free list page entries".to_string(),
+                    expected: offset + 8,
+                    actual: bytes.len(),
+                });
             }
             let page_id = PageId::from(u64::from_le_bytes(
                 bytes[offset..offset + 8].try_into().unwrap(),
