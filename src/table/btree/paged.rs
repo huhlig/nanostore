@@ -1091,11 +1091,13 @@ impl<FS: FileSystem> PagedBTree<FS> {
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
         // Find the leaf page with path
-        let (leaf_page_id, pos, path) = self.search_with_path(&key)?;
+        let (leaf_page_id, _pos, path) = self.search_with_path(&key)?;
         let mut node = self.read_node(leaf_page_id)?;
 
+        // Determine if this is a new key by checking current node state
         let is_new_key = if let BTreeNode::Leaf { ref entries, .. } = node {
-            !(pos < entries.len() && entries[pos].key == key)
+            let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
+            current_pos.is_err() // New key if not found
         } else {
             false
         };
@@ -1104,6 +1106,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
             ref mut entries, ..
         } = node
         {
+            // CRITICAL: Always recalculate position based on current entries
+            // The node may have been modified by another thread between search_with_path and now
+            let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
+            let pos = match current_pos {
+                Ok(i) => i,
+                Err(i) => i,
+            };
+            
             // Check if key already exists
             if pos < entries.len() && entries[pos].key == key {
                 // Update existing entry's version chain by prepending new version
@@ -1130,7 +1140,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 );
             }
 
-            // Write the updated node first
+            // Write the updated node
             self.write_node(leaf_page_id, &node)?;
 
             // Check if node needs to be split after writing
