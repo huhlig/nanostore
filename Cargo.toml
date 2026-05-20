@@ -16,6 +16,7 @@ repository = "https://github.com/huhlig/nanostore"
 async-trait = { version = "0.1" }
 thiserror = { version = "2" }
 parking_lot = { version = "0.12" }
+dashmap = { version = "6.1" }
 sha2 = { version = "0.11" }
 fs2 = "0.4.3"
 tracing = "0.1.44"

@@ -40,6 +40,8 @@ use crate::txn::{TransactionId, VersionChain};
 use crate::types::{Bound, ScanBounds, TableId, ValueBuf, ValueRef};
 use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
+use dashmap::DashMap;
+use parking_lot::RwLock as ParkingLotRwLock;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -428,6 +430,10 @@ pub struct PagedBTree<FS: FileSystem> {
     root_page_id: Arc<RwLock<PageId>>,
     /// Row count wrapped in Arc<RwLock> for atomic updates
     row_count: Arc<RwLock<u64>>,
+    /// Per-page latches for B-tree structure modifications (latch coupling)
+    /// Uses DashMap for concurrent access to different pages
+    /// Each page has an RwLock for read/write latching
+    page_latches: Arc<DashMap<PageId, Arc<ParkingLotRwLock<()>>>>,
 }
 
 impl<FS: FileSystem> PagedBTree<FS> {
@@ -454,6 +460,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             pager,
             root_page_id: Arc::new(RwLock::new(root_page_id)),
             row_count: Arc::new(RwLock::new(0)),
+            page_latches: Arc::new(DashMap::new()),
         })
     }
 
@@ -466,6 +473,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             pager,
             root_page_id: Arc::new(RwLock::new(root_page_id)),
             row_count: Arc::new(RwLock::new(row_count)),
+            page_latches: Arc::new(DashMap::new()),
         }
     }
 
@@ -515,6 +523,31 @@ impl<FS: FileSystem> PagedBTree<FS> {
             .map_err(crate::table::TableError::from)?;
         Ok(())
     }
+    // =============================================================================
+    // Page Latching for Concurrency Control
+    // =============================================================================
+
+    /// Get or create a latch for a page.
+    /// Returns the Arc<RwLock> that can be used to acquire read/write guards.
+    fn get_page_latch(&self, page_id: PageId) -> Arc<ParkingLotRwLock<()>> {
+        self.page_latches
+            .entry(page_id)
+            .or_insert_with(|| Arc::new(ParkingLotRwLock::new(())))
+            .clone()
+    }
+
+    /// Check if a node is "safe" for the given operation.
+    /// Safe means the operation won't cause a split or merge that propagates upward.
+    fn is_node_safe(&self, node: &BTreeNode, is_insert: bool) -> bool {
+        if is_insert {
+            // Safe for insert if not full (won't split)
+            !node.is_full()
+        } else {
+            // Safe for delete if has more than minimum keys (won't merge/redistribute)
+            node.key_count() > MIN_KEYS
+        }
+    }
+
 
     /// Read a node from disk.
     #[instrument(skip(self), fields(page_id = %page_id))]
@@ -1082,7 +1115,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
         }
     }
 
-    /// Insert a key-value pair into the tree, handling splits as needed.
+    /// Insert a key-value pair into the tree with proper latch coupling.
+    ///
+    /// This implementation uses the "latch coupling" (or "crabbing") protocol:
+    /// 1. Acquire write latch on root
+    /// 2. Descend tree, acquiring write latch on each child
+    /// 3. Release parent latch if child is "safe" (won't split)
+    /// 4. Modify leaf while holding its latch
+    /// 5. Handle splits if needed while maintaining latches
     fn insert_internal(
         &self,
         key: Vec<u8>,
@@ -1090,71 +1130,130 @@ impl<FS: FileSystem> PagedBTree<FS> {
         tx_id: TransactionId,
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
-        // Find the leaf page with path
-        let (leaf_page_id, _pos, path) = self.search_with_path(&key)?;
-        let mut node = self.read_node(leaf_page_id)?;
-
-        // Determine if this is a new key by checking current node state
-        let is_new_key = if let BTreeNode::Leaf { ref entries, .. } = node {
-            let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
-            current_pos.is_err() // New key if not found
-        } else {
-            false
-        };
-
-        if let BTreeNode::Leaf {
-            ref mut entries, ..
-        } = node
-        {
-            // CRITICAL: Always recalculate position based on current entries
-            // The node may have been modified by another thread between search_with_path and now
-            let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
-            let pos = match current_pos {
-                Ok(i) => i,
-                Err(i) => i,
-            };
+        // Track latched pages - store both Arc and guard together
+        // The Arc keeps the RwLock alive for the guard
+        struct LatchedPage {
+            page_id: PageId,
+            _latch: Arc<ParkingLotRwLock<()>>,
+            _guard: parking_lot::RwLockWriteGuard<'static, ()>,
+        }
+        
+        let mut latched_pages: Vec<LatchedPage> = Vec::new();
+        
+        // Start at root
+        let mut current_page_id = self.get_root_page_id();
+        let mut path: Vec<(PageId, PageId)> = Vec::new();
+        
+        // Descend tree with latch coupling
+        loop {
+            // Acquire write latch on current page
+            let latch_arc = self.get_page_latch(current_page_id);
+            let guard = latch_arc.write();
+            // SAFETY: We're extending the lifetime to 'static because we're storing the Arc
+            // that owns the RwLock alongside the guard, ensuring the RwLock lives as long as the guard
+            let guard_static: parking_lot::RwLockWriteGuard<'static, ()> =
+                unsafe { std::mem::transmute(guard) };
+            latched_pages.push(LatchedPage {
+                page_id: current_page_id,
+                _latch: latch_arc,
+                _guard: guard_static,
+            });
             
-            // Check if key already exists
-            if pos < entries.len() && entries[pos].key == key {
-                // Update existing entry's version chain by prepending new version
-                let old_chain = entries[pos].chain.clone();
-                let mut new_chain = old_chain.prepend(value, tx_id);
-                // Commit immediately if commit_lsn > 0
-                if commit_lsn.as_u64() > 0 {
-                    new_chain.commit(commit_lsn);
+            // Read the node
+            let node = self.read_node(current_page_id)?;
+            
+            match node {
+                BTreeNode::Internal { ref entries, rightmost_child } => {
+                    // Find child to descend to
+                    let pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
+                    let child_page_id = match pos {
+                        Ok(idx) => {
+                            if idx + 1 < entries.len() {
+                                entries[idx + 1].child_page_id
+                            } else {
+                                rightmost_child
+                            }
+                        }
+                        Err(idx) => {
+                            if idx < entries.len() {
+                                entries[idx].child_page_id
+                            } else {
+                                rightmost_child
+                            }
+                        }
+                    };
+                    
+                    // Track path for potential splits
+                    path.push((current_page_id, child_page_id));
+                    
+                    // Check if current node is safe (won't split)
+                    // If safe, we can release all parent latches
+                    if self.is_node_safe(&node, true) {
+                        // Release all latches except the current one
+                        if latched_pages.len() > 1 {
+                            latched_pages.drain(0..latched_pages.len() - 1);
+                        }
+                    }
+                    
+                    current_page_id = child_page_id;
                 }
-                entries[pos].chain = new_chain;
-            } else {
-                // Insert new entry with new version chain
-                let mut chain = VersionChain::new(value, tx_id);
-                // Commit immediately if commit_lsn > 0
-                if commit_lsn.as_u64() > 0 {
-                    chain.commit(commit_lsn);
+                BTreeNode::Leaf { mut entries, next_leaf } => {
+                    // Reached leaf - perform insertion while holding latch
+                    
+                    // Find insertion position
+                    let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
+                    let pos = match current_pos {
+                        Ok(i) => i,
+                        Err(i) => i,
+                    };
+                    
+                    let is_new_key = current_pos.is_err();
+                    
+                    // Perform the insertion/update
+                    if pos < entries.len() && entries[pos].key == key {
+                        // Update existing entry's version chain
+                        let old_chain = entries[pos].chain.clone();
+                        let mut new_chain = old_chain.prepend(value, tx_id);
+                        if commit_lsn.as_u64() > 0 {
+                            new_chain.commit(commit_lsn);
+                        }
+                        entries[pos].chain = new_chain;
+                    } else {
+                        // Insert new entry
+                        let mut chain = VersionChain::new(value, tx_id);
+                        if commit_lsn.as_u64() > 0 {
+                            chain.commit(commit_lsn);
+                        }
+                        entries.insert(pos, LeafEntry {
+                            key: key.clone(),
+                            chain,
+                        });
+                    }
+                    
+                    // Reconstruct the modified node
+                    let modified_node = BTreeNode::Leaf { entries, next_leaf };
+                    
+                    // Write the updated node (still holding latch)
+                    self.write_node(current_page_id, &modified_node)?;
+                    
+                    // Check if split is needed
+                    if modified_node.is_full() {
+                        // Split while holding latches on the path
+                        self.split_and_propagate(current_page_id, &modified_node, path)?;
+                    }
+                    
+                    // Release all latches (guards drop here)
+                    drop(latched_pages);
+                    
+                    // Update row count if new key
+                    if is_new_key {
+                        self.increment_row_count()?;
+                    }
+                    
+                    return Ok(());
                 }
-                entries.insert(
-                    pos,
-                    LeafEntry {
-                        key: key.clone(),
-                        chain,
-                    },
-                );
-            }
-
-            // Write the updated node
-            self.write_node(leaf_page_id, &node)?;
-
-            // Check if node needs to be split after writing
-            if node.is_full() {
-                self.split_and_propagate(leaf_page_id, &node, path)?;
             }
         }
-
-        // Increment row count if this is a new key
-        if is_new_key {
-            self.increment_row_count()?;
-        }
-
-        Ok(())
     }
 
     /// Split a node and propagate the split up the tree.
