@@ -1117,12 +1117,10 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
     /// Insert a key-value pair into the tree with proper latch coupling.
     ///
-    /// This implementation uses the "latch coupling" (or "crabbing") protocol:
-    /// 1. Acquire write latch on root
-    /// 2. Descend tree, acquiring write latch on each child
-    /// 3. Release parent latch if child is "safe" (won't split)
-    /// 4. Modify leaf while holding its latch
-    /// 5. Handle splits if needed while maintaining latches
+    /// This implementation uses a simplified locking approach:
+    /// - Acquires a coarse-grained write lock on the entire tree during modifications
+    /// - This is safe and correct, though less concurrent than fine-grained latch coupling
+    /// - Future optimization: implement true latch coupling with proper lifetime management
     fn insert_internal(
         &self,
         key: Vec<u8>,
@@ -1130,34 +1128,17 @@ impl<FS: FileSystem> PagedBTree<FS> {
         tx_id: TransactionId,
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
-        // Track latched pages - store both Arc and guard together
-        // The Arc keeps the RwLock alive for the guard
-        struct LatchedPage {
-            page_id: PageId,
-            _latch: Arc<ParkingLotRwLock<()>>,
-            _guard: parking_lot::RwLockWriteGuard<'static, ()>,
-        }
-        
-        let mut latched_pages: Vec<LatchedPage> = Vec::new();
+        // For now, use a simpler approach: acquire a single write lock on the root
+        // This prevents concurrent modifications but is safe and correct
+        let root_latch = self.get_page_latch(self.get_root_page_id());
+        let _root_guard = root_latch.write();
         
         // Start at root
         let mut current_page_id = self.get_root_page_id();
         let mut path: Vec<(PageId, PageId)> = Vec::new();
         
-        // Descend tree with latch coupling
+        // Descend tree to find leaf
         loop {
-            // Acquire write latch on current page
-            let latch_arc = self.get_page_latch(current_page_id);
-            let guard = latch_arc.write();
-            // SAFETY: We're extending the lifetime to 'static because we're storing the Arc
-            // that owns the RwLock alongside the guard, ensuring the RwLock lives as long as the guard
-            let guard_static: parking_lot::RwLockWriteGuard<'static, ()> =
-                unsafe { std::mem::transmute(guard) };
-            latched_pages.push(LatchedPage {
-                page_id: current_page_id,
-                _latch: latch_arc,
-                _guard: guard_static,
-            });
             
             // Read the node
             let node = self.read_node(current_page_id)?;
@@ -1185,16 +1166,6 @@ impl<FS: FileSystem> PagedBTree<FS> {
                     
                     // Track path for potential splits
                     path.push((current_page_id, child_page_id));
-                    
-                    // Check if current node is safe (won't split)
-                    // If safe, we can release all parent latches
-                    if self.is_node_safe(&node, true) {
-                        // Release all latches except the current one
-                        if latched_pages.len() > 1 {
-                            latched_pages.drain(0..latched_pages.len() - 1);
-                        }
-                    }
-                    
                     current_page_id = child_page_id;
                 }
                 BTreeNode::Leaf { mut entries, next_leaf } => {
@@ -1242,8 +1213,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                         self.split_and_propagate(current_page_id, &modified_node, path)?;
                     }
                     
-                    // Release all latches (guards drop here)
-                    drop(latched_pages);
+                    // Root guard will be released when it goes out of scope
                     
                     // Update row count if new key
                     if is_new_key {
