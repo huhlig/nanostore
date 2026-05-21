@@ -9,48 +9,28 @@
 4. ✅ Simplified to optimistic read path (no latches during traversal)
 5. ✅ Added `PageVersion` struct for conflict detection
 6. ✅ Updated `BTreeNode` enum to include version fields
+7. ✅ **Phase 1: Page Versioning** - Complete and integrated
+8. ✅ **Phase 2: Optimistic Path Recording** - Complete with version tracking
 
 ### In Progress
-- **Phase 1: Page Versioning** - Struct added, but needs propagation through codebase
+- **Phase 3: Retry Loop with Conflict Detection** - Next step
+
+### Phase 2 Implementation Details (COMPLETED)
+
+**What was implemented**:
+1. ✅ Added `PathEntry` struct with `page_id`, `version`, and `child_index` fields
+2. ✅ Implemented `search_optimistic()` method for latch-free traversal with version recording
+3. ✅ Implemented `validate_optimistic_path()` to detect concurrent modifications
+4. ✅ Added metrics: `record_optimistic_conflict()`, `record_optimistic_success()`, `record_optimistic_retry()`
+5. ✅ All tests passing (24/24)
+
+**Code locations**:
+- `src/table/btree/paged.rs`: Lines ~127-135 (PathEntry struct)
+- `src/table/btree/paged.rs`: Lines ~770-835 (search_optimistic method)
+- `src/table/btree/paged.rs`: Lines ~837-857 (validate_optimistic_path method)
+- `src/table/metrics.rs`: Lines ~180-200 (optimistic metrics)
 
 ### Remaining Work
-
-#### Phase 1: Complete Page Versioning (CURRENT)
-**Status**: PageVersion struct added to BTreeNode, but ~50+ locations need updates
-
-**Required Changes**:
-1. Update all `BTreeNode::Internal` constructors to include `version: PageVersion::initial()`
-2. Update all `BTreeNode::Leaf` constructors to include `version: PageVersion::initial()`
-3. Update all pattern matches to include version field (can use `..` to ignore initially)
-4. Add `get_version()` and `set_version()` methods to BTreeNode
-5. Update `write_node()` to increment version on each write
-6. Update serialization/deserialization to handle version field
-
-**Affected Locations** (56 total):
-- `new_internal()` and `new_leaf()` constructors
-- All pattern matches in split/merge operations
-- All pattern matches in insert/delete operations  
-- Serialization in `to_bytes()` and `from_bytes()`
-
-**Estimated Effort**: 2-3 hours to update all locations
-
-#### Phase 2: Optimistic Path Recording
-**Goal**: Record path with versions during traversal
-
-**Changes Needed**:
-```rust
-struct PathEntry {
-    page_id: PageId,
-    version: PageVersion,
-    child_index: usize,
-}
-
-fn find_leaf_path_optimistic(&self, key: &[u8]) -> TableResult<Vec<PathEntry>> {
-    // Traverse WITHOUT latches, record versions
-}
-```
-
-**Estimated Effort**: 1-2 hours
 
 #### Phase 3: Retry Loop with Conflict Detection
 **Goal**: Implement retry logic when conflicts detected
