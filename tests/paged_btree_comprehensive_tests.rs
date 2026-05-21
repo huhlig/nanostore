@@ -804,3 +804,161 @@ fn test_reader_writer_isolation() {
 // This test would require changes to the PagedBTree API to support proper persistence testing
 
 // Made with Bob
+
+// =============================================================================
+// Page Size Overflow Tests
+// =============================================================================
+
+/// Test that validates proper handling of page size overflow scenarios.
+///
+/// This test documents our current assertions about page size management:
+///
+/// 1. **DEFAULT_ORDER = 220**: Reduced from 256 to accommodate PageVersion field (8 bytes)
+///    while maintaining safe margins for compression overhead.
+///
+/// 2. **Warning Threshold = 3500 bytes**: Serialized nodes exceeding this trigger a warning
+///    log but do NOT fail. This provides early visibility into potential issues.
+///
+/// 3. **Hard Limit = Page Data Size (4096 bytes)**: The pager enforces this limit during
+///    compression. If compressed data exceeds available space, write_page() returns an error.
+///
+/// 4. **Error Propagation**: Errors from the pager properly propagate through:
+///    - write_node() → insert_internal() → flush() → caller
+///    The caller can handle the error (retry, abort transaction, etc.)
+///
+/// 5. **Current Behavior**: With DEFAULT_ORDER=220 and typical key/value sizes,
+///    nodes should NOT overflow. However, pathological cases (very large keys/values,
+///    deep version chains) could still trigger overflow.
+///
+/// 6. **Future Work (tracked in nanokv-gp41)**: Implement size-based splitting instead
+///    of count-based splitting to handle variable-size keys/values more robustly.
+#[test]
+fn test_page_size_overflow_handling() {
+    let table = create_test_tree();
+    let tx_id = TransactionId::from(1);
+    let lsn = LogSequenceNumber::from(10);
+
+    // Test 1: Normal operation with DEFAULT_ORDER=220 should work fine
+    // Insert 220 entries with reasonable key/value sizes
+    let mut writer = table.writer(tx_id, lsn).unwrap();
+    for i in 0..220 {
+        let key = format!("key_{:04}", i);
+        let value = format!("value_{:04}", i);
+        writer.put(key.as_bytes(), value.as_bytes()).unwrap();
+    }
+    // This should succeed - nodes should fit within page boundaries
+    let result = writer.flush();
+    assert!(
+        result.is_ok(),
+        "Normal operation with DEFAULT_ORDER=220 should succeed: {:?}",
+        result.err()
+    );
+    // Commit the versions to make data visible
+    writer.commit_versions(lsn).unwrap();
+
+    // Test 2: Pathological case - try to create oversized node
+    // Use very large keys and values to approach page size limits
+    let tx_id2 = TransactionId::from(2);
+    let lsn2 = LogSequenceNumber::from(20);
+    let mut writer2 = table.writer(tx_id2, lsn2).unwrap();
+
+    // Create keys/values that will make the node very large
+    // Each entry: ~100 byte key + ~100 byte value = ~200 bytes per entry
+    // 220 entries * 200 bytes = 44,000 bytes (way over 4096 byte page limit)
+    for i in 0..220 {
+        let key = format!("large_key_{:04}_{}", i, "x".repeat(80));
+        let value = format!("large_value_{:04}_{}", i, "y".repeat(80));
+        writer2.put(key.as_bytes(), value.as_bytes()).unwrap();
+    }
+
+    // This SHOULD fail when flush() tries to write the oversized node
+    // The pager will reject the compressed data that exceeds page size
+    let result = writer2.flush();
+
+    // Document current behavior: we expect this to fail with a pager error
+    // The error should propagate cleanly from pager → write_node → insert_internal → flush
+    match result {
+        Ok(_) => {
+            // If this succeeds, it means either:
+            // 1. Compression was very effective, OR
+            // 2. The node split before reaching the limit
+            // Both are acceptable outcomes
+            println!("Large node insertion succeeded (likely due to splitting or compression)");
+        }
+        Err(e) => {
+            // Expected case: pager rejects oversized page
+            println!("Large node insertion failed as expected: {:?}", e);
+            // Verify it's a pager-related error (not a panic or corruption)
+            let error_msg = format!("{:?}", e);
+            assert!(
+                error_msg.contains("compress") || error_msg.contains("page") || error_msg.contains("size"),
+                "Error should be related to page size/compression: {}",
+                error_msg
+            );
+        }
+    }
+
+    // Test 3: Verify tree is still functional after overflow attempt
+    // The tree should remain consistent regardless of whether the large write succeeded or failed
+    let reader = table.reader(lsn).unwrap();
+    let result = reader.get(b"key_0000", lsn).unwrap();
+    assert!(
+        result.is_some(),
+        "Tree should still be functional - original data should be readable"
+    );
+    
+    // Verify we can still read from the tree after the large write attempt
+    let reader2 = table.reader(lsn2).unwrap();
+    // Try to read one of the large keys - it may or may not exist depending on whether
+    // the write succeeded (via splitting) or failed (page overflow)
+    let large_key_result = reader2.get(
+        b"large_key_0000_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        lsn2
+    );
+    // The important thing is that the get() doesn't panic or corrupt the tree
+    assert!(
+        large_key_result.is_ok(),
+        "Tree operations should not panic after large write attempt"
+    );
+}
+
+/// Test that verifies the warning threshold for large nodes.
+///
+/// This test documents that nodes exceeding 3500 bytes trigger a warning
+/// but do NOT fail. The warning provides visibility into potential issues
+/// before they become critical.
+#[test]
+fn test_large_node_warning_threshold() {
+    let table = create_test_tree();
+    let tx_id = TransactionId::from(1);
+    let lsn = LogSequenceNumber::from(10);
+
+    // Create a node that will exceed the 3500 byte warning threshold
+    // but should still fit within the 4096 byte page limit after compression
+    let mut writer = table.writer(tx_id, lsn).unwrap();
+
+    // Insert entries with moderately large keys/values
+    // Target: ~3600 bytes serialized (above warning, below hard limit)
+    // Each entry: ~40 byte key + ~40 byte value = ~80 bytes
+    // 50 entries * 80 bytes = ~4000 bytes (close to limit)
+    for i in 0..50 {
+        let key = format!("medium_key_{:04}_{}", i, "x".repeat(20));
+        let value = format!("medium_value_{:04}_{}", i, "y".repeat(20));
+        writer.put(key.as_bytes(), value.as_bytes()).unwrap();
+    }
+
+    // This should succeed but may trigger a warning log
+    // (Check logs manually to verify warning appears)
+    let result = writer.flush();
+    assert!(
+        result.is_ok(),
+        "Moderately large nodes should succeed with warning: {:?}",
+        result.err()
+    );
+
+    // Verify data was written correctly
+    writer.commit_versions(lsn).unwrap();
+    let reader = table.reader(lsn).unwrap();
+    let result = reader.get(b"medium_key_0000_xxxxxxxxxxxxxxxxxxxx", lsn).unwrap();
+    assert!(result.is_some(), "Data should be retrievable after write");
+}

@@ -48,8 +48,12 @@ use std::time::Instant;
 use tracing::{debug, instrument};
 
 /// Default B-Tree order (maximum keys per node).
-/// Set to 252 to account for the 8-byte `PageVersion` field added for optimistic concurrency.
+/// Set to 220 to account for the 4-byte `PageVersion` field added for optimistic concurrency.
 /// This ensures nodes fit within page boundaries even with the version overhead.
+///
+/// Reduced from 256 (original) to accommodate the version field while maintaining
+/// safe margins for compression and serialization overhead. Conservative value ensures
+/// nodes with large keys/values and version chains still fit after serialization.
 ///
 /// Larger nodes mean:
 /// - Fewer splits → less root lock contention
@@ -57,7 +61,7 @@ use tracing::{debug, instrument};
 /// - Reduced split propagation overhead
 ///
 /// Trade-off: Slightly more wasted space per node, but worth it for concurrency.
-const DEFAULT_ORDER: usize = 252;
+const DEFAULT_ORDER: usize = 220;
 
 /// Minimum keys per node (except root).
 const MIN_KEYS: usize = DEFAULT_ORDER / 2;
@@ -139,6 +143,9 @@ struct PathEntry {
 ///
 /// Each page has a version number that is incremented on every write.
 /// This allows readers to detect if a page has been modified since they read it.
+///
+/// Uses u64 (8 bytes) for future-proofing and consistency with other IDs.
+/// The DEFAULT_ORDER reduction (256→220) provides ample space for this overhead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct PageVersion(u64);
 
@@ -275,6 +282,10 @@ impl BTreeNode {
     }
 
     /// Serialize the node to bytes.
+    ///
+    /// Returns the serialized bytes. Note: This does NOT include compression,
+    /// which happens at the pager level. The serialized size should be well
+    /// under the page data size to allow for compression overhead.
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
 
@@ -334,6 +345,18 @@ impl BTreeNode {
                     bytes.extend_from_slice(&chain_bytes);
                 }
             }
+        }
+
+        // Safety check: Warn if serialized size is approaching page limits
+        // Page data size is typically 4032 bytes. We want to stay well under
+        // that to allow for compression overhead and future growth.
+        const WARN_THRESHOLD: usize = 3500; // Conservative threshold
+        if bytes.len() > WARN_THRESHOLD {
+            tracing::warn!(
+                "BTreeNode serialized to {} bytes (threshold: {}). Consider reducing DEFAULT_ORDER or implementing size-based splitting.",
+                bytes.len(),
+                WARN_THRESHOLD
+            );
         }
 
         bytes

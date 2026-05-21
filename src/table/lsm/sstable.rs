@@ -116,12 +116,12 @@ pub struct SStableMetadata {
     pub footer_offset: u64,
 }
 
-/// SSTable footer (stored at the end of the SSTable).
+/// `SSTable` footer (stored at the end of the `SSTable`).
 ///
-/// The footer contains metadata needed to read the SSTable.
+/// The footer contains metadata needed to read the `SSTable`.
 #[derive(Clone, Debug)]
 pub struct SStableFooter {
-    /// Magic number for validation (0x5353544142 = "SSTAB")
+    /// Magic number for validation (0x0053_5354_4142 = "SSTAB")
     pub magic: u64,
 
     /// Format version
@@ -130,7 +130,7 @@ pub struct SStableFooter {
     /// Metadata
     pub metadata: SStableMetadata,
 
-    /// Checksum of the entire SSTable (excluding footer)
+    /// Checksum of the entire `SSTable` (excluding footer)
     pub checksum: [u8; 32],
 }
 
@@ -140,6 +140,7 @@ impl SStableFooter {
     const SIZE: usize = 256; // Fixed size for footer
 
     /// Create a new footer.
+    #[must_use]
     pub fn new(metadata: SStableMetadata, checksum: [u8; 32]) -> Self {
         Self {
             magic: Self::MAGIC,
@@ -150,6 +151,7 @@ impl SStableFooter {
     }
 
     /// Serialize footer to bytes.
+    #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::SIZE);
 
@@ -299,12 +301,12 @@ impl SStableFooter {
 /// Data block containing sorted key-value pairs with version chains.
 ///
 /// Format:
-/// - Header: num_entries (4 bytes) + compressed_flag (1 byte) + checksum (32 bytes)
+/// - Header: `num_entries` (4 bytes) + `compressed_flag` (1 byte) + `checksum` (32 bytes)
 /// - Entries: For each entry:
-///   - key_len (4 bytes)
-///   - key (variable)
-///   - version_chain_len (4 bytes)
-///   - serialized_version_chain (variable, postcard format)
+///   - `key_len` (4 bytes)
+///   - `key` (variable)
+///   - `version_chain_len` (4 bytes)
+///   - `serialized_version_chain` (variable, postcard format)
 ///
 /// Entries are stored in sorted order by key for efficient binary search.
 #[derive(Clone, Debug)]
@@ -314,10 +316,11 @@ pub struct DataBlock {
 }
 
 impl DataBlock {
-    /// Header size: num_entries (4) + compressed_flag (1) + checksum (32)
+    /// Header size: `num_entries` (4) + `compressed_flag` (1) + `checksum` (32)
     const HEADER_SIZE: usize = 37;
 
     /// Create a new empty data block.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -328,6 +331,7 @@ impl DataBlock {
     ///
     /// # Panics
     /// Panics if entries are not sorted by key.
+    #[must_use]
     pub fn from_entries(entries: Vec<(Vec<u8>, VersionChain)>) -> Self {
         // Verify entries are sorted
         for i in 1..entries.len() {
@@ -357,26 +361,31 @@ impl DataBlock {
     }
 
     /// Get the number of entries in this block.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Check if the block is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Get all entries in the block.
+    #[must_use]
     pub fn entries(&self) -> &[(Vec<u8>, VersionChain)] {
         &self.entries
     }
 
     /// Get the first key in the block (smallest).
+    #[must_use]
     pub fn first_key(&self) -> Option<&[u8]> {
         self.entries.first().map(|(k, _)| k.as_slice())
     }
 
     /// Get the last key in the block (largest).
+    #[must_use]
     pub fn last_key(&self) -> Option<&[u8]> {
         self.entries.last().map(|(k, _)| k.as_slice())
     }
@@ -384,6 +393,7 @@ impl DataBlock {
     /// Binary search for a key in the block.
     ///
     /// Returns the index of the entry if found, or None if not found.
+    #[must_use]
     pub fn search(&self, key: &[u8]) -> Option<usize> {
         self.entries
             .binary_search_by(|(k, _)| k.as_slice().cmp(key))
@@ -391,6 +401,7 @@ impl DataBlock {
     }
 
     /// Get the version chain for a key.
+    #[must_use]
     pub fn get(&self, key: &[u8]) -> Option<&VersionChain> {
         self.search(key).map(|idx| &self.entries[idx].1)
     }
@@ -398,14 +409,14 @@ impl DataBlock {
     /// Serialize the data block to bytes.
     ///
     /// Format:
-    /// - num_entries (4 bytes)
-    /// - compressed_flag (1 byte) - 0 for uncompressed, 1 for compressed
-    /// - checksum (32 bytes) - SHA256 of the data portion
+    /// - `num_entries` (4 bytes)
+    /// - `compressed_flag` (1 byte) - 0 for uncompressed, 1 for compressed
+    /// - `checksum` (32 bytes) - SHA256 of the data portion
     /// - For each entry:
-    ///   - key_len (4 bytes)
-    ///   - key (variable)
-    ///   - version_chain_len (4 bytes)
-    ///   - serialized_version_chain (variable, postcard)
+    ///   - `key_len` (4 bytes)
+    ///   - `key` (variable)
+    ///   - `version_chain_len` (4 bytes)
+    ///   - `serialized_version_chain` (variable, postcard)
     pub fn to_bytes(&self, compress: bool) -> TableResult<Vec<u8>> {
         // Serialize entries
         let mut data = Vec::new();
@@ -596,6 +607,7 @@ impl DataBlock {
     }
 
     /// Estimate the serialized size of this block.
+    #[must_use]
     pub fn estimate_size(&self) -> usize {
         let mut size = Self::HEADER_SIZE;
         for (key, chain) in &self.entries {
@@ -631,19 +643,19 @@ pub struct IndexEntry {
     pub offset: u64,
 }
 
-/// Index block for efficient key lookups in an SSTable.
+/// Index block for efficient key lookups in an `SSTable`.
 ///
 /// The index is a sparse index - it contains one entry per data block,
 /// not one entry per key. This keeps the index small while still enabling
 /// efficient binary search to find the correct data block.
 ///
 /// Format:
-/// - Header: num_entries (4 bytes) + checksum (32 bytes)
+/// - Header: `num_entries` (4 bytes) + `checksum` (32 bytes)
 /// - Entries: For each entry:
-///   - key_len (4 bytes)
-///   - key (variable)
-///   - page_id (8 bytes)
-///   - offset (8 bytes)
+///   - `key_len` (4 bytes)
+///   - `key` (variable)
+///   - `page_id` (8 bytes)
+///   - `offset` (8 bytes)
 ///
 /// Entries are stored in sorted order by key for efficient binary search.
 #[derive(Clone, Debug)]
