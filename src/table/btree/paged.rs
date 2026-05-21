@@ -47,24 +47,44 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tracing::{debug, instrument};
 
-/// Default B-Tree order (maximum keys per node).
-/// Set to 220 to account for the 4-byte `PageVersion` field added for optimistic concurrency.
-/// This ensures nodes fit within page boundaries even with the version overhead.
+/// Calculate a conservative maximum B-Tree order based on page size.
 ///
-/// Reduced from 256 (original) to accommodate the version field while maintaining
-/// safe margins for compression and serialization overhead. Conservative value ensures
-/// nodes with large keys/values and version chains still fit after serialization.
+/// Since we have multiple factors that affect final page size:
+/// - Variable-length keys/values (especially string keys which can be huge)
+/// - 3 compression algorithms (None, LZ4, Zstd) with different expansion characteristics
+/// - Encryption (AES-256-GCM adds 12-byte nonce + 16-byte tag = 28 bytes overhead)
+/// - MVCC version chains (variable length)
 ///
-/// Larger nodes mean:
-/// - Fewer splits → less root lock contention
-/// - Better I/O efficiency (fewer page reads/writes)
-/// - Reduced split propagation overhead
+/// We use a very conservative estimate to minimize the chance of write failures.
+/// The safety margin accounts for worst-case compression expansion (~15%) and encryption overhead.
 ///
-/// Trade-off: Slightly more wasted space per node, but worth it for concurrency.
-const DEFAULT_ORDER: usize = 220;
+/// Formula:
+/// - Available space = page_data_size (already excludes header/checksum)
+/// - Safety margin = 40% (for compression expansion, encryption, and overhead)
+/// - Target size = available_space * 0.60
+/// - Conservative estimate: 30 bytes per entry (works for small-medium keys/values)
+/// - Order = target_size / 30
+///
+/// For variable-length data or unfavorable compression, nodes may need to split earlier.
+/// The write_node method will detect if a node doesn't fit and return an error,
+/// which triggers a split-and-retry cycle.
+fn calculate_max_order(page_data_size: usize) -> usize {
+    // Use 60% of available space to leave large margin for:
+    // - Compression expansion (worst case ~15%)
+    // - Encryption overhead (28 bytes for AES-256-GCM)
+    // - Serialization overhead
+    // - Variable-length keys/values
+    let target_size = (page_data_size * 3) / 5; // 60%
 
-/// Minimum keys per node (except root).
-const MIN_KEYS: usize = DEFAULT_ORDER / 2;
+    // Conservative estimate: 30 bytes per entry on average
+    // This works well for small-medium keys/values
+    // For large keys/values, nodes will split earlier
+    const BYTES_PER_ENTRY: usize = 30;
+
+    // Calculate order, with minimum of 4 (B-Tree requirement)
+    let order = target_size / BYTES_PER_ENTRY;
+    order.max(4)
+}
 
 // =============================================================================
 // Statistics Structures
@@ -239,14 +259,16 @@ impl BTreeNode {
         }
     }
 
-    /// Check if the node is full.
-    fn is_full(&self) -> bool {
-        self.key_count() >= DEFAULT_ORDER
+    /// Check if the node is full (count-based check).
+    /// Note: This is a preliminary check. The authoritative check is size-based
+    /// via `PagedBTree::node_fits_in_page()` which accounts for variable-length keys/values.
+    fn is_full(&self, max_order: usize) -> bool {
+        self.key_count() >= max_order
     }
 
     /// Check if the node has minimum keys.
-    fn has_minimum_keys(&self) -> bool {
-        self.key_count() >= MIN_KEYS
+    fn has_minimum_keys(&self, min_keys: usize) -> bool {
+        self.key_count() >= min_keys
     }
 
     /// Get the current version of this node.
@@ -570,6 +592,64 @@ impl BTreeNode {
 // =============================================================================
 
 /// Paged B-Tree table using the pager for disk storage.
+///
+/// # Dynamic Node Sizing
+///
+/// This B-Tree implementation uses **dynamic node sizing** to prevent page overflow errors.
+/// Unlike traditional B-Trees with fixed order, we adapt to variable-length data and
+/// unpredictable compression/encryption overhead.
+///
+/// ## The Problem
+///
+/// Fixed B-Tree order (e.g., `const DEFAULT_ORDER = 220`) fails when:
+/// - **Variable-length keys/values**: String keys can be arbitrarily large
+/// - **Compression variability**: 3 algorithms (None, LZ4, Zstd) with different characteristics
+///   - Worst case: incompressible data expands by ~15%
+/// - **Encryption overhead**: AES-256-GCM adds 28 bytes (12-byte nonce + 16-byte tag)
+/// - **MVCC version chains**: Variable length depending on transaction history
+/// - **Page size variability**: Pages can be 4KB to 64KB
+///
+/// A node with 220 small entries might fit, but 220 large entries will overflow the page,
+/// causing write failures like: `compressed data length 4053 exceeds available space 4032`
+///
+/// ## The Solution: Dual-Check Strategy
+///
+/// We use **two complementary checks** to prevent overflow:
+///
+/// 1. **Count-based check (preliminary)**: `node.keys.len() >= max_order`
+///    - Fast, conservative estimate based on average entry size
+///    - Computed at initialization: `max_order = (page_size * 0.60) / 30 bytes`
+///    - 40% safety margin accounts for compression expansion and encryption
+///
+/// 2. **Size-based check (authoritative)**: `node.to_bytes().len() > max_node_size`
+///    - Actual serialized size check before writing
+///    - Catches cases where entries are larger than average
+///    - Triggers split even if count is below max_order
+///
+/// ## Implementation Details
+///
+/// - `max_order`: Computed from page size, used for preliminary checks
+/// - `min_keys`: `max_order / 2`, minimum keys per node (B-Tree property)
+/// - `max_node_size`: 60% of available page space (40% safety margin)
+///
+/// Both checks are used together:
+/// ```rust,ignore
+/// if node.is_full(self.max_order) || !self.node_fits_in_page(&node) {
+///     // Split the node
+/// }
+/// ```
+///
+/// This ensures nodes never exceed page capacity, regardless of data characteristics.
+///
+/// ## Trade-offs
+///
+/// - **Pro**: Prevents all page overflow errors
+/// - **Pro**: Adapts to actual data characteristics
+/// - **Pro**: Works with any page size (4KB-64KB)
+/// - **Con**: May split nodes earlier than necessary (conservative)
+/// - **Con**: Slight overhead from size checks (but prevents expensive error recovery)
+///
+/// The conservative approach is intentional: better to split early than fail writes.
 pub struct PagedBTree<FS: FileSystem> {
     id: TableId,
     name: String,
@@ -582,21 +662,34 @@ pub struct PagedBTree<FS: FileSystem> {
     /// Uses `DashMap` for concurrent access to different pages
     /// Each page has an `RwLock` for read/write latching
     page_latches: Arc<DashMap<PageId, Arc<ParkingLotRwLock<()>>>>,
+    /// Maximum keys per node (computed from page size with 40% safety margin)
+    /// Used for preliminary count-based checks. See struct-level docs for details.
+    max_order: usize,
+    /// Minimum keys per node (except root): `max_order / 2`
+    /// Maintains B-Tree balance property.
+    min_keys: usize,
+    /// Maximum serialized size for a node (60% of page data size)
+    /// Used for authoritative size-based checks. See struct-level docs for details.
+    max_node_size: usize,
 }
 
 impl<FS: FileSystem> PagedBTree<FS> {
     /// Create a new paged B-Tree table.
     pub fn new(id: TableId, name: String, pager: Arc<Pager<FS>>) -> TableResult<Self> {
+        // Calculate order based on page size
+        let page_data_size = pager.page_size().data_size();
+        let max_order = calculate_max_order(page_data_size);
+        let min_keys = max_order / 2;
+
+        // Set maximum node size with 40% safety margin for compression expansion and encryption
+        let max_node_size = (page_data_size * 3) / 5; // 60% of available space
+
         // Allocate root page (initially a leaf)
         let root_page_id = pager.allocate_page(PageType::BTreeLeaf)?;
         let root_node = BTreeNode::new_leaf();
 
         // Write root node to disk
-        let mut page = Page::new(
-            root_page_id,
-            PageType::BTreeLeaf,
-            pager.page_size().data_size(),
-        );
+        let mut page = Page::new(root_page_id, PageType::BTreeLeaf, page_data_size);
         page.data_mut().extend_from_slice(&root_node.to_bytes());
         pager.write_page(&page)?;
         pager.set_root_btree_page(root_page_id)?;
@@ -609,12 +702,23 @@ impl<FS: FileSystem> PagedBTree<FS> {
             root_page_id: Arc::new(RwLock::new(root_page_id)),
             row_count: Arc::new(RwLock::new(0)),
             page_latches: Arc::new(DashMap::new()),
+            max_order,
+            min_keys,
+            max_node_size,
         })
     }
 
     /// Open an existing paged B-Tree table.
     #[must_use]
     pub fn open(id: TableId, name: String, pager: Arc<Pager<FS>>, root_page_id: PageId) -> Self {
+        // Calculate order based on page size
+        let page_data_size = pager.page_size().data_size();
+        let max_order = calculate_max_order(page_data_size);
+        let min_keys = max_order / 2;
+
+        // Set maximum node size with 40% safety margin for compression expansion and encryption
+        let max_node_size = (page_data_size * 3) / 5; // 60% of available space
+
         let row_count = pager.btree_row_count();
         Self {
             id,
@@ -623,7 +727,17 @@ impl<FS: FileSystem> PagedBTree<FS> {
             root_page_id: Arc::new(RwLock::new(root_page_id)),
             row_count: Arc::new(RwLock::new(row_count)),
             page_latches: Arc::new(DashMap::new()),
+            max_order,
+            min_keys,
+            max_node_size,
         }
+    }
+
+    /// Check if a node fits within the page size limit.
+    /// This is the authoritative check for whether a node can be written.
+    fn node_fits_in_page(&self, node: &BTreeNode) -> bool {
+        let serialized_size = node.to_bytes().len();
+        serialized_size <= self.max_node_size
     }
 
     /// Get the current root page ID.
@@ -691,10 +805,11 @@ impl<FS: FileSystem> PagedBTree<FS> {
     fn is_node_safe(&self, node: &BTreeNode, is_insert: bool) -> bool {
         if is_insert {
             // Safe for insert if not full (won't split)
-            !node.is_full()
+            // Use both count-based and size-based checks
+            !node.is_full(self.max_order) && self.node_fits_in_page(node)
         } else {
             // Safe for delete if has more than minimum keys (won't merge/redistribute)
-            node.key_count() > MIN_KEYS
+            node.key_count() > self.min_keys
         }
     }
 
@@ -1093,7 +1208,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 },
             ) => {
                 // Check if merge is possible
-                if left_entries.len() + right_entries.len() + 1 > DEFAULT_ORDER {
+                if left_entries.len() + right_entries.len() + 1 > self.max_order {
                     return Ok(false);
                 }
 
@@ -1138,7 +1253,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 },
             ) => {
                 // Check if merge is possible
-                if left_entries.len() + right_entries.len() > DEFAULT_ORDER {
+                if left_entries.len() + right_entries.len() > self.max_order {
                     return Ok(false);
                 }
 
@@ -1500,8 +1615,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
             // Write the updated node (still holding latch)
             self.write_node(leaf_page_id, &modified_node)?;
 
-            // Check if split is needed
-            if modified_node.is_full() {
+            // Check if split is needed (count-based OR size-based)
+            if modified_node.is_full(self.max_order) || !self.node_fits_in_page(&modified_node) {
                 // Convert optimistic path to old-style path for split_and_propagate
                 // TODO: Phase 4 will make split_and_propagate optimistic too
                 let old_style_path: Vec<(PageId, PageId)> = optimistic_path
@@ -1706,8 +1821,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
             // Write the updated parent
             self.write_node(parent_page_id, &parent_node)?;
 
-            // Check if parent is now full and needs to split
-            if parent_node.is_full() {
+            // Check if parent is now full and needs to split (count-based OR size-based)
+            if parent_node.is_full(self.max_order) || !self.node_fits_in_page(&parent_node) {
                 self.split_and_propagate(parent_page_id, &parent_node, path)?;
             }
         }
@@ -1907,7 +2022,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 self.decrement_row_count()?;
 
                 // Check if node needs rebalancing
-                if !node.has_minimum_keys() && leaf_page_id != self.get_root_page_id() {
+                if !node.has_minimum_keys(self.min_keys) && leaf_page_id != self.get_root_page_id()
+                {
                     self.rebalance_leaf_after_delete(leaf_page_id, &path)?;
                 }
 

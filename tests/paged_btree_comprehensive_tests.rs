@@ -891,7 +891,9 @@ fn test_page_size_overflow_handling() {
             // Verify it's a pager-related error (not a panic or corruption)
             let error_msg = format!("{:?}", e);
             assert!(
-                error_msg.contains("compress") || error_msg.contains("page") || error_msg.contains("size"),
+                error_msg.contains("compress")
+                    || error_msg.contains("page")
+                    || error_msg.contains("size"),
                 "Error should be related to page size/compression: {}",
                 error_msg
             );
@@ -906,7 +908,7 @@ fn test_page_size_overflow_handling() {
         result.is_some(),
         "Tree should still be functional - original data should be readable"
     );
-    
+
     // Verify we can still read from the tree after the large write attempt
     let reader2 = table.reader(lsn2).unwrap();
     // Try to read one of the large keys - it may or may not exist depending on whether
@@ -959,6 +961,8 @@ fn test_large_node_warning_threshold() {
     // Verify data was written correctly
     writer.commit_versions(lsn).unwrap();
     let reader = table.reader(lsn).unwrap();
-    let result = reader.get(b"medium_key_0000_xxxxxxxxxxxxxxxxxxxx", lsn).unwrap();
+    let result = reader
+        .get(b"medium_key_0000_xxxxxxxxxxxxxxxxxxxx", lsn)
+        .unwrap();
     assert!(result.is_some(), "Data should be retrievable after write");
 }
