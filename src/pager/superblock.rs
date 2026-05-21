@@ -16,7 +16,7 @@
 
 //! Superblock - Database state and metadata
 
-use crate::pager::{PageId, PagerError, PagerResult};
+use crate::pager::{PageId, PageMapper, PagerError, PagerResult};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// - Page allocation state
 /// - Transaction state
 /// - Database statistics
+/// - Virtual-to-physical page mapping
 ///
 /// Layout (fits within page data section):
 /// - Bytes 0-7: Magic number for validation (u64)
@@ -40,8 +41,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// - Bytes 64-71: Last checkpoint LSN (u64)
 /// - Bytes 72-79: Root B-Tree page ID (u64)
 /// - Bytes 80-87: B-Tree row count (u64)
-/// - Bytes 88-95: Reserved (u64)
+/// - Bytes 88-95: Page mapper data page ID (u64, 0 if inline)
 /// - Bytes 96-127: Reserved (32 bytes)
+/// - Bytes 128+: Page mapper inline data (if fits)
 #[derive(Debug)]
 pub struct Superblock {
     /// Magic number for validation
@@ -66,6 +68,10 @@ pub struct Superblock {
     pub root_btree_page: PageId,
     /// B-Tree row count (total number of rows)
     pub btree_row_count: u64,
+    /// Page mapper data page ID (0 if stored inline)
+    pub page_mapper_page: PageId,
+    /// Page mapper (virtual-to-physical mapping)
+    pub page_mapper: PageMapper,
 }
 
 impl Clone for Superblock {
@@ -83,6 +89,8 @@ impl Clone for Superblock {
             last_checkpoint_lsn: self.last_checkpoint_lsn,
             root_btree_page: self.root_btree_page,
             btree_row_count: self.btree_row_count,
+            page_mapper_page: self.page_mapper_page,
+            page_mapper: self.page_mapper.clone(),
         }
     }
 }
@@ -91,11 +99,17 @@ impl Superblock {
     /// Magic number for superblock validation
     const MAGIC: u64 = 0x004E_4B53_5550_4552; // "NKSUPER" in ASCII
 
-    /// Current superblock version
-    const VERSION: u64 = 1;
+    /// Current superblock version (incremented for page mapper support)
+    const VERSION: u64 = 2;
 
-    /// Size of the superblock in bytes
-    pub const SIZE: usize = 128;
+    /// Size of the superblock header in bytes (before inline mapper data)
+    pub const HEADER_SIZE: usize = 96;
+    
+    /// Maximum size for inline page mapper data
+    pub const INLINE_MAPPER_SIZE: usize = 256;
+    
+    /// Total size of the superblock in bytes
+    pub const SIZE: usize = Self::HEADER_SIZE + Self::INLINE_MAPPER_SIZE;
 
     /// Create a new superblock with default values
     #[must_use]
@@ -112,6 +126,8 @@ impl Superblock {
             last_checkpoint_lsn: 0,
             root_btree_page: PageId::from(0),
             btree_row_count: 0,
+            page_mapper_page: PageId::from(0),
+            page_mapper: PageMapper::new(),
         }
     }
 
@@ -126,6 +142,7 @@ impl Superblock {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::SIZE);
 
+        // Header fields (96 bytes)
         bytes.extend_from_slice(&self.magic.to_le_bytes());
         bytes.extend_from_slice(&self.version.to_le_bytes());
         bytes.extend_from_slice(&self.total_pages.to_le_bytes());
@@ -137,19 +154,31 @@ impl Superblock {
         bytes.extend_from_slice(&self.last_checkpoint_lsn.to_le_bytes());
         bytes.extend_from_slice(&self.root_btree_page.to_bytes());
         bytes.extend_from_slice(&self.btree_row_count.to_le_bytes());
+        bytes.extend_from_slice(&self.page_mapper_page.to_bytes());
 
-        // Add reserved bytes
-        bytes.resize(Self::SIZE, 0);
+        // Serialize page mapper
+        let mapper_bytes = self.page_mapper.to_bytes();
+        
+        // If mapper fits inline, store it; otherwise it will be in a separate page
+        if mapper_bytes.len() <= Self::INLINE_MAPPER_SIZE {
+            bytes.extend_from_slice(&mapper_bytes);
+            // Pad to full size
+            bytes.resize(Self::SIZE, 0);
+        } else {
+            // Mapper is too large, will be stored in separate page
+            // Just pad the inline section with zeros
+            bytes.resize(Self::SIZE, 0);
+        }
 
         bytes
     }
 
     /// Deserialize the superblock from bytes
     pub fn from_bytes(bytes: &[u8]) -> PagerResult<Self> {
-        if bytes.len() < Self::SIZE {
+        if bytes.len() < Self::HEADER_SIZE {
             return Err(PagerError::invalid_superblock(
                 "size",
-                format!("{}", Self::SIZE),
+                format!("{}", Self::HEADER_SIZE),
                 format!("{}", bytes.len()),
             ));
         }
@@ -164,13 +193,45 @@ impl Superblock {
         }
 
         let version = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-        if version != Self::VERSION {
+        
+        // Support both old version (1) and new version (2)
+        let (page_mapper_page, page_mapper) = if version == 1 {
+            // Old version without page mapper - initialize with identity mapping
+            (PageId::from(0), PageMapper::new())
+        } else if version == 2 {
+            // New version with page mapper
+            let page_mapper_page = PageId::from(u64::from_le_bytes(bytes[88..96].try_into().unwrap()));
+            
+            // Try to deserialize inline mapper data
+            let page_mapper = if page_mapper_page.as_u64() == 0 && bytes.len() >= Self::SIZE {
+                // Mapper is stored inline
+                let mapper_bytes = &bytes[Self::HEADER_SIZE..Self::SIZE];
+                
+                // Check if there's actual mapper data (at least 16 bytes for header)
+                // by checking if the first 16 bytes are not all zeros
+                let has_data = mapper_bytes.len() >= 16 &&
+                    mapper_bytes[0..16].iter().any(|&b| b != 0);
+                
+                if has_data {
+                    // Try to deserialize the mapper data
+                    // The PageMapper::from_bytes will read exactly what it needs
+                    PageMapper::from_bytes(mapper_bytes)?
+                } else {
+                    PageMapper::new()
+                }
+            } else {
+                // Mapper is in separate page (will be loaded later by Pager)
+                PageMapper::new()
+            };
+            
+            (page_mapper_page, page_mapper)
+        } else {
             return Err(PagerError::invalid_superblock(
                 "version",
-                format!("{}", Self::VERSION),
+                format!("{} or {}", 1, Self::VERSION),
                 format!("{}", version),
             ));
-        }
+        };
 
         let total_pages = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
         let free_pages = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
@@ -186,7 +247,7 @@ impl Superblock {
 
         Ok(Self {
             magic,
-            version,
+            version: Self::VERSION, // Always use current version
             total_pages,
             free_pages,
             first_free_list_page,
@@ -196,6 +257,8 @@ impl Superblock {
             last_checkpoint_lsn,
             root_btree_page,
             btree_row_count,
+            page_mapper_page,
+            page_mapper,
         })
     }
 
@@ -251,6 +314,8 @@ mod tests {
         assert_eq!(sb.free_pages, 0);
         assert_eq!(sb.next_page_id(), PageId::from(2));
         assert_eq!(sb.transaction_counter, 0);
+        assert_eq!(sb.page_mapper_page, PageId::from(0));
+        assert_eq!(sb.page_mapper.mapping_count(), 0);
     }
 
     #[test]
@@ -263,8 +328,45 @@ mod tests {
         assert_eq!(deserialized.total_pages, sb.total_pages);
         assert_eq!(deserialized.free_pages, sb.free_pages);
         assert_eq!(deserialized.next_page_id(), sb.next_page_id());
+        assert_eq!(deserialized.page_mapper_page, sb.page_mapper_page);
     }
 
+    #[test]
+    fn test_superblock_with_page_mapper() {
+        let sb = Superblock::new();
+        
+        // Add some mappings
+        sb.page_mapper.remap(PageId::from(10), PageId::from(20));
+        sb.page_mapper.remap(PageId::from(15), PageId::from(25));
+        
+        let bytes = sb.to_bytes();
+        let deserialized = Superblock::from_bytes(&bytes).unwrap();
+        
+        assert_eq!(deserialized.page_mapper.mapping_count(), 2);
+        assert_eq!(deserialized.page_mapper.translate(PageId::from(10)), PageId::from(20));
+        assert_eq!(deserialized.page_mapper.translate(PageId::from(15)), PageId::from(25));
+    }
+
+    #[test]
+    fn test_version_migration() {
+        // Create a version 1 superblock (without page mapper)
+        let mut bytes = vec![0u8; Superblock::SIZE];
+        
+        // Magic
+        bytes[0..8].copy_from_slice(&Superblock::MAGIC.to_le_bytes());
+        // Version 1
+        bytes[8..16].copy_from_slice(&1u64.to_le_bytes());
+        // Other fields
+        bytes[16..24].copy_from_slice(&2u64.to_le_bytes()); // total_pages
+        bytes[48..56].copy_from_slice(&2u64.to_le_bytes()); // next_page_id
+        
+        let sb = Superblock::from_bytes(&bytes).unwrap();
+        
+        // Should have migrated to version 2 with empty page mapper
+        assert_eq!(sb.version, 2);
+        assert_eq!(sb.page_mapper.mapping_count(), 0);
+        assert_eq!(sb.page_mapper_page, PageId::from(0));
+    }
     #[test]
     fn test_invalid_magic() {
         let mut bytes = vec![0u8; Superblock::SIZE];
