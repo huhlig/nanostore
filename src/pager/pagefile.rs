@@ -17,8 +17,8 @@
 //! Pager implementation - Main page management logic
 
 use crate::pager::{
-    CacheConfig, FileHeader, FreeList, FreeListPage, Page, PageCache, PageId, PageSize, PageTable,
-    PageType, PagerConfig, PagerError, PagerResult, PinTable, Superblock,
+    CacheConfig, FileHeader, FreeList, FreeListPage, Page, PageCache, PageId, PageMapper, PageSize,
+    PageTable, PageType, PagerConfig, PagerError, PagerResult, PinTable, Superblock,
 };
 use crate::vfs::{File, FileSystem};
 use metrics::{counter, gauge, histogram};
@@ -48,6 +48,8 @@ pub struct Pager<FS: FileSystem> {
     superblock: Arc<RwLock<Superblock>>,
     /// Free list manager (lock-free)
     free_list: Arc<FreeList>,
+    /// Page mapper for virtual-to-physical translation
+    page_mapper: Arc<PageMapper>,
     /// Page cache (optional)
     cache: Option<PageCache>,
     /// Pin table for reference counting
@@ -110,12 +112,16 @@ impl<FS: FileSystem> Pager<FS> {
             None
         };
 
+        // Initialize page mapper from superblock
+        let page_mapper = Arc::new(superblock.page_mapper.clone());
+
         Ok(Self {
             file: Arc::new(RwLock::new(file)),
             config,
             header: Arc::new(RwLock::new(header)),
             superblock: Arc::new(RwLock::new(superblock)),
             free_list: Arc::new(free_list),
+            page_mapper,
             cache,
             pin_table: PinTable::new(),
             page_table: PageTable::new(),
@@ -190,12 +196,16 @@ impl<FS: FileSystem> Pager<FS> {
             None
         };
 
+        // Initialize page mapper from superblock
+        let page_mapper = Arc::new(superblock.page_mapper.clone());
+
         Ok(Self {
             file: Arc::new(RwLock::new(file)),
             config,
             header: Arc::new(RwLock::new(header)),
             superblock: Arc::new(RwLock::new(superblock)),
             free_list: Arc::new(free_list),
+            page_mapper,
             cache,
             pin_table: PinTable::new(),
             page_table: PageTable::new(),
@@ -219,166 +229,63 @@ impl<FS: FileSystem> Pager<FS> {
 
     /// Allocate a new page
     ///
-    /// This will either:
-    /// 1. Reuse a page from the free list, or
-    /// 2. Grow the database by allocating a new page
+    /// This will:
+    /// 1. Allocate a new virtual page ID (monotonic, never reused)
+    /// 2. Allocate a physical page ID (from free list or by growing file)
+    /// 3. Create the virtual → physical mapping
+    /// 4. Write the page to disk
+    ///
+    /// Returns the virtual page ID that tables should use.
     ///
     /// # Lock Ordering
     /// Follows the hierarchy: superblock → header → page_table → file
-    #[instrument(skip(self), fields(page_type = ?page_type, page_id, from_freelist))]
+    #[instrument(skip(self), fields(page_type = ?page_type, virtual_id, physical_id, from_freelist))]
     pub fn allocate_page(&self, page_type: PageType) -> PagerResult<PageId> {
         let start = Instant::now();
         debug!("Allocating page");
 
-        // STEP 1: Lock-free allocation from free list or superblock
+        // STEP 1: Allocate virtual page ID (monotonic, never reused)
+        let virtual_id = self.page_mapper.allocate_virtual();
+
+        // STEP 2: Allocate physical page ID (from free list or grow file)
         // Lock ordering: superblock first (level 2)
-        let (page_id, from_freelist) = if let Some(page_id) = self.free_list.pop_page() {
+        let (physical_id, from_freelist) = if let Some(physical_id) = self.free_list.pop_page() {
             // Got a page from free list - mark it allocated in superblock
             let mut superblock = self.superblock.write();
             superblock.mark_page_allocated();
             drop(superblock); // Release immediately
             counter!("nanostore.pager.page.reused").increment(1);
-            debug!("Page allocated from free list");
-            (page_id, true)
+            debug!("Physical page allocated from free list");
+            (physical_id, true)
         } else {
             // No free pages - allocate a new one
             let mut superblock = self.superblock.write();
-            let page_id = superblock.allocate_new_page();
+            let physical_id = superblock.allocate_new_page();
             drop(superblock); // Release immediately
             counter!("nanostore.pager.page.grown").increment(1);
-            debug!("Page allocated by growing database");
-            (page_id, false)
+            debug!("Physical page allocated by growing database");
+            (physical_id, false)
         };
 
+        // STEP 3: Create virtual → physical mapping
+        self.page_mapper.remap(virtual_id, physical_id);
+
         // Record span fields
-        tracing::Span::current().record("page_id", page_id.as_u64());
+        tracing::Span::current().record("virtual_id", virtual_id.as_u64());
+        tracing::Span::current().record("physical_id", physical_id.as_u64());
         tracing::Span::current().record("from_freelist", from_freelist);
 
         counter!("nanostore.pager.page.allocated").increment(1);
 
-        // STEP 2: Prepare data (no locks held)
-        let mut page = Page::new(page_id, page_type, self.config.page_size.data_size());
+        // STEP 4: Prepare data (no locks held)
+        // Note: Page header stores virtual_id, but we write to physical_id location
+        let mut page = Page::new(virtual_id, page_type, self.config.page_size.data_size());
+        page.header.virtual_page_id = virtual_id; // Explicitly set virtual ID in header
         page.header.compression = self.config.compression;
         page.header.encryption = self.config.encryption;
 
         let page_size = self.config.page_size.to_u32() as usize;
         let page_bytes = page.to_bytes(page_size, self.config.encryption_key.as_ref())?;
-
-        // STEP 3: Collect metadata (lock ordering: superblock → header)
-        let (header_data, superblock_data) = {
-            let free_pages = self.free_list.total_free();
-
-            // Lock superblock first (level 2)
-            let superblock_data = {
-                let superblock = self.superblock.read();
-                superblock.clone()
-            };
-
-            // Then lock header (level 3)
-            let header_data = {
-                let mut header = self.header.write();
-                header.total_pages = superblock_data.total_pages;
-                header.free_pages = free_pages;
-                header.first_free_list_page_id = 0;
-                header.update_modified_timestamp();
-                header.clone()
-            };
-
-            (header_data, superblock_data)
-        };
-
-        // STEP 4: Acquire page lock (level 4), then file lock (level 6)
-        let _page_lock = self.page_table.write_lock(page_id);
-
-        {
-            let mut file = self.file.write();
-            file.write_to_offset(page_id.as_u64() * page_size as u64, &page_bytes)?;
-            let header_bytes = header_data.to_bytes();
-            let mut page0_data = vec![0u8; page_size];
-            page0_data[0..FileHeader::SIZE].copy_from_slice(&header_bytes);
-            file.write_to_offset(0, &page0_data)?;
-
-            let mut superblock_page = Page::new(
-                PageId::from(1),
-                PageType::Superblock,
-                self.config.page_size.data_size(),
-            );
-            superblock_page.header.compression = self.config.compression;
-            superblock_page.header.encryption = self.config.encryption;
-            superblock_page
-                .data_mut()
-                .extend_from_slice(&superblock_data.to_bytes());
-            let superblock_bytes =
-                superblock_page.to_bytes(page_size, self.config.encryption_key.as_ref())?;
-            file.write_to_offset(page_size as u64, &superblock_bytes)?;
-        }
-
-        histogram!("nanostore.pager.allocate.duration_seconds")
-            .record(start.elapsed().as_secs_f64());
-        debug!("Page allocated successfully");
-        Ok(page_id)
-    }
-
-    /// Free a page (add it to the free list)
-    ///
-    /// # Lock Ordering
-    /// Follows the hierarchy: pin_table → superblock → header → page_table → file
-    #[instrument(skip(self), fields(page_id = %page_id))]
-    pub fn free_page(&self, page_id: PageId) -> PagerResult<()> {
-        let start = Instant::now();
-        debug!("Freeing page");
-
-        if page_id == PageId::from(0) || page_id == PageId::from(1) {
-            warn!("Attempted to free reserved page");
-            counter!("nanostore.pager.error", "type" => "invalid_page_id").increment(1);
-            return Err(PagerError::InvalidPageId(page_id));
-        }
-
-        // STEP 1: Check if page is pinned (level 1 - pin_table)
-        // This prevents freeing pages that are currently being read
-        if self.pin_table.is_pinned(page_id) {
-            warn!("Attempted to free pinned page");
-            counter!("nanostore.pager.error", "type" => "page_pinned").increment(1);
-            return Err(PagerError::PagePinned(page_id));
-        }
-
-        let page_size = self.config.page_size.to_u32() as usize;
-        let offset = page_id.as_u64() * page_size as u64;
-
-        // STEP 2: Acquire page lock (level 4), then file lock (level 6) to verify page
-        let _page_lock = self.page_table.write_lock(page_id);
-
-        {
-            let mut file = self.file.write();
-            let mut buffer = vec![0u8; page_size];
-            file.read_at_offset(offset, &mut buffer)?;
-            let page = Page::from_bytes(
-                &buffer,
-                self.config.enable_checksums,
-                self.config.encryption_key.as_ref(),
-            )?;
-            if page.page_type() == PageType::Free || page.page_type() == PageType::FreeList {
-                return Err(PagerError::PageAlreadyFree(page_id));
-            }
-
-            let mut free_page =
-                Page::new(page_id, PageType::Free, self.config.page_size.data_size());
-            free_page.header.compression = self.config.compression;
-            free_page.header.encryption = self.config.encryption;
-            let free_page_bytes =
-                free_page.to_bytes(page_size, self.config.encryption_key.as_ref())?;
-            file.write_to_offset(offset, &free_page_bytes)?;
-        }
-        // File lock released here
-
-        // STEP 3: Add to free list (lock-free, no ordering needed)
-        self.free_list.push_page(page_id);
-
-        // STEP 4: Update superblock (level 2)
-        {
-            let mut superblock = self.superblock.write();
-            superblock.mark_page_freed();
-        }
 
         // STEP 5: Collect metadata (lock ordering: superblock → header)
         let (header_data, superblock_data) = {
@@ -403,7 +310,138 @@ impl<FS: FileSystem> Pager<FS> {
             (header_data, superblock_data)
         };
 
-        // STEP 6: Write metadata to disk (file lock - level 6)
+        // STEP 6: Acquire page lock (level 4), then file lock (level 6)
+        // Lock the physical page location where we're writing
+        let _page_lock = self.page_table.write_lock(physical_id);
+
+        {
+            let mut file = self.file.write();
+            // Write to physical page location
+            file.write_to_offset(physical_id.as_u64() * page_size as u64, &page_bytes)?;
+            let header_bytes = header_data.to_bytes();
+            let mut page0_data = vec![0u8; page_size];
+            page0_data[0..FileHeader::SIZE].copy_from_slice(&header_bytes);
+            file.write_to_offset(0, &page0_data)?;
+
+            let mut superblock_page = Page::new(
+                PageId::from(1),
+                PageType::Superblock,
+                self.config.page_size.data_size(),
+            );
+            superblock_page.header.compression = self.config.compression;
+            superblock_page.header.encryption = self.config.encryption;
+            superblock_page
+                .data_mut()
+                .extend_from_slice(&superblock_data.to_bytes());
+            let superblock_bytes =
+                superblock_page.to_bytes(page_size, self.config.encryption_key.as_ref())?;
+            file.write_to_offset(page_size as u64, &superblock_bytes)?;
+        }
+
+        histogram!("nanostore.pager.allocate.duration_seconds")
+            .record(start.elapsed().as_secs_f64());
+        debug!("Page allocated successfully");
+        
+        // Return virtual page ID (what tables should use)
+        Ok(virtual_id)
+    }
+
+    /// Free a page (remove virtual mapping and add physical page to free list)
+    ///
+    /// Takes a virtual page ID, translates it to physical, then:
+    /// 1. Removes the virtual → physical mapping
+    /// 2. Adds the physical page to the free list for reuse
+    ///
+    /// # Lock Ordering
+    /// Follows the hierarchy: pin_table → superblock → header → page_table → file
+    #[instrument(skip(self), fields(virtual_id = %virtual_id, physical_id))]
+    pub fn free_page(&self, virtual_id: PageId) -> PagerResult<()> {
+        let start = Instant::now();
+        debug!("Freeing page");
+
+        if virtual_id == PageId::from(0) || virtual_id == PageId::from(1) {
+            warn!("Attempted to free reserved page");
+            counter!("nanostore.pager.error", "type" => "invalid_page_id").increment(1);
+            return Err(PagerError::InvalidPageId(virtual_id));
+        }
+
+        // STEP 1: Translate virtual → physical
+        let physical_id = self.page_mapper.translate(virtual_id);
+        tracing::Span::current().record("physical_id", physical_id.as_u64());
+
+        // STEP 2: Check if physical page is pinned (level 1 - pin_table)
+        // This prevents freeing pages that are currently being read
+        if self.pin_table.is_pinned(physical_id) {
+            warn!("Attempted to free pinned page");
+            counter!("nanostore.pager.error", "type" => "page_pinned").increment(1);
+            return Err(PagerError::PagePinned(physical_id));
+        }
+
+        let page_size = self.config.page_size.to_u32() as usize;
+        let offset = physical_id.as_u64() * page_size as u64;
+
+        // STEP 3: Acquire page lock (level 4), then file lock (level 6) to verify page
+        let _page_lock = self.page_table.write_lock(physical_id);
+
+        {
+            let mut file = self.file.write();
+            let mut buffer = vec![0u8; page_size];
+            file.read_at_offset(offset, &mut buffer)?;
+            let page = Page::from_bytes(
+                &buffer,
+                self.config.enable_checksums,
+                self.config.encryption_key.as_ref(),
+            )?;
+            if page.page_type() == PageType::Free || page.page_type() == PageType::FreeList {
+                return Err(PagerError::PageAlreadyFree(physical_id));
+            }
+
+            let mut free_page =
+                Page::new(physical_id, PageType::Free, self.config.page_size.data_size());
+            free_page.header.compression = self.config.compression;
+            free_page.header.encryption = self.config.encryption;
+            let free_page_bytes =
+                free_page.to_bytes(page_size, self.config.encryption_key.as_ref())?;
+            file.write_to_offset(offset, &free_page_bytes)?;
+        }
+        // File lock released here
+
+        // STEP 4: Remove virtual → physical mapping
+        self.page_mapper.unmap(virtual_id);
+
+        // STEP 5: Add physical page to free list (lock-free, no ordering needed)
+        self.free_list.push_page(physical_id);
+
+        // STEP 6: Update superblock (level 2)
+        {
+            let mut superblock = self.superblock.write();
+            superblock.mark_page_freed();
+        }
+
+        // STEP 7: Collect metadata (lock ordering: superblock → header)
+        let (header_data, superblock_data) = {
+            let free_pages = self.free_list.total_free();
+
+            // Lock superblock first (level 2)
+            let superblock_data = {
+                let superblock = self.superblock.read();
+                superblock.clone()
+            };
+
+            // Then lock header (level 3)
+            let header_data = {
+                let mut header = self.header.write();
+                header.total_pages = superblock_data.total_pages;
+                header.free_pages = free_pages;
+                header.first_free_list_page_id = 0;
+                header.update_modified_timestamp();
+                header.clone()
+            };
+
+            (header_data, superblock_data)
+        };
+
+        // STEP 8: Write metadata to disk (file lock - level 6)
         // Note: page_lock is still held, which is fine since we're writing to different pages
         {
             let mut file = self.file.write();
@@ -436,21 +474,29 @@ impl<FS: FileSystem> Pager<FS> {
 
     /// Read a page from disk (with caching)
     ///
+    /// Takes a virtual page ID, translates to physical, and reads from disk.
+    /// The returned page will have the virtual ID in its header.
+    ///
     /// # Lock Ordering
     /// Follows the hierarchy: pin_table → page_table → cache → file
-    #[instrument(skip(self), fields(page_id = %page_id, cache_hit))]
-    pub fn read_page(&self, page_id: PageId) -> PagerResult<Page> {
+    #[instrument(skip(self), fields(virtual_id = %virtual_id, physical_id, cache_hit))]
+    pub fn read_page(&self, virtual_id: PageId) -> PagerResult<Page> {
         let start = Instant::now();
         debug!("Reading page");
 
-        if page_id.as_u64() >= self.total_pages() {
+        // STEP 1: Translate virtual → physical
+        let physical_id = self.page_mapper.translate(virtual_id);
+        tracing::Span::current().record("physical_id", physical_id.as_u64());
+
+        if physical_id.as_u64() >= self.total_pages() {
             counter!("nanostore.pager.error", "type" => "page_not_found").increment(1);
-            return Err(PagerError::PageNotFound(page_id));
+            return Err(PagerError::PageNotFound(physical_id));
         }
 
         // Try cache first (level 5 - cache)
+        // Cache is keyed by virtual ID
         if let Some(cache) = &self.cache
-            && let Some(page) = cache.get(page_id)
+            && let Some(page) = cache.get(virtual_id)
         {
             tracing::Span::current().record("cache_hit", true);
             debug!("Cache hit");
@@ -463,33 +509,46 @@ impl<FS: FileSystem> Pager<FS> {
         tracing::Span::current().record("cache_hit", false);
         debug!("Cache miss - reading from disk");
 
-        // STEP 1: Pin the page (level 1 - pin_table)
+        // STEP 2: Pin the physical page (level 1 - pin_table)
         // This ensures the page cannot be freed and reallocated while we're reading it
-        self.pin_table.pin(page_id);
+        self.pin_table.pin(physical_id);
 
-        // STEP 2: Acquire page-level read lock (level 4 - page_table)
+        // STEP 3: Acquire page-level read lock (level 4 - page_table)
         // Multiple threads can read different pages concurrently (different shards)
-        let _page_lock = self.page_table.read_lock(page_id);
+        let _page_lock = self.page_table.read_lock(physical_id);
 
-        // Cache miss - read from disk
+        // Cache miss - read from disk at physical location
         let page_size = self.config.page_size.to_u32() as usize;
-        let offset = page_id.as_u64() * page_size as u64;
+        let offset = physical_id.as_u64() * page_size as u64;
 
         let result = (|| {
             let mut buffer = vec![0u8; page_size];
-            // STEP 3: Acquire file lock (level 6 - file)
+            // STEP 4: Acquire file lock (level 6 - file)
             // Note: VFS File trait requires &mut self for read_at_offset
             let mut file = self.file.write();
             file.read_at_offset(offset, &mut buffer)?;
             drop(file); // Release file lock early
 
-            let page = Page::from_bytes(
+            let mut page = Page::from_bytes(
                 &buffer,
                 self.config.enable_checksums,
                 self.config.encryption_key.as_ref(),
             )?;
 
-            // STEP 4: Update cache (level 5 - cache)
+            // Verify the page header has the correct virtual ID
+            // (it should have been set when the page was allocated)
+            if page.header.virtual_page_id != virtual_id {
+                warn!(
+                    "Page virtual ID mismatch: expected {}, got {}",
+                    virtual_id.as_u64(),
+                    page.header.virtual_page_id.as_u64()
+                );
+                // Update it to match (for backward compatibility with old pages)
+                page.header.virtual_page_id = virtual_id;
+            }
+
+            // STEP 5: Update cache (level 5 - cache)
+            // Cache is keyed by virtual ID
             if let Some(cache) = &self.cache {
                 // If evicted page is dirty, write it to disk
                 if let Some(evicted_page) = cache.put(page.clone(), false) {
@@ -500,8 +559,8 @@ impl<FS: FileSystem> Pager<FS> {
             Ok(page)
         })();
 
-        // CRITICAL: Always unpin the page (level 1), even if an error occurred
-        self.pin_table.unpin(page_id);
+        // CRITICAL: Always unpin the physical page (level 1), even if an error occurred
+        self.pin_table.unpin(physical_id);
 
         if result.is_ok() {
             let page_size = self.config.page_size.to_u32() as u64;
@@ -516,10 +575,19 @@ impl<FS: FileSystem> Pager<FS> {
     }
 
     /// Write a page to disk (with caching)
-    #[instrument(skip(self, page), fields(page_id = %page.page_id(), write_through))]
+    ///
+    /// The page should have a virtual ID in its header. This method will:
+    /// 1. Translate virtual → physical
+    /// 2. Write to the physical location
+    /// 3. Update cache (keyed by virtual ID)
+    #[instrument(skip(self, page), fields(virtual_id = %page.page_id(), physical_id, write_through))]
     pub fn write_page(&self, page: &Page) -> PagerResult<()> {
         let start = Instant::now();
         debug!("Writing page");
+
+        let virtual_id = page.page_id();
+        let physical_id = self.page_mapper.translate(virtual_id);
+        tracing::Span::current().record("physical_id", physical_id.as_u64());
 
         let page_size = self.config.page_size.to_u32() as u64;
         if let Some(cache) = &self.cache {
@@ -531,7 +599,7 @@ impl<FS: FileSystem> Pager<FS> {
                     self.write_page_to_disk(&evicted_page)?;
                 }
                 self.write_page_to_disk(page)?;
-                cache.mark_clean(page.page_id());
+                cache.mark_clean(virtual_id);
                 counter!("nanostore.pager.page.write").increment(1);
                 counter!("nanostore.pager.bytes.written").increment(page_size);
                 histogram!("nanostore.pager.write.duration_seconds")
@@ -567,15 +635,21 @@ impl<FS: FileSystem> Pager<FS> {
 
     /// Write a page directly to disk (bypassing cache)
     ///
+    /// Translates the page's virtual ID to physical and writes to the physical location.
+    ///
     /// # Lock Ordering
     /// Follows the hierarchy: page_table → file
     fn write_page_to_disk(&self, page: &Page) -> PagerResult<()> {
+        let virtual_id = page.page_id();
+        let physical_id = self.page_mapper.translate(virtual_id);
+
         // STEP 1: Acquire page-level write lock (level 4 - page_table)
         // Only one thread can write to a page at a time, but different pages can be written concurrently
-        let _page_lock = self.page_table.write_lock(page.page_id());
+        // Lock the physical page location where we're writing
+        let _page_lock = self.page_table.write_lock(physical_id);
 
         let page_size = self.config.page_size.to_u32() as usize;
-        let offset = page.page_id().as_u64() * page_size as u64;
+        let offset = physical_id.as_u64() * page_size as u64;
 
         let buffer = page.to_bytes(page_size, self.config.encryption_key.as_ref())?;
 
@@ -646,6 +720,9 @@ impl<FS: FileSystem> Pager<FS> {
         // Flush cache first
         self.flush_cache()?;
 
+        // Persist PageMapper if dirty
+        self.persist_page_mapper()?;
+
         let fsync_start = Instant::now();
         let mut file = self.file.write();
         file.sync_all()?;
@@ -656,6 +733,37 @@ impl<FS: FileSystem> Pager<FS> {
         histogram!("nanostore.pager.sync.duration_seconds").record(start.elapsed().as_secs_f64());
         debug!(duration_ms = start.elapsed().as_millis(), "Sync completed");
         Ok(())
+    }
+
+    /// Persist the PageMapper to the Superblock if it's dirty
+    #[instrument(skip(self))]
+    pub fn persist_page_mapper(&self) -> PagerResult<()> {
+        if !self.page_mapper.is_dirty() {
+            return Ok(());
+        }
+
+        debug!("Persisting PageMapper to Superblock");
+
+        // Update superblock with current PageMapper state
+        let superblock_snapshot = {
+            let mut superblock = self.superblock.write();
+            superblock.page_mapper = self.page_mapper.as_ref().clone();
+            superblock.clone()
+        };
+
+        // Write updated superblock to disk
+        self.write_superblock(&superblock_snapshot)?;
+
+        // Mark PageMapper as clean
+        self.page_mapper.clear_dirty();
+
+        debug!("PageMapper persisted successfully");
+        Ok(())
+    }
+
+    /// Get a reference to the PageMapper for external use
+    pub fn page_mapper(&self) -> &PageMapper {
+        &self.page_mapper
     }
 
     /// Read a free list page
