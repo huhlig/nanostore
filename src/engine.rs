@@ -1090,9 +1090,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(full_stats)
     }
 
-    /// Perform VACUUM FULL on all tables in the database.
+    /// Perform VACUUM PAGER on the entire database.
     ///
-    /// This is a convenience method that runs VACUUM FULL on all persistent
+    /// This is a convenience method that runs VACUUM PAGER on all persistent
     /// tables. In-memory tables are skipped. Each table is compacted
     /// independently with exclusive locking.
     ///
@@ -1116,7 +1116,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
     ///     println!("Table {:?}: reclaimed {} bytes", table_id, stats.bytes_reclaimed);
     /// }
     /// ```
-    pub fn vacuum_full_all(&self) -> Result<HashMap<TableId, VacuumFullStats>, StorageEngineError> {
+    pub fn vacuum_pager(&self) -> Result<HashMap<TableId, VacuumFullStats>, StorageEngineError> {
         let mut results = HashMap::new();
 
         // Get all tables
