@@ -266,6 +266,30 @@ impl FreeList {
         }
     }
 
+    /// Get a snapshot of all free page IDs currently in the queue
+    ///
+    /// This creates a snapshot by draining and repopulating the queue.
+    /// Used by VACUUM FULL to identify which pages are free.
+    ///
+    /// IMPORTANT: This should only be called when no other operations
+    /// are modifying the freelist (e.g., during VACUUM FULL which has
+    /// exclusive access).
+    pub fn snapshot_free_pages(&self) -> Vec<PageId> {
+        let mut pages = Vec::new();
+        
+        // Drain the queue into a vector
+        while let Some(page_id) = self.free_pages.pop() {
+            pages.push(page_id);
+        }
+        
+        // Repopulate the queue in reverse order to maintain LIFO behavior
+        for &page_id in pages.iter().rev() {
+            self.free_pages.push(page_id);
+        }
+        
+        pages
+    }
+
     /// Increment the free page count
     pub fn increment_free(&self) {
         self.total_free.fetch_add(1, Ordering::AcqRel);

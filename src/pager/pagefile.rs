@@ -1218,16 +1218,18 @@ impl<FS: FileSystem> Pager<FS> {
 
         debug!(highest_used = %highest_used, "Found highest used page");
 
-        // Collect free pages below the highest used page
-        let mut free_pages = Vec::new();
-        for page_num in 2..highest_used.as_u64() {
-            let page_id = PageId::from(page_num);
-            let page = self.read_page(page_id)?;
-
-            if page.page_type() == PageType::Free {
-                free_pages.push(page_id);
-            }
-        }
+        // Get snapshot of all free pages from the freelist
+        let all_free_pages = self.free_list.snapshot_free_pages();
+        
+        // Filter to only include free pages below the highest used page
+        // (pages 0 and 1 are reserved for header and superblock)
+        let mut free_pages: Vec<PageId> = all_free_pages
+            .into_iter()
+            .filter(|&page_id| {
+                let page_num = page_id.as_u64();
+                page_num >= 2 && page_num < highest_used.as_u64()
+            })
+            .collect();
 
         free_pages.sort_unstable();
         debug!(
