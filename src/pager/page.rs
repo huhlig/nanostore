@@ -34,6 +34,8 @@ impl PageId {
     pub fn as_u64(&self) -> u64 {
         self.0
     }
+
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
@@ -105,6 +107,7 @@ pub enum PageType {
 
 impl PageType {
     /// Convert from u8 representation
+    #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0 => Some(PageType::Free),
@@ -133,6 +136,7 @@ impl PageType {
     }
 
     /// Convert to u8 representation
+    #[must_use]
     pub fn to_u8(self) -> u8 {
         self as u8
     }
@@ -173,6 +177,7 @@ impl PageHeader {
     pub const SIZE: usize = 32;
 
     /// Create a new page header
+    #[must_use]
     pub fn new(page_id: PageId, page_type: PageType) -> Self {
         Self {
             page_id,
@@ -186,6 +191,7 @@ impl PageHeader {
     }
 
     /// Serialize the header to bytes
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; Self::SIZE] {
         let mut bytes = [0u8; Self::SIZE];
 
@@ -269,6 +275,7 @@ impl Page {
     pub const CHECKSUM_SIZE: usize = 32;
 
     /// Create a new page
+    #[must_use]
     pub fn new(page_id: PageId, page_type: PageType, data_capacity: usize) -> Self {
         Self {
             header: PageHeader::new(page_id, page_type),
@@ -277,6 +284,7 @@ impl Page {
     }
 
     /// Calculate SHA-256 checksum of the page
+    #[must_use]
     pub fn calculate_checksum(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.header.to_bytes());
@@ -287,6 +295,7 @@ impl Page {
     }
 
     /// Verify the checksum of the page
+    #[must_use]
     pub fn verify_checksum(&self, expected: &[u8; 32]) -> bool {
         let actual = self.calculate_checksum();
         actual == *expected
@@ -523,16 +532,19 @@ impl Page {
     }
 
     /// Get the page ID
+    #[must_use]
     pub fn page_id(&self) -> PageId {
         self.header.page_id
     }
 
     /// Get the page type
+    #[must_use]
     pub fn page_type(&self) -> PageType {
         self.header.page_type
     }
 
     /// Get the data slice
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -568,9 +580,10 @@ impl OverflowPageHeader {
     pub const SIZE: usize = 32;
 
     /// Magic number for overflow pages ("OVLF")
-    pub const MAGIC: u32 = 0x4F564C46;
+    pub const MAGIC: u32 = 0x4F56_4C46;
 
     /// Create a new overflow page header
+    #[must_use]
     pub fn new(next_page_id: u32, data_length: u32, checksum: u32) -> Self {
         Self {
             magic: Self::MAGIC,
@@ -581,6 +594,7 @@ impl OverflowPageHeader {
     }
 
     /// Serialize the header to bytes
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; Self::SIZE] {
         let mut bytes = [0u8; Self::SIZE];
 
@@ -633,12 +647,14 @@ impl OverflowPageHeader {
     }
 
     /// Check if this is the last page in the chain
+    #[must_use]
     pub fn is_last(&self) -> bool {
         self.next_page_id == 0
     }
 }
 
 /// Calculate CRC32 checksum for data
+#[must_use]
 pub fn calculate_crc32(data: &[u8]) -> u32 {
     crc32fast::hash(data)
 }

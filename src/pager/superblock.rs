@@ -89,7 +89,7 @@ impl Clone for Superblock {
 
 impl Superblock {
     /// Magic number for superblock validation
-    const MAGIC: u64 = 0x4E4B5355504552; // "NKSUPER" in ASCII
+    const MAGIC: u64 = 0x004E_4B53_5550_4552; // "NKSUPER" in ASCII
 
     /// Current superblock version
     const VERSION: u64 = 1;
@@ -98,6 +98,7 @@ impl Superblock {
     pub const SIZE: usize = 128;
 
     /// Create a new superblock with default values
+    #[must_use]
     pub fn new() -> Self {
         Self {
             magic: Self::MAGIC,
@@ -115,11 +116,13 @@ impl Superblock {
     }
 
     /// Get the current next page ID (for serialization/inspection)
+    #[must_use]
     pub fn next_page_id(&self) -> PageId {
         PageId::from(self.next_page_id.load(Ordering::SeqCst))
     }
 
     /// Serialize the superblock to bytes
+    #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::SIZE);
 
@@ -208,7 +211,7 @@ impl Superblock {
 
     /// Allocate a new page (grows the database)
     ///
-    /// This method uses atomic fetch_add to ensure thread-safe page ID generation.
+    /// This method uses atomic `fetch_add` to ensure thread-safe page ID generation.
     /// Multiple threads can call this simultaneously without risk of duplicate page IDs.
     pub fn allocate_new_page(&mut self) -> PageId {
         // Atomically fetch the current value and increment it

@@ -1,0 +1,7 @@
+[profile.default]
+# Increase slow test threshold from default 60s to 300s
+# Many of our stress tests legitimately take 2-5 minutes
+slow-timeout = { period = "300s" }
+
+# Keep the overall test timeout high for stress tests
+# Default is 10 minutes, we'll keep it at that

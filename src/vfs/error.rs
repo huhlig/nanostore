@@ -20,7 +20,7 @@ pub type FileSystemResult<T> = Result<T, FileSystemError>;
 /// Error Type for VFS Library
 #[derive(Debug)]
 pub enum FileSystemError {
-    /// Path is not valid in this FileSystem
+    /// Path is not valid in this `FileSystem`
     InvalidPath { path: String, reason: String },
     /// Attempt to create an object that already exists.
     PathExists { path: String },
@@ -38,7 +38,7 @@ pub enum FileSystemError {
     InvalidOperation { path: String, operation: String },
     /// Virtual File System doesn't support an operation.
     UnsupportedOperation { operation: String },
-    /// FileSystemError Error
+    /// Internal Error
     InternalError(String),
     /// IO Error
     IOError(std::io::Error),

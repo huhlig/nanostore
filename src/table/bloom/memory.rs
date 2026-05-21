@@ -56,6 +56,7 @@ impl BloomFilter {
     /// * `num_items` - Expected number of items to insert
     /// * `bits_per_key` - Number of bits to use per key (affects false positive rate)
     /// * `num_hash_functions` - Number of hash functions to use (None = auto-calculate)
+    #[must_use]
     pub fn new(num_items: usize, bits_per_key: usize, num_hash_functions: Option<usize>) -> Self {
         let num_bits = num_items * bits_per_key;
         let num_bytes = num_bits.div_ceil(8);
@@ -74,6 +75,7 @@ impl BloomFilter {
     }
 
     /// Create a bloom filter from existing bit data.
+    #[must_use]
     pub fn from_bytes(bits: Vec<u8>, num_hash_functions: usize) -> Self {
         let num_bits = bits.len() * 8;
         Self {
@@ -84,7 +86,8 @@ impl BloomFilter {
         }
     }
 
-    /// Create a bloom filter from existing bit data with explicit num_bits.
+    /// Create a bloom filter from existing bit data with explicit `num_bits`.
+    #[must_use]
     pub fn from_bytes_with_size(bits: Vec<u8>, num_bits: usize, num_hash_functions: usize) -> Self {
         Self {
             bits,
@@ -110,6 +113,7 @@ impl BloomFilter {
     ///
     /// Returns true if the key might be present (with false positive probability),
     /// or false if the key is definitely not present.
+    #[must_use]
     pub fn contains(&self, key: &[u8]) -> bool {
         let (h1, h2) = self.hash_key(key);
 
@@ -124,26 +128,31 @@ impl BloomFilter {
     }
 
     /// Get the number of bits in the filter.
+    #[must_use]
     pub fn num_bits(&self) -> usize {
         self.num_bits
     }
 
     /// Get the number of hash functions.
+    #[must_use]
     pub fn num_hash_functions(&self) -> usize {
         self.num_hash_functions
     }
 
     /// Get the number of items inserted.
+    #[must_use]
     pub fn num_items(&self) -> usize {
         self.num_items
     }
 
     /// Get the raw bit data.
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.bits
     }
 
     /// Calculate the expected false positive rate.
+    #[must_use]
     pub fn false_positive_rate(&self) -> f64 {
         if self.num_items == 0 {
             return 0.0;
@@ -168,10 +177,10 @@ impl BloomFilter {
     /// Uses FNV-1a and a simple multiplicative hash for efficiency.
     fn hash_key(&self, key: &[u8]) -> (u64, u64) {
         // FNV-1a hash
-        let mut h1 = 0xcbf29ce484222325u64;
+        let mut h1 = 0xcbf2_9ce4_8422_2325u64;
         for &byte in key {
             h1 ^= byte as u64;
-            h1 = h1.wrapping_mul(0x100000001b3);
+            h1 = h1.wrapping_mul(0x0100_0000_01b3);
         }
 
         // Simple multiplicative hash

@@ -17,7 +17,7 @@
 use crate::vfs::{FileSystemError, FileSystemResult};
 use std::io::{Read, Seek, SeekFrom, Write};
 
-/// API definition all KBase [`FileSystem`] implementations must adhere to.
+/// API definition all `KBase` [`FileSystem`] implementations must adhere to.
 pub trait FileSystem: std::fmt::Debug + Sized + Sync + Send + 'static {
     /// Type of File Returned by this Virtual File System
     type File: File<FileSystem = Self>;
@@ -50,7 +50,7 @@ pub trait FileSystem: std::fmt::Debug + Sized + Sync + Send + 'static {
 
 /// Handle for File Access
 pub trait File: std::fmt::Debug + Sized + Read + Write + Seek + Sync + Send + 'static {
-    /// FileSystem owning this File
+    /// `FileSystem` owning this File
     type FileSystem: FileSystem<File = Self>;
 
     /// Path to this File

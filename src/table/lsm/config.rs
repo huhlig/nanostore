@@ -28,7 +28,7 @@ pub struct LsmConfig {
     /// Memtable configuration
     pub memtable: MemtableConfig,
 
-    /// SSTable configuration
+    /// `SSTable` configuration
     pub sstable: SStableConfig,
 
     /// Compaction configuration
@@ -73,10 +73,10 @@ pub enum MemtableType {
     BTree,
 }
 
-/// SSTable configuration.
+/// `SSTable` configuration.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SStableConfig {
-    /// Target SSTable size in bytes (default: 2MB)
+    /// Target `SSTable` size in bytes (default: 2MB)
     pub target_size: usize,
 
     /// Block size in bytes (default: 4KB)
@@ -120,10 +120,10 @@ pub struct CompactionConfig {
     /// Level-specific configuration
     pub levels: Vec<LevelConfig>,
 
-    /// Minimum number of SSTables to trigger compaction (default: 4)
+    /// Minimum number of `SSTables` to trigger compaction (default: 4)
     pub min_merge_width: usize,
 
-    /// Maximum number of SSTables to merge at once (default: 10)
+    /// Maximum number of `SSTables` to merge at once (default: 10)
     pub max_merge_width: usize,
 }
 
@@ -176,13 +176,13 @@ impl CompactionConfig {
             LevelConfig {
                 level: 5,
                 max_size: 100 * 1024 * 1024 * 1024, // 100GB
-                max_files: 100000,
+                max_files: 100_000,
                 target_file_size: 2 * 1024 * 1024, // 2MB
             },
             LevelConfig {
                 level: 6,
                 max_size: 1024 * 1024 * 1024 * 1024, // 1TB
-                max_files: 1000000,
+                max_files: 1_000_000,
                 target_file_size: 2 * 1024 * 1024, // 2MB
             },
         ]

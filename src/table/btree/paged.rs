@@ -48,7 +48,14 @@ use std::time::Instant;
 use tracing::{debug, instrument};
 
 /// Default B-Tree order (maximum keys per node).
-const DEFAULT_ORDER: usize = 64;
+/// Set to 252 to account for the 8-byte PageVersion field added for optimistic concurrency.
+/// This ensures nodes fit within page boundaries even with the version overhead.
+/// Larger nodes mean:
+/// - Fewer splits → less root lock contention
+/// - Better I/O efficiency (fewer page reads/writes)
+/// - Reduced split propagation overhead
+/// Trade-off: Slightly more wasted space per node, but worth it for concurrency.
+const DEFAULT_ORDER: usize = 252;
 
 /// Minimum keys per node (except root).
 const MIN_KEYS: usize = DEFAULT_ORDER / 2;
@@ -117,6 +124,39 @@ enum NodeType {
     Leaf,
 }
 
+/// Entry in the optimistic path tracking.
+/// Records a node's page ID, version, and which child index was followed.
+#[derive(Debug, Clone)]
+struct PathEntry {
+    page_id: PageId,
+    version: PageVersion,
+    child_index: usize, // Index of the child that was followed (for internal nodes)
+}
+
+/// Page version for optimistic concurrency control.
+///
+/// Each page has a version number that is incremented on every write.
+/// This allows readers to detect if a page has been modified since they read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct PageVersion(u64);
+
+impl PageVersion {
+    /// Create an initial version (0).
+    fn initial() -> Self {
+        PageVersion(0)
+    }
+
+    /// Increment the version.
+    fn increment(&self) -> Self {
+        PageVersion(self.0.wrapping_add(1))
+    }
+
+    /// Get the raw version number.
+    fn get(&self) -> u64 {
+        self.0
+    }
+}
+
 /// Internal node entry (key + child pointer).
 #[derive(Debug, Clone)]
 struct InternalEntry {
@@ -132,15 +172,22 @@ struct LeafEntry {
 }
 
 /// B-Tree node (either internal or leaf).
+///
+/// Each node includes a version field for optimistic concurrency control.
+/// The version is incremented on every write to detect concurrent modifications.
 #[derive(Debug, Clone)]
 enum BTreeNode {
     Internal {
+        /// Page version for optimistic concurrency control
+        version: PageVersion,
         /// Keys and child pointers (keys.len() == children.len() - 1)
         entries: Vec<InternalEntry>,
         /// Rightmost child pointer
         rightmost_child: PageId,
     },
     Leaf {
+        /// Page version for optimistic concurrency control
+        version: PageVersion,
         /// Key-value pairs with version chains
         entries: Vec<LeafEntry>,
         /// Next leaf page for sequential scans (0 if none)
@@ -152,6 +199,7 @@ impl BTreeNode {
     /// Create a new internal node.
     fn new_internal() -> Self {
         BTreeNode::Internal {
+            version: PageVersion::initial(),
             entries: Vec::new(),
             rightmost_child: PageId::from(0),
         }
@@ -160,6 +208,7 @@ impl BTreeNode {
     /// Create a new leaf node.
     fn new_leaf() -> Self {
         BTreeNode::Leaf {
+            version: PageVersion::initial(),
             entries: Vec::new(),
             next_leaf: PageId::from(0),
         }
@@ -191,6 +240,38 @@ impl BTreeNode {
         self.key_count() >= MIN_KEYS
     }
 
+    /// Get the current version of this node.
+    fn get_version(&self) -> PageVersion {
+        match self {
+            BTreeNode::Internal { version, .. } => *version,
+            BTreeNode::Leaf { version, .. } => *version,
+        }
+    }
+
+    /// Create a new node with an incremented version.
+    fn with_incremented_version(&self) -> Self {
+        match self {
+            BTreeNode::Internal {
+                version,
+                entries,
+                rightmost_child,
+            } => BTreeNode::Internal {
+                version: version.increment(),
+                entries: entries.clone(),
+                rightmost_child: *rightmost_child,
+            },
+            BTreeNode::Leaf {
+                version,
+                entries,
+                next_leaf,
+            } => BTreeNode::Leaf {
+                version: version.increment(),
+                entries: entries.clone(),
+                next_leaf: *next_leaf,
+            },
+        }
+    }
+
     /// Serialize the node to bytes.
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -198,10 +279,14 @@ impl BTreeNode {
         // Write node type (1 byte)
         match self {
             BTreeNode::Internal {
+                version,
                 entries,
                 rightmost_child,
             } => {
                 bytes.push(0); // Internal node
+
+                // Write version (8 bytes)
+                bytes.extend_from_slice(&version.get().to_le_bytes());
 
                 // Write number of entries (4 bytes)
                 bytes.extend_from_slice(&(entries.len() as u32).to_le_bytes());
@@ -219,8 +304,15 @@ impl BTreeNode {
                     bytes.extend_from_slice(&entry.child_page_id.to_bytes());
                 }
             }
-            BTreeNode::Leaf { entries, next_leaf } => {
+            BTreeNode::Leaf {
+                version,
+                entries,
+                next_leaf,
+            } => {
                 bytes.push(1); // Leaf node
+
+                // Write version (8 bytes)
+                bytes.extend_from_slice(&version.get().to_le_bytes());
 
                 // Write number of entries (4 bytes)
                 bytes.extend_from_slice(&(entries.len() as u32).to_le_bytes());
@@ -261,6 +353,19 @@ impl BTreeNode {
         match node_type {
             0 => {
                 // Internal node
+                // Read version (8 bytes)
+                if bytes.len() < offset + 8 {
+                    return Err(crate::table::TableError::corruption(
+                        "BTreeNode::from_bytes",
+                        "truncated_data",
+                        "Insufficient data for version",
+                    ));
+                }
+                let version = PageVersion(u64::from_le_bytes(
+                    bytes[offset..offset + 8].try_into().unwrap(),
+                ));
+                offset += 8;
+
                 if bytes.len() < offset + 4 {
                     return Err(crate::table::TableError::corruption(
                         "BTreeNode::from_bytes",
@@ -323,12 +428,26 @@ impl BTreeNode {
                 }
 
                 Ok(BTreeNode::Internal {
+                    version,
                     entries,
                     rightmost_child,
                 })
             }
             1 => {
                 // Leaf node
+                // Read version (8 bytes)
+                if bytes.len() < offset + 8 {
+                    return Err(crate::table::TableError::corruption(
+                        "BTreeNode::from_bytes",
+                        "truncated_data",
+                        "Insufficient data for version",
+                    ));
+                }
+                let version = PageVersion(u64::from_le_bytes(
+                    bytes[offset..offset + 8].try_into().unwrap(),
+                ));
+                offset += 8;
+
                 if bytes.len() < offset + 4 {
                     return Err(crate::table::TableError::corruption(
                         "BTreeNode::from_bytes",
@@ -406,7 +525,11 @@ impl BTreeNode {
                     entries.push(LeafEntry { key, chain });
                 }
 
-                Ok(BTreeNode::Leaf { entries, next_leaf })
+                Ok(BTreeNode::Leaf {
+                    version,
+                    entries,
+                    next_leaf,
+                })
             }
             _ => Err(crate::table::TableError::corruption(
                 "BTreeNode::from_bytes",
@@ -548,7 +671,6 @@ impl<FS: FileSystem> PagedBTree<FS> {
         }
     }
 
-
     /// Read a node from disk.
     #[instrument(skip(self), fields(page_id = %page_id))]
     fn read_node(&self, page_id: PageId) -> TableResult<BTreeNode> {
@@ -609,6 +731,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 BTreeNode::Internal {
                     entries,
                     rightmost_child,
+                    version,
                 } => {
                     // Binary search for the appropriate child
                     // In our representation: entries[i].child_page_id contains keys < entries[i].key
@@ -650,6 +773,97 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 }
             }
         }
+    }
+
+    /// Search for a key optimistically, recording page versions along the path.
+    /// Returns the leaf page ID, position, and the optimistic path with versions.
+    /// This is used for optimistic concurrency control - the path can be validated later.
+    fn search_optimistic(&self, key: &[u8]) -> TableResult<(PageId, usize, Vec<PathEntry>)> {
+        let mut current_page_id = self.get_root_page_id();
+        let mut path = Vec::new();
+
+        loop {
+            // Read node WITHOUT holding any latch (optimistic read)
+            let node = self.read_node(current_page_id)?;
+            let version = node.get_version();
+
+            match node {
+                BTreeNode::Internal {
+                    entries,
+                    rightmost_child,
+                    ..
+                } => {
+                    // Binary search for the appropriate child
+                    let pos = entries.binary_search_by(|e| e.key.as_slice().cmp(key));
+                    let (child_page_id, child_index) = match pos {
+                        Ok(idx) => {
+                            // Found exact match at idx
+                            // Keys >= entries[idx].key go to the right of this entry
+                            if idx + 1 < entries.len() {
+                                (entries[idx + 1].child_page_id, idx + 1)
+                            } else {
+                                (rightmost_child, entries.len())
+                            }
+                        }
+                        Err(idx) => {
+                            // Key would be inserted at position idx
+                            // This means key < entries[idx].key (or idx == len)
+                            if idx < entries.len() {
+                                (entries[idx].child_page_id, idx)
+                            } else {
+                                (rightmost_child, entries.len())
+                            }
+                        }
+                    };
+
+                    // Record this node in the path with its version
+                    path.push(PathEntry {
+                        page_id: current_page_id,
+                        version,
+                        child_index,
+                    });
+
+                    current_page_id = child_page_id;
+                }
+                BTreeNode::Leaf { entries, .. } => {
+                    // Found the leaf node
+                    let pos = entries.binary_search_by(|e| e.key.as_slice().cmp(key));
+                    let idx = match pos {
+                        Ok(i) => i,
+                        Err(i) => i,
+                    };
+
+                    // Record the leaf in the path (though we won't validate it the same way)
+                    path.push(PathEntry {
+                        page_id: current_page_id,
+                        version,
+                        child_index: idx,
+                    });
+
+                    return Ok((current_page_id, idx, path));
+                }
+            }
+        }
+    }
+
+    /// Validate an optimistic path by checking if any nodes have been modified.
+    /// Returns Ok(true) if the path is still valid, Ok(false) if there was a conflict.
+    /// This should be called while holding a latch on the target node.
+    fn validate_optimistic_path(&self, path: &[PathEntry]) -> TableResult<bool> {
+        // Validate all nodes in the path (except the last one, which is the leaf we're modifying)
+        // We validate from parent to root to detect conflicts early
+        for entry in path.iter().rev().skip(1) {
+            let node = self.read_node(entry.page_id)?;
+            let current_version = node.get_version();
+            
+            if current_version != entry.version {
+                // Version mismatch - node was modified since we read it
+                crate::table::metrics::btree::record_optimistic_conflict();
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
     }
 
     /// Get a value for a key at a specific snapshot.
@@ -744,6 +958,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
         match node {
             BTreeNode::Internal {
+                version,
                 entries,
                 rightmost_child,
             } => {
@@ -761,12 +976,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Create new right sibling
                 let right_page_id = self.pager.allocate_page(PageType::BTreeInternal)?;
                 let right_node = BTreeNode::Internal {
+                    version: PageVersion::initial(),
                     entries: right_entries,
                     rightmost_child: right_rightmost,
                 };
 
-                // Update left node (original page)
+                // Update left node (original page) with incremented version
                 let left_node = BTreeNode::Internal {
+                    version: version.increment(),
                     entries: left_entries,
                     rightmost_child: left_rightmost,
                 };
@@ -778,7 +995,11 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 debug!("Split internal node");
                 Ok((right_page_id, median_key))
             }
-            BTreeNode::Leaf { entries, next_leaf } => {
+            BTreeNode::Leaf {
+                version,
+                entries,
+                next_leaf,
+            } => {
                 // Split leaf node
                 let median_key = entries[mid].key.clone();
 
@@ -791,12 +1012,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Create new right sibling
                 let right_page_id = self.pager.allocate_page(PageType::BTreeLeaf)?;
                 let right_node = BTreeNode::Leaf {
+                    version: PageVersion::initial(),
                     entries: right_entries,
                     next_leaf: *next_leaf,
                 };
 
                 // Update left node to point to new right sibling
                 let left_node = BTreeNode::Leaf {
+                    version: version.increment(),
                     entries: left_entries,
                     next_leaf: right_page_id,
                 };
@@ -832,12 +1055,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
         match (left_node, right_node) {
             (
                 BTreeNode::Internal {
+                    version: left_version,
                     entries: left_entries,
                     rightmost_child: left_rightmost,
                 },
                 BTreeNode::Internal {
                     entries: right_entries,
                     rightmost_child: right_rightmost,
+                    ..
                 },
             ) => {
                 // Check if merge is possible
@@ -856,8 +1081,9 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Add all right entries
                 merged_entries.extend(right_entries);
 
-                // Create merged node
+                // Create merged node with incremented version
                 let merged_node = BTreeNode::Internal {
+                    version: left_version.increment(),
                     entries: merged_entries,
                     rightmost_child: right_rightmost,
                 };
@@ -874,12 +1100,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
             }
             (
                 BTreeNode::Leaf {
+                    version: left_version,
                     entries: left_entries,
                     ..
                 },
                 BTreeNode::Leaf {
                     entries: right_entries,
                     next_leaf: right_next,
+                    ..
                 },
             ) => {
                 // Check if merge is possible
@@ -892,8 +1120,9 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Add all right entries
                 merged_entries.extend(right_entries);
 
-                // Create merged node (left now points to right's next)
+                // Create merged node (left now points to right's next) with incremented version
                 let merged_node = BTreeNode::Leaf {
+                    version: left_version.increment(),
                     entries: merged_entries,
                     next_leaf: right_next,
                 };
@@ -934,10 +1163,12 @@ impl<FS: FileSystem> PagedBTree<FS> {
         match (left_node, right_node) {
             (
                 BTreeNode::Internal {
+                    version: left_version,
                     entries: left_entries,
                     rightmost_child: left_rightmost,
                 },
                 BTreeNode::Internal {
+                    version: right_version,
                     entries: right_entries,
                     rightmost_child: right_rightmost,
                 },
@@ -970,12 +1201,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
                         let new_left_rightmost = entry.child_page_id;
                         right_entries.remove(0);
 
-                        // Update nodes
+                        // Update nodes with incremented versions
                         let new_left = BTreeNode::Internal {
+                            version: left_version.increment(),
                             entries: left_entries,
                             rightmost_child: new_left_rightmost,
                         };
                         let new_right = BTreeNode::Internal {
+                            version: right_version.increment(),
                             entries: right_entries,
                             rightmost_child: right_rightmost,
                         };
@@ -1017,12 +1250,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
                     });
                     moved_entries.extend(right_entries);
 
-                    // Update nodes
+                    // Update nodes with incremented versions
                     let new_left = BTreeNode::Internal {
+                        version: left_version.increment(),
                         entries: left_entries,
                         rightmost_child: new_left_rightmost,
                     };
                     let new_right = BTreeNode::Internal {
+                        version: right_version.increment(),
                         entries: moved_entries,
                         rightmost_child: right_rightmost,
                     };
@@ -1035,10 +1270,12 @@ impl<FS: FileSystem> PagedBTree<FS> {
             }
             (
                 BTreeNode::Leaf {
+                    version: left_version,
                     entries: left_entries,
                     next_leaf: left_next,
                 },
                 BTreeNode::Leaf {
+                    version: right_version,
                     entries: right_entries,
                     next_leaf: right_next,
                 },
@@ -1061,12 +1298,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
                     // New separator is the first key in right
                     let new_separator = right_entries.first().map(|e| e.key.clone());
 
-                    // Update nodes
+                    // Update nodes with incremented versions
                     let new_left = BTreeNode::Leaf {
+                        version: left_version.increment(),
                         entries: left_entries,
                         next_leaf: left_next,
                     };
                     let new_right = BTreeNode::Leaf {
+                        version: right_version.increment(),
                         entries: right_entries,
                         next_leaf: right_next,
                     };
@@ -1095,12 +1334,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
                     moved_entries.extend(right_entries);
 
-                    // Update nodes
+                    // Update nodes with incremented versions
                     let new_left = BTreeNode::Leaf {
+                        version: left_version.increment(),
                         entries: left_entries,
                         next_leaf: left_next,
                     };
                     let new_right = BTreeNode::Leaf {
+                        version: right_version.increment(),
                         entries: moved_entries,
                         next_leaf: right_next,
                     };
@@ -1117,10 +1358,10 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
     /// Insert a key-value pair into the tree with proper latch coupling.
     ///
-    /// This implementation uses a simplified locking approach:
-    /// - Acquires a coarse-grained write lock on the entire tree during modifications
-    /// - This is safe and correct, though less concurrent than fine-grained latch coupling
-    /// - Future optimization: implement true latch coupling with proper lifetime management
+    /// This implementation uses latch coupling (crabbing) for concurrency:
+    /// - Acquires latches on nodes as we descend
+    /// - Releases parent latches when child is "safe" (won't split)
+    /// - Only holds latches on the path that might need modification during splits
     fn insert_internal(
         &self,
         key: Vec<u8>,
@@ -1128,23 +1369,22 @@ impl<FS: FileSystem> PagedBTree<FS> {
         tx_id: TransactionId,
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
-        // For now, use a simpler approach: acquire a single write lock on the root
-        // This prevents concurrent modifications but is safe and correct
-        let root_latch = self.get_page_latch(self.get_root_page_id());
-        let _root_guard = root_latch.write();
-        
-        // Start at root
+        // Start at root - for now, use simple approach without latch coupling
+        // TODO: Implement optimistic path validation as per safe_paged_btree_concurrency_guide.md
         let mut current_page_id = self.get_root_page_id();
         let mut path: Vec<(PageId, PageId)> = Vec::new();
-        
-        // Descend tree to find leaf
+
+        // Descend tree to find leaf (optimistic read, no latches yet)
         loop {
-            
-            // Read the node
+            // Read the node without holding a latch
             let node = self.read_node(current_page_id)?;
-            
+
             match node {
-                BTreeNode::Internal { ref entries, rightmost_child } => {
+                BTreeNode::Internal {
+                    ref entries,
+                    rightmost_child,
+                    ..
+                } => {
                     // Find child to descend to
                     let pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
                     let child_page_id = match pos {
@@ -1163,63 +1403,93 @@ impl<FS: FileSystem> PagedBTree<FS> {
                             }
                         }
                     };
-                    
+
                     // Track path for potential splits
                     path.push((current_page_id, child_page_id));
                     current_page_id = child_page_id;
                 }
-                BTreeNode::Leaf { mut entries, next_leaf } => {
-                    // Reached leaf - perform insertion while holding latch
-                    
-                    // Find insertion position
-                    let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
-                    let pos = match current_pos {
-                        Ok(i) => i,
-                        Err(i) => i,
-                    };
-                    
-                    let is_new_key = current_pos.is_err();
-                    
-                    // Perform the insertion/update
-                    if pos < entries.len() && entries[pos].key == key {
-                        // Update existing entry's version chain
-                        let old_chain = entries[pos].chain.clone();
-                        let mut new_chain = old_chain.prepend(value, tx_id);
-                        if commit_lsn.as_u64() > 0 {
-                            new_chain.commit(commit_lsn);
+                BTreeNode::Leaf {
+                    version,
+                    mut entries,
+                    next_leaf,
+                } => {
+                    // Now acquire write latch on the leaf only
+                    let leaf_latch = self.get_page_latch(current_page_id);
+                    let _leaf_guard = leaf_latch.write();
+
+                    // Re-read the leaf to ensure it hasn't changed
+                    let node = self.read_node(current_page_id)?;
+                    let (version, entries, next_leaf, is_new_key) = if let BTreeNode::Leaf {
+                        version,
+                        mut entries,
+                        next_leaf,
+                    } = node
+                    {
+                        // Find insertion position
+                        let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
+                        let pos = match current_pos {
+                            Ok(i) => i,
+                            Err(i) => i,
+                        };
+
+                        let is_new_key = current_pos.is_err();
+
+                        // Perform the insertion/update
+                        if pos < entries.len() && entries[pos].key == key {
+                            // Update existing entry's version chain
+                            let old_chain = entries[pos].chain.clone();
+                            let mut new_chain = old_chain.prepend(value, tx_id);
+                            if commit_lsn.as_u64() > 0 {
+                                new_chain.commit(commit_lsn);
+                            }
+                            entries[pos].chain = new_chain;
+                        } else {
+                            // Insert new entry
+                            let mut chain = VersionChain::new(value, tx_id);
+                            if commit_lsn.as_u64() > 0 {
+                                chain.commit(commit_lsn);
+                            }
+                            entries.insert(
+                                pos,
+                                LeafEntry {
+                                    key: key.clone(),
+                                    chain,
+                                },
+                            );
                         }
-                        entries[pos].chain = new_chain;
+
+                        (version, entries, next_leaf, is_new_key)
                     } else {
-                        // Insert new entry
-                        let mut chain = VersionChain::new(value, tx_id);
-                        if commit_lsn.as_u64() > 0 {
-                            chain.commit(commit_lsn);
-                        }
-                        entries.insert(pos, LeafEntry {
-                            key: key.clone(),
-                            chain,
-                        });
-                    }
-                    
-                    // Reconstruct the modified node
-                    let modified_node = BTreeNode::Leaf { entries, next_leaf };
-                    
+                        // Node type changed (shouldn't happen), retry would be needed
+                        return Err(crate::table::TableError::corruption(
+                            "PagedBTree::insert_internal",
+                            "node_type_changed",
+                            "Leaf node changed to internal during insert",
+                        ));
+                    };
+
+                    // Reconstruct the modified node with incremented version
+                    let modified_node = BTreeNode::Leaf {
+                        version: version.increment(),
+                        entries,
+                        next_leaf,
+                    };
+
                     // Write the updated node (still holding latch)
                     self.write_node(current_page_id, &modified_node)?;
-                    
+
                     // Check if split is needed
                     if modified_node.is_full() {
-                        // Split while holding latches on the path
+                        // Split while holding latch on the leaf
                         self.split_and_propagate(current_page_id, &modified_node, path)?;
                     }
-                    
-                    // Root guard will be released when it goes out of scope
-                    
+
                     // Update row count if new key
                     if is_new_key {
                         self.increment_row_count()?;
                     }
-                    
+
+                    // Leaf latch released when _leaf_guard goes out of scope
                     return Ok(());
                 }
             }
@@ -1244,6 +1514,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             // Create new root
             let new_root_page_id = self.pager.allocate_page(PageType::BTreeInternal)?;
             let new_root = BTreeNode::Internal {
+                version: PageVersion::initial(),
                 entries: vec![InternalEntry {
                     key: median_key,
                     child_page_id: page_id,
@@ -1293,6 +1564,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
         if let BTreeNode::Internal {
             ref mut entries,
             ref mut rightmost_child,
+            ..
         } = parent_node
         {
             // In our B-Tree structure:
@@ -1422,6 +1694,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
         if let BTreeNode::Internal {
             ref mut entries,
             rightmost_child,
+            ..
         } = parent_node
         {
             for i in 0..entries.len() {
@@ -1463,6 +1736,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             BTreeNode::Internal {
                 entries,
                 rightmost_child,
+                ..
             } => (entries, rightmost_child),
             _ => {
                 return Err(crate::table::TableError::corruption(
@@ -1518,6 +1792,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 if let BTreeNode::Internal {
                     ref mut entries,
                     ref mut rightmost_child,
+                    ..
                 } = updated_parent
                 {
                     entries.remove(separator_index);
@@ -1555,6 +1830,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 if let BTreeNode::Internal {
                     ref mut entries,
                     ref mut rightmost_child,
+                    ..
                 } = updated_parent
                 {
                     entries.remove(separator_index);
@@ -1645,15 +1921,19 @@ impl<FS: FileSystem> PagedBTree<FS> {
         // Traverse all leaf pages and commit versions
         loop {
             let node = self.read_node(current_page_id)?;
-            if let BTreeNode::Leaf { entries, next_leaf } = node {
+            if let BTreeNode::Leaf {
+                version, entries, next_leaf
+            } = node
+            {
                 let mut new_entries = entries.clone();
 
                 for entry in new_entries.iter_mut() {
                     Self::commit_chain_recursive(&mut entry.chain, tx_id, commit_lsn);
                 }
 
-                // Write back the updated node
+                // Write back the updated node with incremented version
                 let updated_node = BTreeNode::Leaf {
+                    version: version.increment(),
                     entries: new_entries,
                     next_leaf,
                 };
@@ -1725,6 +2005,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             BTreeNode::Internal {
                 entries,
                 rightmost_child,
+                ..
             } => {
                 stats.internal_node_count += 1;
 
@@ -1736,7 +2017,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             }
             BTreeNode::Leaf {
                 entries,
-                next_leaf: _,
+                ..
             } => {
                 stats.leaf_node_count += 1;
 
@@ -2822,7 +3103,10 @@ impl<'a, FS: FileSystem> PagedBTreeCursor<'a, FS> {
         loop {
             let node = self.table.read_node(self.current_page_id)?;
 
-            if let BTreeNode::Leaf { entries, next_leaf } = node {
+            if let BTreeNode::Leaf {
+                entries, next_leaf, ..
+            } = node
+            {
                 // Try to advance within current leaf
                 while self.current_position < entries.len() {
                     self.load_current_entry()?;
@@ -3280,6 +3564,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             BTreeNode::Internal {
                 entries,
                 rightmost_child,
+                ..
             } => {
                 let mut count = 0;
                 for entry in &entries {
@@ -3301,6 +3586,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             BTreeNode::Internal {
                 entries,
                 rightmost_child,
+                ..
             } => {
                 // Verify internal node structure
                 for entry in &entries {
@@ -3344,6 +3630,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             BTreeNode::Internal {
                 entries,
                 rightmost_child,
+                ..
             } => {
                 // Recursively vacuum all child nodes
                 for entry in &entries {
@@ -3352,6 +3639,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 total_removed += self.vacuum_node(rightmost_child, min_visible_lsn)?;
             }
             BTreeNode::Leaf {
+                version,
                 mut entries,
                 next_leaf,
             } => {
@@ -3366,8 +3654,12 @@ impl<FS: FileSystem> PagedBTree<FS> {
                     }
                 }
 
-                // Write the updated node back to disk
-                let updated_node = BTreeNode::Leaf { entries, next_leaf };
+                // Write the updated node back to disk with incremented version
+                let updated_node = BTreeNode::Leaf {
+                    version: version.increment(),
+                    entries,
+                    next_leaf
+                };
                 self.write_node(page_id, &updated_node)?;
             }
         }
@@ -3387,6 +3679,7 @@ mod tests {
         if let BTreeNode::Internal {
             entries,
             rightmost_child,
+            ..
         } = &mut internal
         {
             entries.push(InternalEntry {

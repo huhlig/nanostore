@@ -41,6 +41,7 @@ pub struct MemoryFileSystem(Arc<RwLock<BTreeMap<String, MemoryEntry>>>);
 
 impl MemoryFileSystem {
     /// Create a new Memory FileSystem
+    #[must_use]
     pub fn new() -> MemoryFileSystem {
         MemoryFileSystem(Arc::new(RwLock::new(BTreeMap::new())))
     }

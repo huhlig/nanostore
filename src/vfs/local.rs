@@ -24,7 +24,7 @@ pub struct LocalFileSystem {
 }
 
 impl LocalFileSystem {
-    /// Create a new LocalFileSystem with the provided root path.
+    /// Create a new `LocalFileSystem` with the provided root path.
     pub fn new<T: AsRef<std::path::Path>>(root: T) -> Self {
         LocalFileSystem {
             root: root.as_ref().to_path_buf(),

@@ -19,10 +19,12 @@
 pub struct Version(u64);
 
 impl Version {
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
         self.0
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
@@ -200,6 +202,7 @@ impl ValueRef {
     const TYPE_OVERFLOW_CHAIN: u8 = 0x02;
 
     /// Check if this is an inline value reference.
+    #[must_use]
     pub fn is_inline(&self) -> bool {
         matches!(self, ValueRef::Inline)
     }
@@ -208,6 +211,7 @@ impl ValueRef {
     ///
     /// Returns None for Inline (size depends on actual value),
     /// Some(size) for SinglePage and OverflowChain.
+    #[must_use]
     pub fn size_hint(&self) -> Option<u64> {
         match self {
             ValueRef::Inline => None,
@@ -217,6 +221,7 @@ impl ValueRef {
     }
 
     /// Check if this value requires overflow pages.
+    #[must_use]
     pub fn requires_overflow(&self) -> bool {
         !matches!(self, ValueRef::Inline)
     }
@@ -227,6 +232,7 @@ impl ValueRef {
     /// - Inline: [0x00] (1 byte)
     /// - SinglePage: [0x01][page_id: u32][offset: u16][length: u32] (11 bytes)
     /// - OverflowChain: [0x02][first_page_id: u32][total_length: u64][page_count: u32] (17 bytes)
+    #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         match self {
             ValueRef::Inline => {
@@ -411,10 +417,12 @@ pub enum EncryptionKind {
 pub struct TableId(u64);
 
 impl TableId {
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
         self.0
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }

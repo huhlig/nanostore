@@ -537,16 +537,19 @@ impl<FS: FileSystem> WalWriter<FS> {
     }
 
     /// Get current LSN
+    #[must_use]
     pub fn current_lsn(&self) -> LogSequenceNumber {
         self.state.read().current_lsn
     }
 
     /// Get active transactions
+    #[must_use]
     pub fn active_transactions(&self) -> Vec<TransactionId> {
         self.state.read().active_txns.iter().copied().collect()
     }
 
     /// Get current file size
+    #[must_use]
     pub fn file_size(&self) -> u64 {
         self.state.read().current_offset
     }
@@ -572,11 +575,13 @@ impl<FS: FileSystem> WalWriter<FS> {
     }
 
     /// Get group commit metrics (if enabled)
+    #[must_use]
     pub fn group_commit_metrics(&self) -> Option<&crate::wal::GroupCommitMetrics> {
         self.group_commit.as_ref().map(|gc| gc.metrics())
     }
 
     /// Check if group commit is enabled
+    #[must_use]
     pub fn is_group_commit_enabled(&self) -> bool {
         self.group_commit.is_some()
     }

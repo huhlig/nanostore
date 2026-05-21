@@ -18,7 +18,7 @@
 //!
 //! This module provides a standalone Bloom filter table that stores its bitmap
 //! across multiple pages, supporting large-scale approximate membership testing.
-//! Unlike the in-memory BloomFilter in lsm/bloom.rs, this implementation is
+//! Unlike the in-memory `BloomFilter` in lsm/bloom.rs, this implementation is
 //! designed for persistent storage and can handle filters larger than memory.
 
 use crate::pager::{Page, PageId, PageType, Pager};
@@ -91,7 +91,7 @@ struct BloomFilterMetadata {
     _reserved: [u8; 32],
 }
 
-const BLOOM_MAGIC: u32 = 0x424C4F4D; // "BLOM"
+const BLOOM_MAGIC: u32 = 0x424C_4F4D; // "BLOM"
 const BLOOM_VERSION: u32 = 1;
 
 impl<FS: FileSystem> PagedBloomFilter<FS> {
@@ -385,10 +385,10 @@ impl<FS: FileSystem> PagedBloomFilter<FS> {
     /// Hash a key using two independent hash functions.
     fn hash_key(&self, key: &[u8]) -> (u64, u64) {
         // FNV-1a hash
-        let mut h1 = 0xcbf29ce484222325u64;
+        let mut h1 = 0xcbf2_9ce4_8422_2325u64;
         for &byte in key {
             h1 ^= byte as u64;
-            h1 = h1.wrapping_mul(0x100000001b3);
+            h1 = h1.wrapping_mul(0x0100_0000_01b3);
         }
 
         // Simple multiplicative hash

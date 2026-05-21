@@ -17,14 +17,14 @@
 //! Merge iterator for LSM tree.
 //!
 //! This module provides iterators for reading across multiple data sources
-//! in the LSM tree (memtable, immutable memtables, and SSTables).
+//! in the LSM tree (memtable, immutable memtables, and `SSTables`).
 //!
 //! # Architecture
 //!
-//! - **LsmIterator trait**: Common interface for all data source iterators
-//! - **MemtableIterator**: Iterates over a single memtable
-//! - **SStableIterator**: Iterates over a single SSTable
-//! - **MergeIterator**: K-way merge of multiple iterators using min-heap
+//! - **`LsmIterator` trait**: Common interface for all data source iterators
+//! - **`MemtableIterator`**: Iterates over a single memtable
+//! - **`SStableIterator`**: Iterates over a single `SSTable`
+//! - **`MergeIterator`**: K-way merge of multiple iterators using min-heap
 //!
 //! # Features
 //!
@@ -67,6 +67,7 @@ pub struct LsmEntry {
 
 impl LsmEntry {
     /// Create a new LSM entry.
+    #[must_use]
     pub fn new(key: Vec<u8>, chain: VersionChain, priority: usize) -> Self {
         Self {
             key,
@@ -328,12 +329,12 @@ impl LsmIterator for MemtableIterator {
     }
 }
 
-/// Iterator over an SSTable using block-level iteration.
+/// Iterator over an `SSTable` using block-level iteration.
 ///
 /// This implementation loads data blocks on demand rather than loading all entries
-/// into memory, providing better memory efficiency for large SSTables.
+/// into memory, providing better memory efficiency for large `SSTables`.
 pub struct SStableIterator<FS: FileSystem> {
-    /// SSTable reader
+    /// `SSTable` reader
     reader: Arc<SStableReader<FS>>,
     /// Current data block index in the index block
     current_block_idx: Option<usize>,
@@ -350,7 +351,7 @@ pub struct SStableIterator<FS: FileSystem> {
 }
 
 impl<FS: FileSystem> SStableIterator<FS> {
-    /// Create a new SSTable iterator with block-level iteration.
+    /// Create a new `SSTable` iterator with block-level iteration.
     pub fn new(
         reader: Arc<SStableReader<FS>>,
         direction: Direction,

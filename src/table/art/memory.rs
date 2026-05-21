@@ -24,9 +24,9 @@
 
 use crate::snap::Snapshot;
 use crate::table::{
-    BatchOps, BatchReport, Flushable, MutableTable, OrderedScan, PointLookup, PrefixScan,
+    BatchOps, BatchReport, Flushable, MutableTable, Mutation, OrderedScan, PointLookup, PrefixScan,
     SearchableTable, Table, TableCapabilities, TableCursor, TableEngineKind, TableReader,
-    TableResult, TableStatistics, TableWriter,
+    TableResult, TableStatistics, TableWriter, WriteBatch,
 };
 use crate::txn::{TransactionId, VersionChain};
 use crate::types::{Bound, KeyBuf, ScanBounds, TableId, ValueBuf};
@@ -1413,29 +1413,29 @@ impl<'a> BatchOps for MemoryARTWriter<'a> {
             .collect())
     }
 
-    fn apply_batch(&mut self, batch: crate::table::WriteBatch) -> TableResult<BatchReport> {
+    fn apply_batch(&mut self, batch: WriteBatch<'_>) -> TableResult<BatchReport> {
         let mut report = BatchReport {
             attempted: batch.mutations.len() as u64,
             ..Default::default()
         };
         for mutation in batch.mutations {
             match mutation {
-                crate::table::Mutation::Put { key, value } => {
+                Mutation::Put { key, value } => {
                     self.put(&key, &value)?;
                     report.applied += 1;
                     report.bytes_written += key.len() as u64 + value.len() as u64;
                 }
-                crate::table::Mutation::Delete { key } => {
+                Mutation::Delete { key } => {
                     if self.delete(&key)? {
                         report.deleted += 1;
                     }
                     report.applied += 1;
                 }
-                crate::table::Mutation::RangeDelete { bounds } => {
+                Mutation::RangeDelete { bounds } => {
                     report.deleted += self.range_delete(bounds)?;
                     report.applied += 1;
                 }
-                crate::table::Mutation::Merge { .. } => continue,
+                Mutation::Merge { .. } => continue,
             }
         }
         Ok(report)

@@ -107,6 +107,7 @@ pub struct WalRecovery {
 
 impl WalRecovery {
     /// Create a new recovery manager
+    #[must_use]
     pub fn new() -> Self {
         Self {
             transactions: BTreeMap::new(),
@@ -164,7 +165,7 @@ impl WalRecovery {
                 self.process_rollback(txn_id)?;
             }
             RecordData::Checkpoint { lsn, active_txns } => {
-                self.process_checkpoint(lsn, active_txns)?;
+                self.process_checkpoint(lsn, &active_txns)?;
             }
             RecordData::Prepare { txn_id } => {
                 // Prepare records indicate a transaction entered the prepare phase
@@ -255,7 +256,7 @@ impl WalRecovery {
     fn process_checkpoint(
         &mut self,
         lsn: LogSequenceNumber,
-        active_txns: Vec<TransactionId>,
+        active_txns: &[TransactionId],
     ) -> WalResult<()> {
         self.last_checkpoint_lsn = Some(lsn);
 

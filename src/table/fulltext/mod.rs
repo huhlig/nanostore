@@ -17,7 +17,7 @@
 //! Full-text search table engine.
 //!
 //! This module provides a full-text search table using an inverted index
-//! stored in a BTree. Supports tokenization, stemming, stop words, and
+//! stored in a `BTree`. Supports tokenization, stemming, stop words, and
 //! TF-IDF scoring.
 
 mod posting;
@@ -42,7 +42,7 @@ use std::sync::{Arc, RwLock};
 use tokenizer::Tokenizer as TextTokenizer;
 
 /// Magic number for full-text index validation.
-const FULLTEXT_MAGIC: u32 = 0x46545854; // "FTXT"
+const FULLTEXT_MAGIC: u32 = 0x4654_5854; // "FTXT"
 const FULLTEXT_VERSION: u32 = 1;
 
 /// Configuration for full-text search index.
@@ -102,7 +102,7 @@ pub struct PagedFullTextIndex<FS: FileSystem> {
     /// In-memory inverted index: term -> posting list
     inverted_index: RwLock<HashMap<String, PostingList>>,
 
-    /// In-memory document store: doc_id -> document entry
+    /// In-memory document store: `doc_id` -> document entry
     document_store: RwLock<HashMap<Vec<u8>, DocumentEntry>>,
 
     /// Number of documents
@@ -692,8 +692,8 @@ impl<FS: FileSystem> FullTextSearch for PagedFullTextIndex<FS> {
         &self,
         doc_id: &[u8],
         fields: &[TextField<'_>],
-        tx_id: crate::txn::TransactionId,
-        commit_lsn: crate::wal::LogSequenceNumber,
+        tx_id: TransactionId,
+        commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
         // Check if document already exists
         let doc_exists = {

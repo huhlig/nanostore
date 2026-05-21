@@ -91,7 +91,7 @@ pub struct HnswConfig {
     /// Maximum connections for layer 0 (typically 2*M)
     pub max_connections_layer0: usize,
 
-    /// Size of dynamic candidate list during construction (ef_construction)
+    /// Size of dynamic candidate list during construction (`ef_construction`)
     pub ef_construction: usize,
 
     /// Multiplier for layer selection probability
@@ -186,7 +186,7 @@ impl HnswNode {
     }
 
     /// Prepend a new version to this node's chain.
-    /// For deletions, use prepend_tombstone instead.
+    /// For deletions, use `prepend_tombstone` instead.
     fn prepend_version(&mut self, tx_id: TransactionId) {
         let old_chain = std::mem::replace(
             &mut self.version_chain,
@@ -205,7 +205,7 @@ impl HnswNode {
     }
 
     /// Vacuum old versions from this node's chain.
-    /// Returns (removed_count, freed_refs) where freed_refs contains ValueRefs that need cleanup.
+    /// Returns (`removed_count`, `freed_refs`) where `freed_refs` contains `ValueRefs` that need cleanup.
     fn vacuum(
         &mut self,
         min_visible_lsn: LogSequenceNumber,
@@ -235,7 +235,7 @@ struct HnswMetadata {
     /// Maximum connections for layer 0
     max_connections_layer0: u32,
 
-    /// ef_construction parameter
+    /// `ef_construction` parameter
     ef_construction: u32,
 
     /// ml parameter (stored as f64)
@@ -250,14 +250,14 @@ struct HnswMetadata {
     /// Number of vectors
     num_vectors: u64,
 
-    /// First page of id_to_node mapping (0 if none)
+    /// First page of `id_to_node` mapping (0 if none)
     mapping_page_id: u64,
 
     /// Reserved for future use
     _reserved: [u8; 56],
 }
 
-const HNSW_MAGIC: u32 = 0x484E5357; // "HNSW"
+const HNSW_MAGIC: u32 = 0x484E_5357; // "HNSW"
 const HNSW_VERSION: u32 = 1;
 
 /// Candidate for priority queue during search
@@ -514,7 +514,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let mut rng_state = self.rng_state.write().unwrap();
 
         // Simple LCG random number generator
-        *rng_state = rng_state.wrapping_mul(1664525).wrapping_add(1013904223);
+        *rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         let uniform = (*rng_state as f64) / (u64::MAX as f64);
 
         // Use exponential distribution for layer selection
@@ -762,7 +762,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             version_chain,
         })
     }
-    /// Serialize id_to_node mapping to pages
+    /// Serialize `id_to_node` mapping to pages
     fn serialize_mapping(&self, mapping: &HashMap<KeyBuf, NodeId>) -> TableResult<PageId> {
         if mapping.is_empty() {
             return Ok(PageId::from(0u64));
@@ -843,7 +843,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         Ok(first_page_id)
     }
 
-    /// Deserialize id_to_node mapping from pages
+    /// Deserialize `id_to_node` mapping from pages
     fn deserialize_mapping(&self, first_page_id: PageId) -> TableResult<HashMap<KeyBuf, NodeId>> {
         if first_page_id.as_u64() == 0 {
             return Ok(HashMap::new());
@@ -948,7 +948,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         Ok(mapping)
     }
-    /// Persist the id_to_node mapping to disk and update metadata
+    /// Persist the `id_to_node` mapping to disk and update metadata
     fn persist_mapping(&self) -> TableResult<()> {
         let mapping = self.id_to_node.read().unwrap();
         let mapping_page_id = self.serialize_mapping(&mapping)?;

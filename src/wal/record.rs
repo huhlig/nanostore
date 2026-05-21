@@ -48,9 +48,12 @@ use std::io::Write;
 pub struct LogSequenceNumber(u64);
 
 impl LogSequenceNumber {
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
         self.0
     }
+
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
@@ -104,6 +107,7 @@ impl RecordType {
     }
 
     /// Convert to u8
+    #[must_use]
     pub fn to_u8(self) -> u8 {
         self as u8
     }
@@ -169,6 +173,7 @@ impl WriteOpType {
     }
 
     /// Convert to u8
+    #[must_use]
     pub fn to_u8(self) -> u8 {
         self as u8
     }
@@ -221,6 +226,7 @@ pub enum RecordData {
 
 impl RecordData {
     /// Get the record type
+    #[must_use]
     pub fn record_type(&self) -> RecordType {
         match self {
             RecordData::Begin { .. } => RecordType::Begin,
@@ -233,6 +239,7 @@ impl RecordData {
     }
 
     /// Get the transaction ID (if applicable)
+    #[must_use]
     pub fn txn_id(&self) -> Option<TransactionId> {
         match self {
             RecordData::Begin { txn_id } => Some(*txn_id),
@@ -262,6 +269,7 @@ pub struct WalRecord {
 
 impl WalRecord {
     /// Create a new WAL record
+    #[must_use]
     pub fn new(
         lsn: LogSequenceNumber,
         data: RecordData,

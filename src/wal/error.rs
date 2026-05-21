@@ -151,6 +151,7 @@ impl WalError {
     }
 
     /// Create a checksum mismatch error
+    #[must_use]
     pub fn checksum_mismatch(
         lsn: LogSequenceNumber,
         offset: u64,
@@ -179,11 +180,13 @@ impl WalError {
     }
 
     /// Create a transaction not found error
+    #[must_use]
     pub fn transaction_not_found(txn_id: TransactionId) -> Self {
         Self::TransactionNotFound { txn_id }
     }
 
     /// Create a transaction already exists error
+    #[must_use]
     pub fn transaction_already_exists(txn_id: TransactionId) -> Self {
         Self::TransactionAlreadyExists { txn_id }
     }
@@ -202,6 +205,7 @@ impl WalError {
     }
 
     /// Create a WAL full error
+    #[must_use]
     pub fn wal_full(current_size: u64, max_size: u64) -> Self {
         Self::WalFull {
             current_size,

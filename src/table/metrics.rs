@@ -176,6 +176,24 @@ pub mod btree {
     pub fn record_search_duration(start: Instant) {
         histogram!("nanostore.table.btree.search_duration").record(start.elapsed().as_secs_f64());
     }
+
+    /// Record an optimistic concurrency conflict (version mismatch during validation).
+    #[inline]
+    pub fn record_optimistic_conflict() {
+        counter!("nanostore.table.btree.optimistic_conflict").increment(1);
+    }
+
+    /// Record a successful optimistic operation (no conflicts).
+    #[inline]
+    pub fn record_optimistic_success() {
+        counter!("nanostore.table.btree.optimistic_success").increment(1);
+    }
+
+    /// Record an optimistic retry attempt.
+    #[inline]
+    pub fn record_optimistic_retry() {
+        counter!("nanostore.table.btree.optimistic_retry").increment(1);
+    }
 }
 
 // =============================================================================
