@@ -14,14 +14,14 @@
 // limitations under the License.
 //
 
-//! SSTable (Sorted String Table) implementation for LSM tree.
+//! `SSTable` (Sorted String Table) implementation for LSM tree.
 //!
-//! An SSTable is an immutable, sorted file format that stores key-value pairs.
+//! An `SSTable` is an immutable, sorted file format that stores key-value pairs.
 //! It consists of:
 //! - Data blocks: Contain sorted key-value pairs
 //! - Index block: Maps keys to data block offsets
 //! - Bloom filter: Probabilistic filter for membership testing
-//! - Footer: Metadata about the SSTable
+//! - Footer: Metadata about the `SSTable`
 //!
 //! # Format
 //!
@@ -52,7 +52,7 @@ use crate::wal::LogSequenceNumber;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
-/// SSTable identifier (unique within a table).
+/// `SSTable` identifier (unique within a table).
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -133,7 +133,7 @@ pub struct SStableFooter {
 }
 
 impl SStableFooter {
-    const MAGIC: u64 = 0x5353544142; // "SSTAB"
+    const MAGIC: u64 = 0x0053_5354_4142; // "SSTAB"
     const VERSION: u32 = 1;
     const SIZE: usize = 256; // Fixed size for footer
 
@@ -1133,7 +1133,7 @@ impl<FS: FileSystem> SStableReader<FS> {
     ) -> TableResult<Vec<u8>> {
         let mut result = Vec::with_capacity(size);
         let mut remaining = size;
-        let mut target_offset = offset;
+        let target_offset = offset;
 
         // First, find which page contains the starting offset
         let mut cumulative_offset = 0u64;

@@ -820,6 +820,7 @@ impl MergeIterator {
     }
 
     /// Get the current key-value pair.
+    #[must_use]
     pub fn current(&self) -> Option<(&[u8], &[u8])> {
         self.current
             .as_ref()
@@ -827,6 +828,7 @@ impl MergeIterator {
     }
 
     /// Check if the iterator is valid.
+    #[must_use]
     pub fn valid(&self) -> bool {
         self.current.is_some()
     }

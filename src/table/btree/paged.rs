@@ -1356,12 +1356,15 @@ impl<FS: FileSystem> PagedBTree<FS> {
         }
     }
 
-    /// Insert a key-value pair into the tree with proper latch coupling.
+    /// Insert a key-value pair into the tree with optimistic concurrency control.
     ///
-    /// This implementation uses latch coupling (crabbing) for concurrency:
-    /// - Acquires latches on nodes as we descend
-    /// - Releases parent latches when child is "safe" (won't split)
-    /// - Only holds latches on the path that might need modification during splits
+    /// This implementation uses optimistic concurrency:
+    /// - Traverses tree WITHOUT latches, recording page versions
+    /// - Acquires write latch only on the target leaf
+    /// - Validates that the path hasn't changed (version check)
+    /// - Retries from root if conflict detected
+    ///
+    /// This dramatically reduces lock contention compared to latch coupling.
     fn insert_internal(
         &self,
         key: Vec<u8>,
@@ -1369,130 +1372,131 @@ impl<FS: FileSystem> PagedBTree<FS> {
         tx_id: TransactionId,
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
-        // Start at root - for now, use simple approach without latch coupling
-        // TODO: Implement optimistic path validation as per safe_paged_btree_concurrency_guide.md
-        let mut current_page_id = self.get_root_page_id();
-        let mut path: Vec<(PageId, PageId)> = Vec::new();
+        const MAX_RETRIES: usize = 10;
+        let mut retry_count = 0;
 
-        // Descend tree to find leaf (optimistic read, no latches yet)
         loop {
-            // Read the node without holding a latch
-            let node = self.read_node(current_page_id)?;
+            // Phase 1: Optimistic traversal (no latches)
+            let (leaf_page_id, _pos, optimistic_path) = self.search_optimistic(&key)?;
 
-            match node {
-                BTreeNode::Internal {
-                    ref entries,
-                    rightmost_child,
-                    ..
-                } => {
-                    // Find child to descend to
-                    let pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
-                    let child_page_id = match pos {
-                        Ok(idx) => {
-                            if idx + 1 < entries.len() {
-                                entries[idx + 1].child_page_id
-                            } else {
-                                rightmost_child
-                            }
-                        }
-                        Err(idx) => {
-                            if idx < entries.len() {
-                                entries[idx].child_page_id
-                            } else {
-                                rightmost_child
-                            }
-                        }
-                    };
+            // Phase 2: Acquire write latch on leaf
+            let leaf_latch = self.get_page_latch(leaf_page_id);
+            let _leaf_guard = leaf_latch.write();
 
-                    // Track path for potential splits
-                    path.push((current_page_id, child_page_id));
-                    current_page_id = child_page_id;
+            // Phase 3: Validate the optimistic path
+            if !self.validate_optimistic_path(&optimistic_path)? {
+                // Conflict detected - path changed during traversal
+                crate::table::metrics::btree::record_optimistic_retry();
+                retry_count += 1;
+                
+                if retry_count >= MAX_RETRIES {
+                    return Err(crate::table::TableError::Other(format!(
+                        "Insert failed after {} retries due to high contention",
+                        MAX_RETRIES
+                    )));
                 }
-                BTreeNode::Leaf {
-                    version,
-                    mut entries,
-                    next_leaf,
-                } => {
-                    // Now acquire write latch on the leaf only
-                    let leaf_latch = self.get_page_latch(current_page_id);
-                    let _leaf_guard = leaf_latch.write();
-
-                    // Re-read the leaf to ensure it hasn't changed
-                    let node = self.read_node(current_page_id)?;
-                    let (version, entries, next_leaf, is_new_key) = if let BTreeNode::Leaf {
-                        version,
-                        mut entries,
-                        next_leaf,
-                    } = node
-                    {
-                        // Find insertion position
-                        let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
-                        let pos = match current_pos {
-                            Ok(i) => i,
-                            Err(i) => i,
-                        };
-
-                        let is_new_key = current_pos.is_err();
-
-                        // Perform the insertion/update
-                        if pos < entries.len() && entries[pos].key == key {
-                            // Update existing entry's version chain
-                            let old_chain = entries[pos].chain.clone();
-                            let mut new_chain = old_chain.prepend(value, tx_id);
-                            if commit_lsn.as_u64() > 0 {
-                                new_chain.commit(commit_lsn);
-                            }
-                            entries[pos].chain = new_chain;
-                        } else {
-                            // Insert new entry
-                            let mut chain = VersionChain::new(value, tx_id);
-                            if commit_lsn.as_u64() > 0 {
-                                chain.commit(commit_lsn);
-                            }
-                            entries.insert(
-                                pos,
-                                LeafEntry {
-                                    key: key.clone(),
-                                    chain,
-                                },
-                            );
-                        }
-
-                        (version, entries, next_leaf, is_new_key)
-                    } else {
-                        // Node type changed (shouldn't happen), retry would be needed
-                        return Err(crate::table::TableError::corruption(
-                            "PagedBTree::insert_internal",
-                            "node_type_changed",
-                            "Leaf node changed to internal during insert",
-                        ));
-                    };
-
-                    // Reconstruct the modified node with incremented version
-                    let modified_node = BTreeNode::Leaf {
-                        version: version.increment(),
-                        entries,
-                        next_leaf,
-                    };
-
-                    // Write the updated node (still holding latch)
-                    self.write_node(current_page_id, &modified_node)?;
-
-                    // Check if split is needed
-                    if modified_node.is_full() {
-                        // Split while holding latch on the leaf
-                        self.split_and_propagate(current_page_id, &modified_node, path)?;
-                    }
-
-                    // Update row count if new key
-                    if is_new_key {
-                        self.increment_row_count()?;
-                    }
-
-                    // Leaf latch released when _leaf_guard goes out of scope
-                    return Ok(());
-                }
+                
+                // Drop the latch and retry from root
+                drop(_leaf_guard);
+                continue;
             }
+
+            // Phase 4: Path is valid, perform the insert
+            // Re-read the leaf node (we have the latch, so it's stable)
+            let node = self.read_node(leaf_page_id)?;
+            
+            let (version, mut entries, next_leaf, is_new_key) = if let BTreeNode::Leaf {
+                version,
+                entries,
+                next_leaf,
+            } = node
+            {
+                // Find insertion position
+                let current_pos = entries.binary_search_by(|e| e.key.as_slice().cmp(&key));
+                let pos = match current_pos {
+                    Ok(i) => i,
+                    Err(i) => i,
+                };
+
+                let is_new_key = current_pos.is_err();
+                let mut entries = entries;
+
+                // Perform the insertion/update
+                if pos < entries.len() && entries[pos].key == key {
+                    // Update existing entry's version chain
+                    let old_chain = entries[pos].chain.clone();
+                    let mut new_chain = old_chain.prepend(value, tx_id);
+                    if commit_lsn.as_u64() > 0 {
+                        new_chain.commit(commit_lsn);
+                    }
+                    entries[pos].chain = new_chain;
+                } else {
+                    // Insert new entry
+                    let mut chain = VersionChain::new(value, tx_id);
+                    if commit_lsn.as_u64() > 0 {
+                        chain.commit(commit_lsn);
+                    }
+                    entries.insert(
+                        pos,
+                        LeafEntry {
+                            key: key.clone(),
+                            chain,
+                        },
+                    );
+                }
+
+                (version, entries, next_leaf, is_new_key)
+            } else {
+                // Node type changed - this is a conflict, retry
+                crate::table::metrics::btree::record_optimistic_retry();
+                retry_count += 1;
+                
+                if retry_count >= MAX_RETRIES {
+                    return Err(crate::table::TableError::corruption(
+                        "PagedBTree::insert_internal",
+                        "node_type_changed",
+                        "Leaf node changed to internal during insert",
+                    ));
+                }
+                
+                drop(_leaf_guard);
+                continue;
+            };
+
+            // Reconstruct the modified node with incremented version
+            let modified_node = BTreeNode::Leaf {
+                version: version.increment(),
+                entries,
+                next_leaf,
+            };
+
+            // Write the updated node (still holding latch)
+            self.write_node(leaf_page_id, &modified_node)?;
+
+            // Check if split is needed
+            if modified_node.is_full() {
+                // Convert optimistic path to old-style path for split_and_propagate
+                // TODO: Phase 4 will make split_and_propagate optimistic too
+                let old_style_path: Vec<(PageId, PageId)> = optimistic_path
+                    .iter()
+                    .take(optimistic_path.len() - 1) // Exclude the leaf itself
+                    .zip(optimistic_path.iter().skip(1))
+                    .map(|(parent, child)| (parent.page_id, child.page_id))
+                    .collect();
+                
+                self.split_and_propagate(leaf_page_id, &modified_node, old_style_path)?;
+            }
+
+            // Update row count if new key
+            if is_new_key {
+                self.increment_row_count()?;
+            }
+
+            // Success!
+            crate::table::metrics::btree::record_optimistic_success();
+            
+            // Leaf latch released when _leaf_guard goes out of scope
+            return Ok(());
         }
     }
 
