@@ -145,7 +145,7 @@ impl PageType {
 /// Page header (32 bytes)
 ///
 /// Layout:
-/// - Bytes 0-7: Page ID (u64)
+/// - Bytes 0-7: Page ID (physical page ID) (u64)
 /// - Byte 8: Page type (u8)
 /// - Byte 9: Compression type (u8)
 /// - Byte 10: Encryption type (u8)
@@ -153,10 +153,10 @@ impl PageType {
 /// - Bytes 12-15: Uncompressed size (u32)
 /// - Bytes 16-19: Compressed size (u32)
 /// - Bytes 20-23: Reserved (u32)
-/// - Bytes 24-31: Reserved (u64)
+/// - Bytes 24-31: Virtual page ID (u64) - for mapping recovery
 #[derive(Debug, Clone)]
 pub struct PageHeader {
-    /// Page identifier
+    /// Page identifier (physical page ID in file)
     pub page_id: PageId,
     /// Page type
     pub page_type: PageType,
@@ -170,6 +170,9 @@ pub struct PageHeader {
     pub uncompressed_size: u32,
     /// Compressed data size (0 if not compressed)
     pub compressed_size: u32,
+    /// Virtual page ID (for mapping recovery if superblock is corrupted)
+    /// If 0, this page uses identity mapping (virtual == physical)
+    pub virtual_page_id: PageId,
 }
 
 impl PageHeader {
@@ -187,6 +190,7 @@ impl PageHeader {
             flags: 0,
             uncompressed_size: 0,
             compressed_size: 0,
+            virtual_page_id: PageId::from(0), // 0 means identity mapping
         }
     }
 
@@ -216,7 +220,10 @@ impl PageHeader {
         // Compressed size (4 bytes)
         bytes[16..20].copy_from_slice(&self.compressed_size.to_le_bytes());
 
-        // Reserved bytes remain 0
+        // Reserved (4 bytes) - bytes 20-23 remain 0
+
+        // Virtual page ID (8 bytes)
+        bytes[24..32].copy_from_slice(&self.virtual_page_id.to_bytes());
 
         bytes
     }
@@ -247,6 +254,9 @@ impl PageHeader {
         let uncompressed_size = u32::from_le_bytes(bytes[12..16].try_into().unwrap());
         let compressed_size = u32::from_le_bytes(bytes[16..20].try_into().unwrap());
 
+        // Virtual page ID (bytes 24-31)
+        let virtual_page_id = PageId::from(u64::from_le_bytes(bytes[24..32].try_into().unwrap()));
+
         Ok(Self {
             page_id,
             page_type,
@@ -255,6 +265,7 @@ impl PageHeader {
             flags,
             uncompressed_size,
             compressed_size,
+            virtual_page_id,
         })
     }
 }
