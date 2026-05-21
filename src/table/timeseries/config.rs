@@ -14,11 +14,11 @@
 // limitations under the License.
 //
 
-//! Configuration for TimeSeries table engine.
+//! Configuration for `TimeSeries` table engine.
 
 use std::time::Duration;
 
-/// Configuration for TimeSeries table engine.
+/// Configuration for `TimeSeries` table engine.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TimeSeriesConfig {
     /// Time bucket size for organizing data (in seconds).
@@ -27,7 +27,7 @@ pub struct TimeSeriesConfig {
     pub bucket_size: u64,
 
     /// Compression type for time series data.
-    /// Default: DeltaOfDelta (efficient for time series)
+    /// Default: `DeltaOfDelta` (efficient for time series)
     pub compression: TimeSeriesCompression,
 
     /// Retention policy for old data.
@@ -39,7 +39,7 @@ pub struct TimeSeriesConfig {
     pub enable_downsampling: bool,
 
     /// Downsampling interval (in seconds).
-    /// Only used if enable_downsampling is true.
+    /// Only used if `enable_downsampling` is true.
     /// Default: 86400 (1 day)
     pub downsampling_interval: u64,
 
@@ -68,29 +68,34 @@ impl Default for TimeSeriesConfig {
 
 impl TimeSeriesConfig {
     /// Create a new configuration with default values.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the bucket size.
+    #[must_use]
     pub fn with_bucket_size(mut self, size: u64) -> Self {
         self.bucket_size = size;
         self
     }
 
     /// Set the compression type.
+    #[must_use]
     pub fn with_compression(mut self, compression: TimeSeriesCompression) -> Self {
         self.compression = compression;
         self
     }
 
     /// Set the retention policy.
+    #[must_use]
     pub fn with_retention_policy(mut self, policy: TimeSeriesRetentionPolicy) -> Self {
         self.retention_policy = policy;
         self
     }
 
     /// Enable or disable downsampling.
+    #[must_use]
     pub fn with_downsampling(mut self, enable: bool, interval: u64) -> Self {
         self.enable_downsampling = enable;
         self.downsampling_interval = interval;
@@ -98,12 +103,14 @@ impl TimeSeriesConfig {
     }
 
     /// Set the maximum points per bucket.
+    #[must_use]
     pub fn with_max_points_per_bucket(mut self, max: usize) -> Self {
         self.max_points_per_bucket = max;
         self
     }
 
     /// Enable or disable memory index.
+    #[must_use]
     pub fn with_memory_index(mut self, use_index: bool) -> Self {
         self.use_memory_index = use_index;
         self
@@ -206,10 +213,10 @@ mod tests {
         let policy2 = TimeSeriesRetentionPolicy::max_points(1000);
         assert_eq!(policy2, TimeSeriesRetentionPolicy::MaxPoints(1000));
 
-        let policy3 = TimeSeriesRetentionPolicy::until_timestamp(1234567890);
+        let policy3 = TimeSeriesRetentionPolicy::until_timestamp(1_234_567_890);
         assert_eq!(
             policy3,
-            TimeSeriesRetentionPolicy::UntilTimestamp(1234567890)
+            TimeSeriesRetentionPolicy::UntilTimestamp(1_234_567_890)
         );
     }
 }

@@ -32,7 +32,7 @@
 //! - Resource management (memory, file handles, locks)
 //! - Error handling and recovery
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::{Durability, IsolationLevel};
 use nanostore::vfs::MemoryFileSystem;
@@ -146,8 +146,10 @@ fn test_concurrent_transactions_multiple_tables() {
     let total_ops = num_threads * ops_per_thread;
     let success = success_count.load(Ordering::SeqCst);
     let success_rate = (success as f64 / total_ops as f64) * 100.0;
-    println!("Concurrent transactions: {} successful operations out of {} ({:.1}%)",
-             success, total_ops, success_rate);
+    println!(
+        "Concurrent transactions: {} successful operations out of {} ({:.1}%)",
+        success, total_ops, success_rate
+    );
     assert!(
         success >= (total_ops * 30 / 100),
         "Should have at least 30% success rate, got {}/{} ({:.1}%)",
@@ -485,8 +487,11 @@ fn test_oltp_workload() {
     let writes = success_count.load(Ordering::Relaxed);
     let expected_writes = num_threads * ops_per_thread * 3 / 10; // 30% writes
 
-    println!("OLTP workload: {} successful writes (expected ~{})", writes, expected_writes);
-    
+    println!(
+        "OLTP workload: {} successful writes (expected ~{})",
+        writes, expected_writes
+    );
+
     // Note: Due to lack of proper page-level locking in PagedBTree, write throughput
     // is significantly reduced under high concurrency. We accept 10%+ of expected writes
     // until proper latch coupling is implemented.

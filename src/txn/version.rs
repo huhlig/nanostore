@@ -23,7 +23,7 @@ use crate::wal::LogSequenceNumber;
 ///
 /// This enum enables efficient storage of values of varying sizes:
 /// - Small values (< inline threshold) are stored directly in memory
-/// - Large values (>= inline threshold) are stored in overflow pages via ValueRef
+/// - Large values (>= inline threshold) are stored in overflow pages via `ValueRef`
 ///
 /// This hybrid approach allows gradual migration and optimization per table type.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -32,32 +32,37 @@ pub enum VersionValue {
     Inline(Vec<u8>),
 
     /// Value stored externally in overflow pages (for large values)
-    /// The ValueRef contains the page location information
+    /// The `ValueRef` contains the page location information
     External(ValueRef),
 }
 
 impl VersionValue {
     /// Create an inline version value.
+    #[must_use]
     pub fn inline(data: Vec<u8>) -> Self {
         Self::Inline(data)
     }
 
-    /// Create an external version value with a ValueRef.
+    /// Create an external version value with a `ValueRef`.
+    #[must_use]
     pub fn external(value_ref: ValueRef) -> Self {
         Self::External(value_ref)
     }
 
     /// Check if this is an inline value.
+    #[must_use]
     pub fn is_inline(&self) -> bool {
         matches!(self, Self::Inline(_))
     }
 
     /// Check if this is an external value.
+    #[must_use]
     pub fn is_external(&self) -> bool {
         matches!(self, Self::External(_))
     }
 
     /// Get the inline data if this is an inline value.
+    #[must_use]
     pub fn as_inline(&self) -> Option<&[u8]> {
         match self {
             Self::Inline(data) => Some(data),
@@ -65,7 +70,8 @@ impl VersionValue {
         }
     }
 
-    /// Get the ValueRef if this is an external value.
+    /// Get the `ValueRef` if this is an external value.
+    #[must_use]
     pub fn as_external(&self) -> Option<&ValueRef> {
         match self {
             Self::Inline(_) => None,
@@ -74,6 +80,7 @@ impl VersionValue {
     }
 
     /// Get a size hint for the value.
+    #[must_use]
     pub fn size_hint(&self) -> Option<u64> {
         match self {
             Self::Inline(data) => Some(data.len() as u64),
@@ -82,6 +89,7 @@ impl VersionValue {
     }
 
     /// Check if this is an empty value (for tombstone detection).
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
             Self::Inline(data) => data.is_empty(),
@@ -94,6 +102,7 @@ impl VersionValue {
     }
 
     /// Get the length of the value in bytes.
+    #[must_use]
     pub fn len(&self) -> usize {
         match self {
             Self::Inline(data) => data.len(),
@@ -103,6 +112,7 @@ impl VersionValue {
 
     /// Convert to a Vec<u8> if this is an inline value.
     /// Returns None for external values (caller must read from overflow pages).
+    #[must_use]
     pub fn to_vec(&self) -> Option<Vec<u8>> {
         match self {
             Self::Inline(data) => Some(data.clone()),
@@ -111,6 +121,7 @@ impl VersionValue {
     }
 
     /// Get inline data as a slice, or None for external values.
+    #[must_use]
     pub fn as_slice(&self) -> Option<&[u8]> {
         match self {
             Self::Inline(data) => Some(data.as_slice()),
@@ -160,6 +171,7 @@ pub struct VersionChain {
 
 impl VersionChain {
     /// Create a new version chain entry with inline value
+    #[must_use]
     pub fn new(value: Vec<u8>, created_by: TransactionId) -> Self {
         Self {
             value: VersionValue::Inline(value),
@@ -169,7 +181,8 @@ impl VersionChain {
         }
     }
 
-    /// Create a new version chain entry with external value (ValueRef)
+    /// Create a new version chain entry with external value (`ValueRef`)
+    #[must_use]
     pub fn new_external(value_ref: ValueRef, created_by: TransactionId) -> Self {
         Self {
             value: VersionValue::External(value_ref),
@@ -180,11 +193,13 @@ impl VersionChain {
     }
 
     /// Mark this version as committed at the given LSN
+    #[must_use]
     pub fn commit(&mut self, lsn: LogSequenceNumber) {
         self.commit_lsn = Some(lsn);
     }
 
     /// Add a new inline version to the front of the chain
+    #[must_use]
     pub fn prepend(self, value: Vec<u8>, created_by: TransactionId) -> Self {
         Self {
             value: VersionValue::Inline(value),
@@ -195,6 +210,7 @@ impl VersionChain {
     }
 
     /// Add a new external version to the front of the chain
+    #[must_use]
     pub fn prepend_external(self, value_ref: ValueRef, created_by: TransactionId) -> Self {
         Self {
             value: VersionValue::External(value_ref),
@@ -210,8 +226,9 @@ impl VersionChain {
     /// that is committed and visible at the snapshot's LSN and transaction set.
     /// Uncommitted versions are never visible.
     ///
-    /// Returns the VersionValue (which may be inline or external).
+    /// Returns the `VersionValue` (which may be inline or external).
     /// Callers must handle external values by reading from overflow pages.
+    #[must_use]
     pub fn find_visible_version(&self, snapshot: &Snapshot) -> Option<&VersionValue> {
         let mut current = Some(self);
 
@@ -232,6 +249,7 @@ impl VersionChain {
     ///
     /// This is a convenience method for callers that only want inline values.
     /// Returns None if the visible version is external or if no version is visible.
+    #[must_use]
     pub fn find_visible_inline(&self, snapshot: &Snapshot) -> Option<&[u8]> {
         self.find_visible_version(snapshot)
             .and_then(|v| v.as_inline())
@@ -244,11 +262,11 @@ impl VersionChain {
     /// - committed versions with `commit_lsn >= min_visible_lsn`
     /// - the newest committed version older than `min_visible_lsn` as a base
     ///
-    /// Returns the number of removed versions and a list of ValueRefs that need
+    /// Returns the number of removed versions and a list of `ValueRefs` that need
     /// to have their overflow pages freed by the caller.
     ///
     /// Note: The caller is responsible for freeing overflow pages for external values.
-    /// This method only identifies which ValueRefs need cleanup.
+    /// This method only identifies which `ValueRefs` need cleanup.
     pub fn vacuum(&mut self, min_visible_lsn: LogSequenceNumber) -> (usize, Vec<ValueRef>) {
         let mut freed_refs = Vec::new();
 
@@ -332,9 +350,10 @@ impl VersionChain {
         (removed, freed_refs)
     }
 
-    /// Collect all external ValueRefs in this version chain.
+    /// Collect all external `ValueRefs` in this version chain.
     ///
     /// This is useful for operations that need to track or free overflow pages.
+    #[must_use]
     pub fn collect_external_refs(&self) -> Vec<ValueRef> {
         let mut refs = Vec::new();
         let mut current = Some(self);

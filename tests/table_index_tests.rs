@@ -16,7 +16,7 @@
 
 //! Comprehensive integration tests for table and index operations.
 
-use nanostore::kvdb::{StorageEngine, StorageEngineErrorKind};
+use nanostore::engine::{StorageEngine, StorageEngineErrorKind};
 use nanostore::pager::{Pager, PagerConfig};
 use nanostore::table::TimeSeriesCursor;
 use nanostore::table::fulltext::FullTextConfig;

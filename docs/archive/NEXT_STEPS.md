@@ -216,7 +216,7 @@
 **Goal**: Implement metadata catalog for tables and indexes.
 
 **Tasks**:
-1. Create `Catalog` struct in [`src/kvdb.rs`](../../src/kvdb.rs)
+1. Create `Catalog` struct in [`src/kvdb.rs`](../../src/engine.rs)
 2. Implement table metadata storage
 3. Implement index metadata storage
 4. Add catalog persistence to WAL

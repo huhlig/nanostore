@@ -24,7 +24,7 @@
 //! 5. Vacuum with active snapshots
 //! 6. Cross-table transaction visibility
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::{Durability, KeyEncoding};
 use nanostore::vfs::MemoryFileSystem;

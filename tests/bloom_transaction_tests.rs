@@ -21,7 +21,7 @@
 //! write-set visibility, commit/rollback semantics, and error handling
 //! for unsupported generic KV operations on bloom filters.
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanostore::txn::TransactionId;
 use nanostore::types::{Durability, KeyEncoding};

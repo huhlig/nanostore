@@ -48,12 +48,14 @@ use std::time::Instant;
 use tracing::{debug, instrument};
 
 /// Default B-Tree order (maximum keys per node).
-/// Set to 252 to account for the 8-byte PageVersion field added for optimistic concurrency.
+/// Set to 252 to account for the 8-byte `PageVersion` field added for optimistic concurrency.
 /// This ensures nodes fit within page boundaries even with the version overhead.
+///
 /// Larger nodes mean:
 /// - Fewer splits → less root lock contention
 /// - Better I/O efficiency (fewer page reads/writes)
 /// - Reduced split propagation overhead
+///
 /// Trade-off: Slightly more wasted space per node, but worth it for concurrency.
 const DEFAULT_ORDER: usize = 252;
 
@@ -180,7 +182,7 @@ enum BTreeNode {
     Internal {
         /// Page version for optimistic concurrency control
         version: PageVersion,
-        /// Keys and child pointers (keys.len() == children.len() - 1)
+        /// Keys and child pointers (`keys.len()` == `children.len()` - 1)
         entries: Vec<InternalEntry>,
         /// Rightmost child pointer
         rightmost_child: PageId,
@@ -554,8 +556,8 @@ pub struct PagedBTree<FS: FileSystem> {
     /// Row count wrapped in Arc<RwLock> for atomic updates
     row_count: Arc<RwLock<u64>>,
     /// Per-page latches for B-tree structure modifications (latch coupling)
-    /// Uses DashMap for concurrent access to different pages
-    /// Each page has an RwLock for read/write latching
+    /// Uses `DashMap` for concurrent access to different pages
+    /// Each page has an `RwLock` for read/write latching
     page_latches: Arc<DashMap<PageId, Arc<ParkingLotRwLock<()>>>>,
 }
 
@@ -588,6 +590,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
     }
 
     /// Open an existing paged B-Tree table.
+    #[must_use]
     pub fn open(id: TableId, name: String, pager: Arc<Pager<FS>>, root_page_id: PageId) -> Self {
         let row_count = pager.btree_row_count();
         Self {
@@ -601,6 +604,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
     }
 
     /// Get the current root page ID.
+    #[must_use]
     pub fn get_root_page_id(&self) -> PageId {
         *self.root_page_id.read().unwrap()
     }
@@ -719,7 +723,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
     }
 
     /// Search for a key in the tree, tracking the path from root to leaf.
-    /// Returns the leaf page ID, position, and path (list of (parent_page_id, child_page_id) tuples).
+    /// Returns the leaf page ID, position, and path (list of (`parent_page_id`, `child_page_id`) tuples).
     fn search_with_path(&self, key: &[u8]) -> TableResult<(PageId, usize, Vec<(PageId, PageId)>)> {
         let mut current_page_id = self.get_root_page_id();
         let mut path = Vec::new();
@@ -855,14 +859,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
         for entry in path.iter().rev().skip(1) {
             let node = self.read_node(entry.page_id)?;
             let current_version = node.get_version();
-            
+
             if current_version != entry.version {
                 // Version mismatch - node was modified since we read it
                 crate::table::metrics::btree::record_optimistic_conflict();
                 return Ok(false);
             }
         }
-        
+
         Ok(true)
     }
 
@@ -1388,14 +1392,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Conflict detected - path changed during traversal
                 crate::table::metrics::btree::record_optimistic_retry();
                 retry_count += 1;
-                
+
                 if retry_count >= MAX_RETRIES {
                     return Err(crate::table::TableError::Other(format!(
                         "Insert failed after {} retries due to high contention",
                         MAX_RETRIES
                     )));
                 }
-                
+
                 // Drop the latch and retry from root
                 drop(_leaf_guard);
                 continue;
@@ -1404,7 +1408,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
             // Phase 4: Path is valid, perform the insert
             // Re-read the leaf node (we have the latch, so it's stable)
             let node = self.read_node(leaf_page_id)?;
-            
+
             let (version, mut entries, next_leaf, is_new_key) = if let BTreeNode::Leaf {
                 version,
                 entries,
@@ -1450,7 +1454,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Node type changed - this is a conflict, retry
                 crate::table::metrics::btree::record_optimistic_retry();
                 retry_count += 1;
-                
+
                 if retry_count >= MAX_RETRIES {
                     return Err(crate::table::TableError::corruption(
                         "PagedBTree::insert_internal",
@@ -1458,7 +1462,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                         "Leaf node changed to internal during insert",
                     ));
                 }
-                
+
                 drop(_leaf_guard);
                 continue;
             };
@@ -1483,7 +1487,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                     .zip(optimistic_path.iter().skip(1))
                     .map(|(parent, child)| (parent.page_id, child.page_id))
                     .collect();
-                
+
                 self.split_and_propagate(leaf_page_id, &modified_node, old_style_path)?;
             }
 
@@ -1494,14 +1498,14 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
             // Success!
             crate::table::metrics::btree::record_optimistic_success();
-            
+
             // Leaf latch released when _leaf_guard goes out of scope
             return Ok(());
         }
     }
 
     /// Split a node and propagate the split up the tree.
-    /// The path parameter contains (parent_page_id, child_page_id) tuples from root to the node being split.
+    /// The path parameter contains (`parent_page_id`, `child_page_id`) tuples from root to the node being split.
     fn split_and_propagate(
         &self,
         page_id: PageId,
@@ -1541,7 +1545,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
     /// Insert a key and right child pointer into a parent node.
     /// This is called after splitting a child node.
-    /// The path contains (parent_page_id, child_page_id) tuples from root to the child that was split.
+    /// The path contains (`parent_page_id`, `child_page_id`) tuples from root to the child that was split.
     fn insert_into_parent(
         &self,
         left_child: PageId,
@@ -1893,7 +1897,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
 
     /// Commit all uncommitted versions created by the given transaction.
     ///
-    /// Traverses all leaf pages and marks versions created by tx_id with the given commit_lsn.
+    /// Traverses all leaf pages and marks versions created by `tx_id` with the given `commit_lsn`.
     fn commit_versions_for_tx(
         &self,
         tx_id: TransactionId,
@@ -1926,7 +1930,9 @@ impl<FS: FileSystem> PagedBTree<FS> {
         loop {
             let node = self.read_node(current_page_id)?;
             if let BTreeNode::Leaf {
-                version, entries, next_leaf
+                version,
+                entries,
+                next_leaf,
             } = node
             {
                 let mut new_entries = entries.clone();
@@ -2019,10 +2025,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 }
                 self.collect_node_statistics(rightmost_child, depth + 1, stats, page_size)?;
             }
-            BTreeNode::Leaf {
-                entries,
-                ..
-            } => {
+            BTreeNode::Leaf { entries, .. } => {
                 stats.leaf_node_count += 1;
 
                 // Process each entry in the leaf
@@ -3662,7 +3665,7 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 let updated_node = BTreeNode::Leaf {
                     version: version.increment(),
                     entries,
-                    next_leaf
+                    next_leaf,
                 };
                 self.write_node(page_id, &updated_node)?;
             }
@@ -3711,32 +3714,31 @@ mod tests {
         let deserialized = BTreeNode::from_bytes(&bytes).unwrap();
         assert_eq!(deserialized.node_type(), NodeType::Leaf);
         assert_eq!(deserialized.key_count(), 1);
+    }
+    #[test]
+    fn test_statistics_collection() {
+        use crate::pager::PagerConfig;
+        use crate::vfs::MemoryFileSystem;
 
-        #[test]
-        fn test_statistics_collection() {
-            use crate::pager::PagerConfig;
-            use crate::vfs::MemoryFileSystem;
+        // Create an empty BTree
+        let fs = MemoryFileSystem::new();
+        let config = PagerConfig::default();
+        let pager = Arc::new(Pager::create(&fs, "test.db", config).unwrap());
+        let btree = PagedBTree::new(TableId::from(1), "test_table".to_string(), pager).unwrap();
 
-            // Create an empty BTree
-            let fs = MemoryFileSystem::new();
-            let config = PagerConfig::default();
-            let pager = Arc::new(Pager::create(&fs, "test.db", config).unwrap());
-            let btree = PagedBTree::new(TableId::from(1), "test_table".to_string(), pager).unwrap();
+        // Collect statistics on empty tree - should not panic
+        let stats = Table::stats(&btree).unwrap();
 
-            // Collect statistics on empty tree - should not panic
-            let stats = Table::stats(&btree).unwrap();
+        // Verify empty tree statistics
+        assert_eq!(stats.row_count, Some(0), "Empty tree should have 0 rows");
+        assert!(stats.total_size_bytes.is_some(), "Total size should be set");
+        assert!(
+            stats.total_size_bytes.unwrap() > 0,
+            "Total size should include at least root page"
+        );
 
-            // Verify empty tree statistics
-            assert_eq!(stats.row_count, Some(0), "Empty tree should have 0 rows");
-            assert!(stats.total_size_bytes.is_some(), "Total size should be set");
-            assert!(
-                stats.total_size_bytes.unwrap() > 0,
-                "Total size should include at least root page"
-            );
-
-            // Key and value stats should be present even for empty tree
-            assert!(stats.key_stats.is_some(), "Key stats should be set");
-            assert!(stats.value_stats.is_some(), "Value stats should be set");
-        }
+        // Key and value stats should be present even for empty tree
+        assert!(stats.key_stats.is_some(), "Key stats should be set");
+        assert!(stats.value_stats.is_some(), "Value stats should be set");
     }
 }

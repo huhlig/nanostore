@@ -59,10 +59,12 @@ use std::sync::Arc;
 pub struct SStableId(u64);
 
 impl SStableId {
+    #[must_use]
     pub fn new(id: u64) -> Self {
         Self(id)
     }
 
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
         self.0
     }
@@ -74,19 +76,19 @@ impl std::fmt::Display for SStableId {
     }
 }
 
-/// SSTable metadata stored in the footer.
+/// `SSTable` metadata stored in the footer.
 #[derive(Clone, Debug)]
 pub struct SStableMetadata {
-    /// SSTable ID
+    /// `SSTable` ID
     pub id: SStableId,
 
     /// Level in the LSM tree (0 = L0, 1 = L1, etc.)
     pub level: u32,
 
-    /// Smallest key in the SSTable
+    /// Smallest key in the `SSTable`
     pub min_key: Vec<u8>,
 
-    /// Largest key in the SSTable
+    /// Largest key in the `SSTable`
     pub max_key: Vec<u8>,
 
     /// Number of key-value pairs
@@ -95,22 +97,22 @@ pub struct SStableMetadata {
     /// Total size in bytes
     pub total_size: u64,
 
-    /// LSN when this SSTable was created
+    /// LSN when this `SSTable` was created
     pub created_lsn: LogSequenceNumber,
 
-    /// First page ID of this SSTable
+    /// First page ID of this `SSTable`
     pub first_page_id: PageId,
 
-    /// Number of pages used by this SSTable
+    /// Number of pages used by this `SSTable`
     pub num_pages: u32,
 
-    /// Offset to index block (from start of SSTable)
+    /// Offset to index block (from the start of `SSTable`)
     pub index_offset: u64,
 
-    /// Offset to bloom filter (from start of SSTable)
+    /// Offset to bloom filter (from the start of `SSTable`)
     pub bloom_filter_offset: u64,
 
-    /// Offset to footer (from start of SSTable)
+    /// Offset to footer (from the start of `SSTable`)
     pub footer_offset: u64,
 }
 

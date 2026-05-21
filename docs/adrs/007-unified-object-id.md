@@ -31,7 +31,7 @@ We will implement a **unified ObjectId system** where:
 1. **ObjectId as Base Type**: Create `ObjectId` as the fundamental identifier for any storage object
 2. **Type-Safe Wrappers**: [`TableId`](../../src/table/traits.rs) and [`IndexId`](../../src/index/traits.rs) become type-safe wrappers around `ObjectId`
 3. **Transaction Layer Uses ObjectId**: Transaction operations work with `ObjectId`, treating all storage objects uniformly
-4. **Semantic Layer at Database**: The [`Database`](../../src/kvdb.rs) layer maintains the semantic distinction and handles index maintenance
+4. **Semantic Layer at Database**: The [`Database`](../../src/engine.rs) layer maintains the semantic distinction and handles index maintenance
 
 **Type Hierarchy:**
 ```rust
@@ -77,7 +77,7 @@ None of these operations need to know whether an object is a table or an index. 
 
 ### 3. Index Maintenance Belongs at Database Layer
 
-Index maintenance logic (updating indexes when tables change) is a **semantic concern** that belongs at the [`Database`](../../src/kvdb.rs) layer:
+Index maintenance logic (updating indexes when tables change) is a **semantic concern** that belongs at the [`Database`](../../src/engine.rs) layer:
 
 ```rust
 impl Database {
@@ -480,7 +480,7 @@ Unified conflict detection is **simpler and faster**:
 - Update conflict detection to use `ObjectId`
 
 **Phase 3**: Implement index maintenance (Nanostore-j89)
-- Add index maintenance logic to [`Database`](../../src/kvdb.rs)
+- Add index maintenance logic to [`Database`](../../src/engine.rs)
 - Implement `insert()`, `update()`, `delete()` with automatic index updates
 - Add index key extraction logic
 
@@ -510,7 +510,7 @@ Track these metrics:
 
 - [Transaction Layer Improvements](../TRANSACTION_LAYER_IMPROVEMENTS.md)
 - [Transaction Implementation](../../src/txn/transaction.rs)
-- [Database Implementation](../../src/kvdb.rs)
+- [Database Implementation](../../src/engine.rs)
 - [Table Traits](../../src/table/traits.rs)
 - [Index Traits](../../src/index/traits.rs)
 

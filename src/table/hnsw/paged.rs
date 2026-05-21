@@ -514,7 +514,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let mut rng_state = self.rng_state.write().unwrap();
 
         // Simple LCG random number generator
-        *rng_state = rng_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        *rng_state = rng_state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
         let uniform = (*rng_state as f64) / (u64::MAX as f64);
 
         // Use exponential distribution for layer selection

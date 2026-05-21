@@ -28,7 +28,7 @@
 )]
 
 pub mod error;
-pub mod kvdb;
+pub mod engine;
 pub mod pager;
 mod rest;
 pub mod snap;

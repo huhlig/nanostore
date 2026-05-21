@@ -31,7 +31,7 @@
 //! # Recovery Process
 //!
 //! 1. Read all WAL records sequentially
-//! 2. Track transaction states (Active, Committed, RolledBack)
+//! 2. Track transaction states (Active, Committed, `RolledBack`)
 //! 3. When encountering a checkpoint:
 //!    - Store the checkpoint LSN and active transactions
 //!    - Validate that checkpoint's active transactions match current recovery state

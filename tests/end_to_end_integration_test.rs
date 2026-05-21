@@ -39,7 +39,7 @@
 //! - Explicit StorageEngine::close() method for controlled shutdown with error handling
 //! - Data in memtables is persisted to SSTables before the StorageEngine is destroyed
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::KeyEncoding;
 use nanostore::vfs::MemoryFileSystem;

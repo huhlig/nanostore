@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{AppendLogConfig, TableEngineKind, TableOptions};
 use nanostore::types::KeyEncoding;
 use nanostore::vfs::MemoryFileSystem;

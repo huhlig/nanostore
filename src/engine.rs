@@ -1078,7 +1078,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         // Step 2: Perform pager-level compaction
         // Phase 2 (nanokv-n5gs) is now complete, so we can call the pager methods
-        let mut full_stats = self.pager.compact_and_truncate()
+        let mut full_stats = self
+            .pager
+            .compact_and_truncate()
             .map_err(|e| StorageEngineError::pager_failed(format!("Compaction failed: {}", e)))?;
 
         // Update duration to include the vacuum step

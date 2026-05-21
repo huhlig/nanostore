@@ -16,7 +16,7 @@
 
 //! Tests for background vacuum task and metrics collection.
 
-use nanostore::kvdb::{StorageEngine, VacuumConfig};
+use nanostore::engine::{StorageEngine, VacuumConfig};
 use nanostore::table::TableOptions;
 use nanostore::types::Durability;
 use nanostore::vfs::MemoryFileSystem;

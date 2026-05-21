@@ -19,7 +19,7 @@
 //! These tests verify that transactions correctly integrate with the WAL
 //! for durability and crash recovery.
 
-use nanostore::kvdb::{StorageEngine, StorageEngineErrorKind};
+use nanostore::engine::{StorageEngine, StorageEngineErrorKind};
 use nanostore::table::{ApproximateMembership, TableEngineKind, TableOptions};
 use nanostore::txn::TransactionId;
 use nanostore::types::{Bound, Durability, KeyBuf, KeyEncoding, ScanBounds};

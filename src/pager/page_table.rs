@@ -39,9 +39,9 @@ use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 ///
 /// # Performance Characteristics
 ///
-/// - Lock acquisition: O(1)
-/// - Memory overhead: O(shard_count) locks
-/// - Contention reduction: ~shard_count times fewer conflicts
+/// - Lock acquisition: `O(1)`
+/// - Memory overhead: `O(shard_count)` locks
+/// - Contention reduction: ~`shard_count` times fewer conflicts
 ///
 /// # Recommended Shard Counts
 ///
@@ -54,7 +54,7 @@ pub struct PageTable {
     shards: Vec<RwLock<()>>,
     /// Number of shards (always a power of 2)
     shard_count: usize,
-    /// Bit mask for fast modulo (shard_count - 1)
+    /// Bit mask for fast modulo (`shard_count` - 1)
     shard_mask: usize,
 }
 
@@ -63,6 +63,7 @@ impl PageTable {
     pub const DEFAULT_SHARD_COUNT: usize = 64;
 
     /// Create a new page table with the default number of shards
+    #[must_use]
     pub fn new() -> Self {
         Self::with_shard_count(Self::DEFAULT_SHARD_COUNT)
     }
@@ -87,6 +88,7 @@ impl PageTable {
     /// // Create with 100 shards (rounded up to 128)
     /// let table = PageTable::with_shard_count(100);
     /// ```
+    #[must_use]
     pub fn with_shard_count(shard_count: usize) -> Self {
         // Ensure at least 1 shard
         let shard_count = shard_count.max(1);
@@ -187,6 +189,7 @@ impl PageTable {
     ///
     /// * `page_id` - The page to try locking for reading
     #[inline]
+    #[must_use]
     pub fn try_read_lock(&self, page_id: PageId) -> Option<RwLockReadGuard<'_, ()>> {
         self.shards[self.shard_index(page_id)].try_read()
     }
@@ -199,11 +202,13 @@ impl PageTable {
     ///
     /// * `page_id` - The page to try locking for writing
     #[inline]
+    #[must_use]
     pub fn try_write_lock(&self, page_id: PageId) -> Option<RwLockWriteGuard<'_, ()>> {
         self.shards[self.shard_index(page_id)].try_write()
     }
 
     /// Get the number of shards in this page table
+    #[must_use]
     pub fn shard_count(&self) -> usize {
         self.shard_count
     }
@@ -211,6 +216,7 @@ impl PageTable {
     /// Check if two pages would map to the same shard
     ///
     /// Useful for understanding potential lock contention.
+    #[must_use]
     pub fn same_shard(&self, page_id1: PageId, page_id2: PageId) -> bool {
         self.shard_index(page_id1) == self.shard_index(page_id2)
     }

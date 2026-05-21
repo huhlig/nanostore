@@ -1192,7 +1192,7 @@ impl<FS: FileSystem> Pager<FS> {
     /// # Lock Ordering
     /// This is a high-level operation that acquires locks as needed for each sub-operation
     #[instrument(skip(self))]
-    pub fn compact_and_truncate(&self) -> PagerResult<crate::kvdb::VacuumFullStats> {
+    pub fn compact_and_truncate(&self) -> PagerResult<crate::engine::VacuumFullStats> {
         let start = Instant::now();
         debug!("Starting compact and truncate");
 
@@ -1202,7 +1202,7 @@ impl<FS: FileSystem> Pager<FS> {
             file.get_size()?
         };
 
-        let mut stats = crate::kvdb::VacuumFullStats::new(file_size_before);
+        let mut stats = crate::engine::VacuumFullStats::new(file_size_before);
 
         // Find the highest used page
         let highest_used = match self.find_highest_used_page()? {

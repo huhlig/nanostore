@@ -159,14 +159,14 @@ impl AsRef<[u8]> for ValueBuf {
 /// Reference to a value that may be stored inline or in overflow pages.
 ///
 /// This enum enables efficient storage of values of varying sizes:
-/// - Small values (< max_inline_size) are stored directly in the table
+/// - Small values (< `max_inline_size`) are stored directly in the table
 /// - Medium values (< 1 page) use a single overflow page
 /// - Large values (>= 1 page) use a linked chain of overflow pages
 ///
 /// The encoding format is optimized for space efficiency:
 /// - Inline: No encoding needed (value stored directly)
-/// - SinglePage: 11 bytes (1 type + 4 page_id + 2 offset + 4 length)
-/// - OverflowChain: 17 bytes (1 type + 4 page_id + 8 length + 4 page_count)
+/// - `SinglePage`: 11 bytes (1 type + 4 `page_id` + 2 offset + 4 length)
+/// - `OverflowChain`: 17 bytes (1 type + 4 `page_id` + 8 length + 4 `page_count`)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ValueRef {
     /// Value is stored inline in the table structure (no external reference)
@@ -196,9 +196,9 @@ pub enum ValueRef {
 impl ValueRef {
     /// Type byte for Inline variant
     const TYPE_INLINE: u8 = 0x00;
-    /// Type byte for SinglePage variant
+    /// Type byte for `SinglePage` variant
     const TYPE_SINGLE_PAGE: u8 = 0x01;
-    /// Type byte for OverflowChain variant
+    /// Type byte for `OverflowChain` variant
     const TYPE_OVERFLOW_CHAIN: u8 = 0x02;
 
     /// Check if this is an inline value reference.
@@ -210,7 +210,7 @@ impl ValueRef {
     /// Get a size hint for the value, if known.
     ///
     /// Returns None for Inline (size depends on actual value),
-    /// Some(size) for SinglePage and OverflowChain.
+    /// Some(size) for `SinglePage` and `OverflowChain`.
     #[must_use]
     pub fn size_hint(&self) -> Option<u64> {
         match self {
@@ -226,12 +226,12 @@ impl ValueRef {
         !matches!(self, ValueRef::Inline)
     }
 
-    /// Encode the ValueRef to bytes for storage in tables.
+    /// Encode the `ValueRef` to bytes for storage in tables.
     ///
     /// Format:
     /// - Inline: [0x00] (1 byte)
-    /// - SinglePage: [0x01][page_id: u32][offset: u16][length: u32] (11 bytes)
-    /// - OverflowChain: [0x02][first_page_id: u32][total_length: u64][page_count: u32] (17 bytes)
+    /// - `SinglePage`: [0x01][page_id: u32][offset: u16][length: u32] (11 bytes)
+    /// - `OverflowChain`: [0x02][first_page_id: u32][total_length: u64][page_count: u32] (17 bytes)
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         match self {

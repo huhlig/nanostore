@@ -112,6 +112,7 @@ impl TransactionError {
     }
 
     /// Create a write-write conflict error with full context
+    #[must_use]
     pub fn write_write_conflict(
         object_id: TableId,
         key: Vec<u8>,
@@ -127,6 +128,7 @@ impl TransactionError {
     }
 
     /// Create a read-write conflict error with full context
+    #[must_use]
     pub fn read_write_conflict(
         object_id: TableId,
         key: Vec<u8>,

@@ -28,7 +28,7 @@
 //! - Vacuum of tombstones in SSTables
 //! - Vacuum coordination with level-based compaction
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::vfs::MemoryFileSystem;
 

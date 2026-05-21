@@ -22,7 +22,7 @@
 //! - Table handle wrapper
 //! - Error handling
 
-use nanostore::kvdb::{StorageEngine, StorageEngineErrorKind};
+use nanostore::engine::{StorageEngine, StorageEngineErrorKind};
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::types::{KeyEncoding, TableId};
 use nanostore::vfs::{FileSystem, MemoryFileSystem};

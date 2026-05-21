@@ -17,7 +17,7 @@
 //! Leveled compaction implementation for LSM tree.
 //!
 //! This module implements RocksDB-style leveled compaction, which maintains
-//! non-overlapping SSTables in each level (except L0) and merges data from
+//! non-overlapping `SSTables` in each level (except L0) and merges data from
 //! level N to level N+1 when size limits are exceeded.
 //!
 //! # Architecture
@@ -32,8 +32,8 @@
 //!
 //! # Compaction Strategy
 //!
-//! 1. **L0 → L1**: Merge all overlapping L0 SSTables with overlapping L1 SSTables
-//! 2. **Ln → Ln+1**: Pick one SSTable from Ln, merge with overlapping SSTables in Ln+1
+//! 1. **L0 → L1**: Merge all overlapping L0 `SSTables` with overlapping L1 `SSTables`
+//! 2. **Ln → Ln+1**: Pick one `SSTable` from Ln, merge with overlapping `SSTables` in Ln+1
 //! 3. **Priority**: Based on level size ratio vs target size
 //!
 //! # Features
@@ -61,16 +61,16 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// Compaction job that describes which SSTables to merge.
+/// Compaction job that describes which `SSTables` to merge.
 #[derive(Clone, Debug)]
 pub struct CompactionJob {
     /// Level to compact from
     pub source_level: u32,
     /// Level to compact to
     pub target_level: u32,
-    /// SSTables from source level
+    /// `SSTables` from source level
     pub source_files: Vec<FileMetadata>,
-    /// SSTables from target level that overlap with source
+    /// `SSTables` from target level that overlap with source
     pub target_files: Vec<FileMetadata>,
     /// Priority score (higher = more urgent)
     pub priority: f64,
@@ -80,6 +80,7 @@ pub struct CompactionJob {
 
 impl CompactionJob {
     /// Create a new compaction job.
+    #[must_use]
     pub fn new(
         source_level: u32,
         target_level: u32,
@@ -101,11 +102,13 @@ impl CompactionJob {
     }
 
     /// Get the total number of input files.
+    #[must_use]
     pub fn input_file_count(&self) -> usize {
         self.source_files.len() + self.target_files.len()
     }
 
     /// Get all input file IDs.
+    #[must_use]
     pub fn input_file_ids(&self) -> HashSet<SStableId> {
         self.source_files
             .iter()
@@ -159,6 +162,7 @@ pub struct CompactionStats {
 
 impl CompactionStats {
     /// Create new empty statistics.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -181,6 +185,7 @@ impl CompactionStats {
     }
 
     /// Get the write amplification factor.
+    #[must_use]
     pub fn write_amplification(&self) -> f64 {
         if self.bytes_read == 0 {
             0.0
@@ -190,18 +195,20 @@ impl CompactionStats {
     }
 }
 
-/// Compaction picker that selects which SSTables to compact.
+/// Compaction picker that selects which `SSTables` to compact.
 pub struct CompactionPicker {
     config: CompactionConfig,
 }
 
 impl CompactionPicker {
     /// Create a new compaction picker.
+    #[must_use]
     pub fn new(config: CompactionConfig) -> Self {
         Self { config }
     }
 
     /// Pick the next compaction job based on current version state.
+    #[must_use]
     pub fn pick_compaction(&self, version: &Version) -> Option<CompactionJob> {
         // Calculate priority for each level
         let mut candidates = Vec::new();
@@ -334,6 +341,7 @@ impl CompactionPicker {
     }
 
     /// Check if a manual compaction is needed for a specific key range.
+    #[must_use]
     pub fn pick_manual_compaction(
         &self,
         version: &Version,
@@ -403,6 +411,7 @@ pub struct CompactionExecutor<FS: FileSystem> {
 
 impl<FS: FileSystem> CompactionExecutor<FS> {
     /// Create a new compaction executor.
+    #[must_use]
     pub fn new(
         pager: Arc<Pager<FS>>,
         manifest: Arc<Manifest<FS>>,
@@ -602,6 +611,7 @@ impl<FS: FileSystem> CompactionExecutor<FS> {
     }
 
     /// Get current compaction statistics.
+    #[must_use]
     pub fn stats(&self) -> CompactionStats {
         self.stats.read().unwrap().clone()
     }
@@ -618,6 +628,7 @@ pub struct CompactionManager<FS: FileSystem> {
 
 impl<FS: FileSystem + 'static> CompactionManager<FS> {
     /// Create a new compaction manager.
+    #[must_use]
     pub fn new(
         pager: Arc<Pager<FS>>,
         manifest: Arc<Manifest<FS>>,

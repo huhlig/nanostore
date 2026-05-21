@@ -25,7 +25,7 @@
 //! here focus on transaction-layer integration: WAL logging, write set tracking,
 //! and the trait interface.
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{FullTextSearch, TableEngineKind, TableOptions, TextField, TextQuery};
 use nanostore::txn::TransactionId;
 use nanostore::types::{Durability, KeyEncoding};

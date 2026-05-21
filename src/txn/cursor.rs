@@ -34,6 +34,7 @@ pub struct Cursor {
 
 impl Cursor {
     /// Create a new cursor wrapping a table cursor implementation.
+    #[must_use]
     pub fn new(inner: Box<dyn TableCursor>) -> Self {
         Self { inner }
     }
@@ -42,6 +43,7 @@ impl Cursor {
     ///
     /// Returns `false` when the cursor has moved past the end of the scan
     /// bounds or before the beginning.
+    #[must_use]
     pub fn valid(&self) -> bool {
         self.inner.valid()
     }
@@ -53,11 +55,13 @@ impl Cursor {
     ///
     /// Note: Currently this is the same as `valid()`. In the future, this
     /// may track cursor invalidation separately from position validity.
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         self.inner.valid()
     }
 
     /// Get the snapshot LSN at which this cursor reads.
+    #[must_use]
     pub fn snapshot_lsn(&self) -> LogSequenceNumber {
         self.inner.snapshot_lsn()
     }
@@ -66,6 +70,7 @@ impl Cursor {
     ///
     /// Returns `None` if the cursor is not positioned at a valid entry.
     /// The returned slice is borrowed and valid until the next cursor operation.
+    #[must_use]
     pub fn key(&self) -> Option<&[u8]> {
         self.inner.key()
     }
@@ -74,6 +79,7 @@ impl Cursor {
     ///
     /// Returns `None` if the cursor is not positioned at a valid entry.
     /// The returned slice is borrowed and valid until the next cursor operation.
+    #[must_use]
     pub fn value(&self) -> Option<&[u8]> {
         self.inner.value()
     }

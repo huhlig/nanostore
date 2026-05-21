@@ -25,7 +25,7 @@
 //! - vacuum_table() and vacuum_all() APIs
 //! - Different table engines (BTree, Hash, LsmTree, GraphAdjacency, TimeSeries)
 
-use nanostore::kvdb::StorageEngine;
+use nanostore::engine::StorageEngine;
 use nanostore::table::{TableEngineKind, TableOptions};
 use nanostore::vfs::MemoryFileSystem;
 use std::sync::Arc;

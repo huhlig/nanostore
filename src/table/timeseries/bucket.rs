@@ -78,6 +78,7 @@ pub struct BucketId(pub u64);
 
 impl BucketId {
     /// Create a new bucket ID from a timestamp and bucket size.
+    #[must_use]
     pub fn from_timestamp(timestamp: i64, bucket_size: u64) -> Self {
         // Ensure we handle negative timestamps correctly
         let bucket_num = if timestamp >= 0 {
@@ -92,6 +93,7 @@ impl BucketId {
     }
 
     /// Get the start timestamp for this bucket.
+    #[must_use]
     pub fn start_timestamp(&self, bucket_size: u64) -> i64 {
         if self.0 > (i64::MAX as u64) / bucket_size {
             // Handle overflow for very large bucket IDs
@@ -102,6 +104,7 @@ impl BucketId {
     }
 
     /// Get the end timestamp for this bucket (exclusive).
+    #[must_use]
     pub fn end_timestamp(&self, bucket_size: u64) -> i64 {
         self.start_timestamp(bucket_size)
             .saturating_add(bucket_size as i64)
@@ -119,7 +122,7 @@ pub struct TimeBucket<FS: FileSystem> {
     /// End timestamp (exclusive)
     end_ts: i64,
 
-    /// Data points in this bucket: (timestamp, version_chain)
+    /// Data points in this bucket: (timestamp, `version_chain`)
     /// Each timestamp can have multiple versions for MVCC support
     points: BTreeMap<i64, VersionChain>,
 
@@ -142,6 +145,7 @@ pub struct TimeBucket<FS: FileSystem> {
 
 impl<FS: FileSystem> TimeBucket<FS> {
     /// Create a new time bucket.
+    #[must_use]
     pub fn new(id: BucketId, bucket_size: u64, pager: std::sync::Arc<Pager<FS>>) -> Self {
         let start_ts = id.start_timestamp(bucket_size);
         let end_ts = id.end_timestamp(bucket_size);
@@ -173,21 +177,25 @@ impl<FS: FileSystem> TimeBucket<FS> {
     }
 
     /// Get the bucket ID.
+    #[must_use]
     pub fn id(&self) -> BucketId {
         self.id
     }
 
     /// Get the start timestamp.
+    #[must_use]
     pub fn start_timestamp(&self) -> i64 {
         self.start_ts
     }
 
     /// Get the end timestamp.
+    #[must_use]
     pub fn end_timestamp(&self) -> i64 {
         self.end_ts
     }
 
     /// Check if a timestamp falls within this bucket.
+    #[must_use]
     pub fn contains_timestamp(&self, timestamp: i64) -> bool {
         timestamp >= self.start_ts && timestamp < self.end_ts
     }
@@ -279,16 +287,19 @@ impl<FS: FileSystem> TimeBucket<FS> {
     }
 
     /// Get the number of points in this bucket.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.points.len()
     }
 
     /// Check if the bucket is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.points.is_empty()
     }
 
     /// Check if the bucket is dirty (modified since last flush).
+    #[must_use]
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
@@ -327,6 +338,7 @@ impl<FS: FileSystem> TimeBucket<FS> {
     }
 
     /// Find the latest point before or at the given timestamp with snapshot visibility.
+    #[must_use]
     pub fn latest_before(&self, timestamp: i64, snapshot: &Snapshot) -> Option<(i64, Vec<u8>)> {
         self.points
             .range(..=timestamp)
@@ -573,21 +585,25 @@ impl<FS: FileSystem> TimeBucket<FS> {
     }
 
     /// Get the page ID where this bucket is stored.
+    #[must_use]
     pub fn page_id(&self) -> Option<PageId> {
         self.page_id
     }
 
     /// Set the page ID where this bucket is stored.
+    #[must_use]
     pub fn set_page_id(&mut self, page_id: PageId) {
         self.page_id = Some(page_id);
     }
 
     /// Get the last access time.
+    #[must_use]
     pub fn last_access_time(&self) -> u64 {
         self.last_access_time
     }
 
     /// Get the estimated size in bytes.
+    #[must_use]
     pub fn estimated_size(&self) -> usize {
         let mut size = 32; // Fixed overhead (id, timestamps, metadata)
         for (_, chain) in &self.points {
@@ -682,6 +698,7 @@ pub struct BucketManager<FS: FileSystem> {
 
 impl<FS: FileSystem> BucketManager<FS> {
     /// Create a new bucket manager.
+    #[must_use]
     pub fn new(
         bucket_size: u64,
         pager: std::sync::Arc<Pager<FS>>,
@@ -726,6 +743,7 @@ impl<FS: FileSystem> BucketManager<FS> {
     }
 
     /// Get a bucket by ID.
+    #[must_use]
     pub fn get_bucket(&self, bucket_id: BucketId) -> Option<&TimeBucket<FS>> {
         self.buckets.get(&bucket_id)
     }
@@ -736,6 +754,7 @@ impl<FS: FileSystem> BucketManager<FS> {
     }
 
     /// Get all bucket IDs that overlap with the given time range.
+    #[must_use]
     pub fn get_bucket_ids_in_range(&self, start_ts: i64, end_ts: i64) -> Vec<BucketId> {
         let start_bucket = BucketId::from_timestamp(start_ts, self.bucket_size);
         let end_bucket = BucketId::from_timestamp(end_ts, self.bucket_size);
@@ -786,11 +805,13 @@ impl<FS: FileSystem> BucketManager<FS> {
     }
 
     /// Get the number of buckets in memory.
+    #[must_use]
     pub fn bucket_count(&self) -> usize {
         self.buckets.len()
     }
 
     /// Get the total number of tracked buckets (in memory + on disk).
+    #[must_use]
     pub fn total_bucket_count(&self) -> usize {
         self.bucket_page_map.len()
     }
@@ -801,11 +822,13 @@ impl<FS: FileSystem> BucketManager<FS> {
     }
 
     /// Get the page ID for a bucket if it exists.
+    #[must_use]
     pub fn get_bucket_page_id(&self, bucket_id: BucketId) -> Option<PageId> {
         self.bucket_page_map.get(&bucket_id).copied()
     }
 
     /// Get all bucket page mappings for persistence.
+    #[must_use]
     pub fn get_bucket_page_mappings(&self) -> Vec<(u64, PageId)> {
         self.bucket_page_map
             .iter()

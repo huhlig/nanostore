@@ -116,6 +116,7 @@ impl TableInfo {
     }
 
     /// Get a metadata property
+    #[must_use]
     pub fn get_metadata(&self, key: &str) -> Option<&Vec<u8>> {
         self.metadata.get(key)
     }
@@ -126,6 +127,7 @@ impl TableInfo {
     }
 
     /// Get all metadata properties
+    #[must_use]
     pub fn metadata(&self) -> &HashMap<String, Vec<u8>> {
         &self.metadata
     }
@@ -190,6 +192,7 @@ impl TableEngineKind {
     ///
     /// Persistent engines survive process restarts and store data on disk.
     /// Non-persistent engines are ephemeral and lose data when the process ends.
+    #[must_use]
     pub fn is_persistent(&self) -> bool {
         match self {
             // Paged engines - persistent
@@ -602,12 +605,6 @@ pub trait OrderedKvTable: PointLookup + OrderedScan + MutableTable + BatchOps + 
 impl<T> OrderedKvTable for T where T: PointLookup + OrderedScan + MutableTable + BatchOps + Flushable
 {}
 
-/// Backward compatibility alias.
-#[deprecated(since = "0.1.0", note = "Use `SearchableTable` instead")]
-pub trait TableEngine: SearchableTable {}
-
-impl<T: SearchableTable> TableEngine for T {}
-
 /// Read view over a table engine.
 pub trait TableReader: PointLookup + OrderedScan {
     fn snapshot_lsn(&self) -> LogSequenceNumber;
@@ -812,7 +809,7 @@ pub struct VacuumReport {
     /// Bytes reclaimed from removing obsolete versions
     pub bytes_reclaimed: u64,
     /// VACUUM FULL statistics (only populated when full=true)
-    pub full_stats: Option<crate::kvdb::VacuumFullStats>,
+    pub full_stats: Option<crate::engine::VacuumFullStats>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
