@@ -204,6 +204,10 @@ impl<FS: FileSystem> LsmTree<FS> {
         {
             let memtable = self.active_memtable.read().unwrap();
             if let Some(value) = memtable.get(key, snapshot_lsn)? {
+                // Empty value means tombstone (deleted key)
+                if value.is_empty() {
+                    return Ok(None);
+                }
                 return Ok(Some(value));
             }
         }
@@ -213,6 +217,10 @@ impl<FS: FileSystem> LsmTree<FS> {
             let immutable = self.immutable_memtables.read().unwrap();
             for memtable in immutable.iter().rev() {
                 if let Some(value) = memtable.get(key, snapshot_lsn)? {
+                    // Empty value means tombstone (deleted key)
+                    if value.is_empty() {
+                        return Ok(None);
+                    }
                     return Ok(Some(value));
                 }
             }
@@ -244,6 +252,10 @@ impl<FS: FileSystem> LsmTree<FS> {
                     }
 
                     if let Some(value) = reader.get(key, snapshot_lsn)? {
+                        // Empty value means tombstone (deleted key)
+                        if value.is_empty() {
+                            return Ok(None);
+                        }
                         return Ok(Some(value));
                     }
                 }
@@ -273,6 +285,10 @@ impl<FS: FileSystem> LsmTree<FS> {
                     }
 
                     if let Some(value) = reader.get(key, snapshot_lsn)? {
+                        // Empty value means tombstone (deleted key)
+                        if value.is_empty() {
+                            return Ok(None);
+                        }
                         return Ok(Some(value));
                     }
                 }
@@ -566,12 +582,14 @@ impl<FS: FileSystem> LsmTree<FS> {
         Ok(iterators)
     }
 
-    /// Vacuum obsolete versions from the active and immutable memtables.
+    /// Vacuum obsolete versions from memtables and trigger compaction for SSTables.
     ///
-    /// Note: This only vacuums memtables. SSTables are immutable and cleaned up
-    /// during compaction. For a full vacuum, trigger compaction after calling this.
+    /// This performs a full vacuum by:
+    /// 1. Vacuuming active and immutable memtables to remove old versions
+    /// 2. Triggering compaction for all levels to clean up obsolete versions in SSTables
+    /// 3. Freeing pages from removed SSTables during compaction
     ///
-    /// Returns the total count of removed versions.
+    /// Returns the total count of removed versions from memtables.
     pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
         let mut total_removed = 0;
 
@@ -586,6 +604,20 @@ impl<FS: FileSystem> LsmTree<FS> {
         let immutable = self.immutable_memtables.read().unwrap();
         for memtable in immutable.iter() {
             total_removed += memtable.vacuum(min_visible_lsn)?;
+        }
+
+        // Trigger compaction for all levels to clean up SSTables
+        // This will remove obsolete versions and free pages from old SSTables
+        let version = self.manifest.current();
+        for level in 0..version.num_levels() {
+            // Trigger compaction for this level if there are files
+            if !version.level_files(level as u32).is_empty() {
+                // Use compact_range with None bounds to compact all files in the level
+                if let Err(e) = self.compaction_manager.compact_range(level as u32, None, None) {
+                    // Log error but continue with other levels
+                    eprintln!("Failed to compact level {}: {:?}", level, e);
+                }
+            }
         }
 
         Ok(total_removed)
@@ -767,11 +799,32 @@ impl<'a, FS: FileSystem> MutableTable for LsmWriter<'a, FS> {
     }
 
     fn delete(&mut self, key: &[u8]) -> TableResult<bool> {
-        // Check if key exists
-        let exists = self.tree.get_internal(key, self.snapshot_lsn)?.is_some();
-        if exists {
+        // Check if we have a pending change for this key in the same transaction
+        // If so, update it to None (tombstone) instead of adding a new entry
+        let mut found_pending = false;
+        let mut was_insert = false;
+        for (k, v) in self.pending_changes.iter_mut() {
+            if k == key {
+                found_pending = true;
+                was_insert = v.is_some(); // Key exists if it was a pending insert
+                *v = None; // Update to tombstone
+                break;
+            }
+        }
+        
+        // If not found in pending changes, always add tombstone
+        // This handles both committed keys and uncommitted keys from previous flushes
+        if !found_pending {
             self.pending_changes.push((key.to_vec(), None));
         }
+        
+        // Check if key exists (either committed or was a pending insert)
+        // Note: We can't reliably check uncommitted versions from the same transaction
+        // after they've been flushed, so we always add the tombstone and let the
+        // memtable/sstable handle it
+        let exists_committed = self.tree.get_internal(key, self.snapshot_lsn)?.is_some();
+        let exists = exists_committed || was_insert;
+        
         Ok(exists)
     }
 

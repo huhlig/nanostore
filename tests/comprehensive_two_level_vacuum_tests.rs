@@ -18,7 +18,7 @@
 //!
 //! This test validates the full two-level vacuum process:
 //! 1. **Table-level vacuum** (`vacuum_table()`) - Condenses B-tree nodes, frees pages
-//! 2. **Pager-level compaction** (`vacuum_full_table()`) - Repacks physical pages, reclaims disk space
+//! 2. **Pager-level compaction** (`vacuum_table()`) - Repacks physical pages, reclaims disk space
 //!
 //! The test ensures both levels of compaction work correctly together.
 
@@ -79,10 +79,10 @@ fn test_comprehensive_two_level_vacuum_single_table() {
     println!("✓ Table vacuum removed {} versions", versions_removed);
 
     // Phase 4: Perform pager-level compaction (repack physical pages)
-    println!("\nPhase 4: Performing pager-level compaction (vacuum_full_table)...");
+    println!("\nPhase 4: Performing pager-level compaction (vacuum_table)...");
     let stats = db
-        .vacuum_full_table(table_id)
-        .expect("Failed to run vacuum_full_table");
+        .vacuum_table(table_id)
+        .expect("Failed to run vacuum_table");
 
     println!("✓ Pager compaction complete:");
     println!("  Pages moved: {}", stats.pages_moved);
@@ -232,7 +232,7 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     println!("\nPhase 5: Performing pager-level compaction on each table sequentially...");
 
     let stats1 = db
-        .vacuum_full_table(table1)
+        .vacuum_table(table1)
         .expect("Failed to compact table1");
     println!(
         "✓ Table1 compaction: {} bytes reclaimed",
@@ -240,7 +240,7 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     );
 
     let stats2 = db
-        .vacuum_full_table(table2)
+        .vacuum_table(table2)
         .expect("Failed to compact table2");
     println!(
         "✓ Table2 compaction: {} bytes reclaimed",
@@ -248,7 +248,7 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     );
 
     let stats3 = db
-        .vacuum_full_table(table3)
+        .vacuum_table(table3)
         .expect("Failed to compact table3");
     println!(
         "✓ Table3 compaction: {} bytes reclaimed",

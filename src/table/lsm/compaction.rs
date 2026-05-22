@@ -45,7 +45,7 @@
 //! - Progress tracking and statistics
 //! - Graceful shutdown
 
-use crate::pager::Pager;
+use crate::pager::{PageId, Pager};
 use crate::table::error::{TableError, TableResult};
 use crate::table::lsm::{
     CompactionConfig, Direction, FileMetadata, LsmIterator, Manifest, MergeIterator, SStableId,
@@ -615,6 +615,25 @@ impl<FS: FileSystem> CompactionExecutor<FS> {
     pub fn stats(&self) -> CompactionStats {
         self.stats.read().unwrap().clone()
     }
+
+    /// Free pages from removed SSTables.
+    ///
+    /// This is called after compaction to free the pages occupied by the input SSTables
+    /// that have been merged into new output SSTables.
+    pub fn free_sstable_pages(&self, files: &[FileMetadata]) {
+        for file in files {
+            // Free all pages used by this SSTable
+            for page_offset in 0..file.num_pages {
+                let page_id = PageId::from(file.first_page_id.as_u64() + page_offset as u64);
+                if let Err(e) = self.pager.free_page(page_id) {
+                    eprintln!(
+                        "Failed to free page {} from SSTable {}: {:?}",
+                        page_id, file.id, e
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Background compaction manager.
@@ -709,6 +728,14 @@ impl<FS: FileSystem + 'static> CompactionManager<FS> {
                 // Execute compaction
                 match executor.execute(job.clone()) {
                     Ok(output_files) => {
+                        // Collect input file metadata before removing them
+                        let input_files: Vec<_> = job
+                            .input_file_ids()
+                            .iter()
+                            .filter_map(|id| version.get_file(*id))
+                            .cloned()
+                            .collect();
+
                         // Apply version edits
                         let mut edits = Vec::new();
 
@@ -725,6 +752,9 @@ impl<FS: FileSystem + 'static> CompactionManager<FS> {
                         // Apply edits to manifest
                         if let Err(e) = manifest.apply_edits(edits) {
                             eprintln!("Failed to apply compaction edits: {:?}", e);
+                        } else {
+                            // Free pages from removed SSTables
+                            executor.free_sstable_pages(&input_files);
                         }
                     }
                     Err(e) => {
@@ -751,6 +781,14 @@ impl<FS: FileSystem + 'static> CompactionManager<FS> {
             .picker
             .pick_manual_compaction(&version, level, start_key, end_key)
         {
+            // Collect input file metadata before removing them
+            let input_files: Vec<_> = job
+                .input_file_ids()
+                .iter()
+                .filter_map(|id| version.get_file(*id))
+                .cloned()
+                .collect();
+
             let output_files = self.executor.execute(job.clone())?;
 
             // Apply version edits
@@ -765,6 +803,9 @@ impl<FS: FileSystem + 'static> CompactionManager<FS> {
             }
 
             self.manifest.apply_edits(edits)?;
+
+            // Free pages from removed SSTables
+            self.executor.free_sstable_pages(&input_files);
         }
 
         Ok(())

@@ -311,7 +311,12 @@ fn test_mixed_workload_15k_operations() {
 
     // Deleted keys should not exist
     let result = reader.get(b"key_03000", lsn).unwrap();
-    assert!(result.is_none());
+    if result.is_some() {
+        eprintln!("ERROR: key_03000 returned Some with value length: {}", result.as_ref().unwrap().0.len());
+        eprintln!("Value: {:?}", result.as_ref().unwrap().0);
+    }
+    assert!(result.is_none(), "Deleted key key_03000 should return None, but got Some with {} bytes",
+        result.as_ref().map(|v| v.0.len()).unwrap_or(0));
 
     // New keys should exist
     let result = reader.get(b"key_10000", lsn).unwrap();

@@ -114,7 +114,7 @@ fn test_vacuum_full_basic_compaction() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("VACUUM FULL stats: {:?}", stats);
@@ -294,7 +294,7 @@ fn test_vacuum_full_large_file_many_free_pages() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("Large file VACUUM FULL stats: {:?}", stats);
@@ -341,7 +341,7 @@ fn test_vacuum_full_edge_case_no_free_pages() {
 
     // Run VACUUM FULL on a table with no free pages
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("No free pages VACUUM FULL stats: {:?}", stats);
@@ -385,7 +385,7 @@ fn test_vacuum_full_edge_case_all_pages_free() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("All pages free VACUUM FULL stats: {:?}", stats);
@@ -434,7 +434,7 @@ fn test_vacuum_full_edge_case_single_page() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("Single page VACUUM FULL stats: {:?}", stats);
@@ -492,7 +492,7 @@ fn test_vacuum_full_statistics_accuracy() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("Statistics verification: {:?}", stats);
@@ -563,7 +563,7 @@ fn test_vacuum_full_file_size_reduction() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("File size reduction test: {:?}", stats);
@@ -649,7 +649,7 @@ fn test_vacuum_full_data_integrity_after_compaction() {
 
     // Run VACUUM FULL
     let stats = db
-        .vacuum_full_table(table_id)
+        .vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     println!("Data integrity test stats: {:?}", stats);
@@ -704,7 +704,7 @@ fn test_vacuum_full_non_persistent_table_error() {
     insert_test_data(&db, table_id, 50);
 
     // VACUUM FULL should fail on non-persistent tables
-    let result = db.vacuum_full_table(table_id);
+    let result = db.vacuum_table(table_id);
 
     assert!(
         result.is_err(),
@@ -760,7 +760,7 @@ fn test_vacuum_full_preserves_table_metadata() {
         .expect("Table should exist");
 
     // Run VACUUM FULL
-    db.vacuum_full_table(table_id)
+    db.vacuum_table(table_id)
         .expect("Failed to run VACUUM FULL");
 
     // Get table info after VACUUM FULL

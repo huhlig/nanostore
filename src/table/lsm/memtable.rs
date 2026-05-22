@@ -206,14 +206,12 @@ impl Memtable {
                 if let Some(commit_lsn) = version.commit_lsn
                     && commit_lsn <= snapshot_lsn
                 {
-                    // Found visible version
-                    // Empty value means tombstone (deleted)
-                    if version.value.is_empty() {
-                        return Ok(None);
-                    }
+                    // Found visible version - return it (including tombstones)
                     // Extract inline value from VersionValue
                     match &version.value {
                         VersionValue::Inline(data) => {
+                            // Empty value means tombstone (deleted), but we still return Some(empty)
+                            // to distinguish from "key never existed" (None)
                             return Ok(Some(data.clone()));
                         }
                         VersionValue::External(_) => {
@@ -509,9 +507,9 @@ mod tests {
         let value = memtable.get(b"key1", create_lsn(150)).unwrap();
         assert_eq!(value, Some(b"value1".to_vec()));
 
-        // Get at LSN 200 should return None (deleted)
+        // Get at LSN 200 should return Some(empty) (tombstone)
         let value = memtable.get(b"key1", create_lsn(200)).unwrap();
-        assert_eq!(value, None);
+        assert_eq!(value, Some(Vec::new()));
     }
 
     #[test]
