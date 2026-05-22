@@ -2021,11 +2021,10 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 // Decrement row count
                 self.decrement_row_count()?;
 
-                // Check if node needs rebalancing
-                if !node.has_minimum_keys(self.min_keys) && leaf_page_id != self.get_root_page_id()
-                {
-                    self.rebalance_leaf_after_delete(leaf_page_id, &path)?;
-                }
+                // Do not rebalance on MVCC tombstone insert.
+                // The physical key remains present in the leaf; only its visible
+                // version changes. Rebalancing based on key count here can merge or
+                // redistribute populated leaves and corrupt parent separator routing.
 
                 return Ok(true);
             }

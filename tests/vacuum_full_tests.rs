@@ -43,7 +43,11 @@ fn create_test_db() -> StorageEngine<MemoryFileSystem> {
 }
 
 /// Helper to insert test data into a table
-fn insert_test_data(db: &StorageEngine<MemoryFileSystem>, table_id: nanostore::types::TableId, count: usize) {
+fn insert_test_data(
+    db: &StorageEngine<MemoryFileSystem>,
+    table_id: nanostore::types::TableId,
+    count: usize,
+) {
     for i in 0..count {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}", i);
@@ -53,7 +57,11 @@ fn insert_test_data(db: &StorageEngine<MemoryFileSystem>, table_id: nanostore::t
 }
 
 /// Helper to verify data integrity
-fn verify_data(db: &StorageEngine<MemoryFileSystem>, table_id: nanostore::types::TableId, count: usize) {
+fn verify_data(
+    db: &StorageEngine<MemoryFileSystem>,
+    table_id: nanostore::types::TableId,
+    count: usize,
+) {
     for i in 0..count {
         let key = format!("key{:05}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
@@ -185,11 +193,16 @@ fn test_vacuum_full_multiple_tables() {
     }
 
     // Run VACUUM FULL on all tables
-    let results = db.vacuum_full_all().expect("Failed to run VACUUM FULL on all tables");
+    let results = db
+        .vacuum_full_all()
+        .expect("Failed to run VACUUM FULL on all tables");
 
     println!("VACUUM FULL results for {} tables", results.len());
     for (tid, stats) in &results {
-        println!("  Table {:?}: reclaimed {} bytes", tid, stats.bytes_reclaimed);
+        println!(
+            "  Table {:?}: reclaimed {} bytes",
+            tid, stats.bytes_reclaimed
+        );
     }
 
     // Verify all tables were processed
@@ -266,7 +279,11 @@ fn test_vacuum_full_large_file_many_free_pages() {
         let key = format!("key{:05}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         assert!(value.is_some(), "Remaining data should exist");
-        assert_eq!(value.unwrap().as_ref().len(), 512, "Value size should be preserved");
+        assert_eq!(
+            value.unwrap().as_ref().len(),
+            512,
+            "Value size should be preserved"
+        );
     }
 }
 
@@ -518,7 +535,11 @@ fn test_vacuum_full_file_size_reduction() {
         let key = format!("key{:05}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         assert!(value.is_some(), "Remaining data should exist");
-        assert_eq!(value.unwrap().as_ref().len(), 1024, "Value size should be preserved");
+        assert_eq!(
+            value.unwrap().as_ref().len(),
+            1024,
+            "Value size should be preserved"
+        );
     }
 }
 
@@ -576,9 +597,7 @@ fn test_vacuum_full_data_integrity_after_compaction() {
 
     // Verify all expected data is intact
     for (key, expected_value) in &expected_data {
-        let value = db
-            .get(table_id, key.as_bytes())
-            .expect("Failed to get");
+        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
             Some(expected_value.as_bytes()),
@@ -594,7 +613,10 @@ fn test_vacuum_full_data_integrity_after_compaction() {
         assert_eq!(value, None, "Deleted key {} should return None", key);
     }
 
-    println!("Data integrity verified: {} keys checked", expected_data.len());
+    println!(
+        "Data integrity verified: {} keys checked",
+        expected_data.len()
+    );
 }
 
 #[test]
@@ -624,7 +646,10 @@ fn test_vacuum_full_non_persistent_table_error() {
         "VACUUM FULL should fail on non-persistent tables"
     );
 
-    println!("Expected error for non-persistent table: {:?}", result.err());
+    println!(
+        "Expected error for non-persistent table: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -637,7 +662,11 @@ fn test_vacuum_full_empty_database() {
         .vacuum_full_all()
         .expect("Failed to run VACUUM FULL on empty database");
 
-    assert_eq!(results.len(), 0, "Empty database should have no tables to compact");
+    assert_eq!(
+        results.len(),
+        0,
+        "Empty database should have no tables to compact"
+    );
 }
 
 #[test]
@@ -676,8 +705,14 @@ fn test_vacuum_full_preserves_table_metadata() {
         .expect("Table should exist");
 
     // Verify metadata is preserved
-    assert_eq!(info_before.id, info_after.id, "Table ID should be preserved");
-    assert_eq!(info_before.name, info_after.name, "Table name should be preserved");
+    assert_eq!(
+        info_before.id, info_after.id,
+        "Table ID should be preserved"
+    );
+    assert_eq!(
+        info_before.name, info_after.name,
+        "Table name should be preserved"
+    );
     assert_eq!(
         info_before.options.engine, info_after.options.engine,
         "Table engine should be preserved"

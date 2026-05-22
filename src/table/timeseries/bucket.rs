@@ -713,6 +713,12 @@ impl<FS: FileSystem> BucketManager<FS> {
         }
     }
 
+    /// Get the bucket size.
+    #[must_use]
+    pub fn bucket_size(&self) -> u64 {
+        self.bucket_size
+    }
+
     /// Get or create a bucket for the given timestamp.
     pub fn get_or_create_bucket(&mut self, timestamp: i64) -> TableResult<&mut TimeBucket<FS>> {
         let bucket_id = BucketId::from_timestamp(timestamp, self.bucket_size);

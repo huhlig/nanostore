@@ -397,14 +397,8 @@ mod tests {
 
         assert_eq!(deserialized.next_virtual_id(), PageId::from(4));
         assert_eq!(deserialized.mapping_count(), 2);
-        assert_eq!(
-            deserialized.translate(PageId::from(10)),
-            PageId::from(20)
-        );
-        assert_eq!(
-            deserialized.translate(PageId::from(15)),
-            PageId::from(25)
-        );
+        assert_eq!(deserialized.translate(PageId::from(10)), PageId::from(20));
+        assert_eq!(deserialized.translate(PageId::from(15)), PageId::from(25));
     }
 
     #[test]
@@ -440,12 +434,12 @@ mod tests {
     fn test_rebuild_from_headers() {
         // Simulate page headers: (physical_id, virtual_id)
         let headers = vec![
-            (PageId::from(0), PageId::from(0)),   // Header page (identity)
-            (PageId::from(1), PageId::from(0)),   // Superblock (identity)
-            (PageId::from(2), PageId::from(0)),   // Identity mapping
-            (PageId::from(3), PageId::from(0)),   // Identity mapping
-            (PageId::from(10), PageId::from(5)),  // Virtual 5 → Physical 10
-            (PageId::from(15), PageId::from(8)),  // Virtual 8 → Physical 15
+            (PageId::from(0), PageId::from(0)),  // Header page (identity)
+            (PageId::from(1), PageId::from(0)),  // Superblock (identity)
+            (PageId::from(2), PageId::from(0)),  // Identity mapping
+            (PageId::from(3), PageId::from(0)),  // Identity mapping
+            (PageId::from(10), PageId::from(5)), // Virtual 5 → Physical 10
+            (PageId::from(15), PageId::from(8)), // Virtual 8 → Physical 15
         ];
 
         let mapper = PageMapper::rebuild_from_headers(headers.into_iter());

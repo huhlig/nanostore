@@ -896,6 +896,23 @@ impl<'a, FS: FileSystem> TimeSeriesTableCursor<'a, FS> {
         end_ts: i64,
         snapshot: Snapshot,
     ) -> TableResult<Self> {
+        // First, ensure all required buckets are loaded into memory
+        // We need to do this with a write lock before we can scan with a read lock
+        {
+            let mut state = table.state.write().unwrap();
+            if let Some(manager) = state.series.get_mut(series_key) {
+                let bucket_ids = manager.get_bucket_ids_in_range(start_ts, end_ts);
+                let bucket_size = manager.bucket_size();
+                for bucket_id in bucket_ids {
+                    // This will load the bucket from disk if it's not in memory
+                    // Use the bucket's start timestamp to load it
+                    let bucket_start_ts = bucket_id.start_timestamp(bucket_size);
+                    let _ = manager.get_or_create_bucket(bucket_start_ts);
+                }
+            }
+        }
+
+        // Now scan with a read lock - all buckets are guaranteed to be in memory
         let state = table.state.read().unwrap();
 
         // Collect all points in the range with snapshot visibility

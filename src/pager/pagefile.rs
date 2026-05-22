@@ -113,7 +113,20 @@ impl<FS: FileSystem> Pager<FS> {
         };
 
         // Initialize page mapper from superblock
-        let page_mapper = Arc::new(superblock.page_mapper.clone());
+        let mut page_mapper = superblock.page_mapper.clone();
+        
+        // Sync page mapper's next_virtual_id with superblock's next_page_id
+        // For new databases, both should be 2, but we ensure consistency
+        let next_page_id = superblock.next_page_id();
+        let next_virtual_id = page_mapper.next_virtual_id();
+        if next_virtual_id.as_u64() < next_page_id.as_u64() {
+            page_mapper = PageMapper::from_state(
+                page_mapper.get_mappings(),
+                next_page_id,
+            );
+        }
+        
+        let page_mapper = Arc::new(page_mapper);
 
         Ok(Self {
             file: Arc::new(RwLock::new(file)),
@@ -197,7 +210,26 @@ impl<FS: FileSystem> Pager<FS> {
         };
 
         // Initialize page mapper from superblock
-        let page_mapper = Arc::new(superblock.page_mapper.clone());
+        let mut page_mapper = superblock.page_mapper.clone();
+        
+        // CRITICAL FIX: Sync page mapper's next_virtual_id with superblock's next_page_id
+        // When opening an existing database, the page mapper needs to know about all
+        // pages that have been allocated. For databases created before PageMapper,
+        // all pages use identity mapping (virtual_id == physical_id), so we need to
+        // ensure next_virtual_id is at least as high as next_page_id.
+        let next_page_id = superblock.next_page_id();
+        let next_virtual_id = page_mapper.next_virtual_id();
+        if next_virtual_id.as_u64() < next_page_id.as_u64() {
+            // Update the page mapper to account for all existing pages
+            // This ensures that when we allocate new virtual IDs, they don't conflict
+            // with existing physical pages that use identity mapping
+            page_mapper = PageMapper::from_state(
+                page_mapper.get_mappings(),
+                next_page_id,
+            );
+        }
+        
+        let page_mapper = Arc::new(page_mapper);
 
         Ok(Self {
             file: Arc::new(RwLock::new(file)),
@@ -341,7 +373,7 @@ impl<FS: FileSystem> Pager<FS> {
         histogram!("nanostore.pager.allocate.duration_seconds")
             .record(start.elapsed().as_secs_f64());
         debug!("Page allocated successfully");
-        
+
         // Return virtual page ID (what tables should use)
         Ok(virtual_id)
     }
@@ -396,8 +428,11 @@ impl<FS: FileSystem> Pager<FS> {
                 return Err(PagerError::PageAlreadyFree(physical_id));
             }
 
-            let mut free_page =
-                Page::new(physical_id, PageType::Free, self.config.page_size.data_size());
+            let mut free_page = Page::new(
+                physical_id,
+                PageType::Free,
+                self.config.page_size.data_size(),
+            );
             free_page.header.compression = self.config.compression;
             free_page.header.encryption = self.config.encryption;
             let free_page_bytes =
@@ -1328,7 +1363,7 @@ impl<FS: FileSystem> Pager<FS> {
 
         // Get snapshot of all free pages from the freelist
         let all_free_pages = self.free_list.snapshot_free_pages();
-        
+
         // Filter to only include free pages below the highest used page
         // (pages 0 and 1 are reserved for header and superblock)
         let mut free_pages: Vec<PageId> = all_free_pages
@@ -1505,18 +1540,23 @@ mod tests {
         let config = PagerConfig::default();
         let pager = Pager::create(&fs, "test.db", config).unwrap();
 
-        // Allocate a page
+        // Allocate a page (virtual ID 2, physical ID 2)
         let page_id = pager.allocate_page(PageType::BTreeLeaf).unwrap();
         assert_eq!(page_id, PageId::from(2));
         assert_eq!(pager.free_pages(), 0);
 
-        // Free the page
+        // Free the page (unmaps virtual ID 2, adds physical ID 2 to free list)
         pager.free_page(page_id).unwrap();
         assert_eq!(pager.free_pages(), 1);
 
-        // Allocate again - should reuse the freed page
+        // Allocate again - should get NEW virtual ID 3 (virtual IDs are monotonic)
+        // but reuse physical ID 2 from the free list
         let reused_page_id = pager.allocate_page(PageType::BTreeLeaf).unwrap();
-        assert_eq!(reused_page_id, page_id);
-        assert_eq!(pager.free_pages(), 0);
+        assert_eq!(reused_page_id, PageId::from(3)); // New virtual ID
+        assert_eq!(pager.free_pages(), 0); // Physical page was reused
+
+        // Verify the mapping: virtual 3 → physical 2
+        let physical_id = pager.page_mapper.translate(reused_page_id);
+        assert_eq!(physical_id, PageId::from(2)); // Physical page was reused
     }
 }

@@ -103,7 +103,7 @@ fn test_vacuum_table_memory_btree() {
     let versions_removed = db
         .vacuum_table(table_id)
         .expect("Failed to vacuum Memory table");
-    
+
     println!("Memory table vacuum removed {} versions", versions_removed);
 
     // Verify data integrity - all keys should still be accessible
@@ -111,7 +111,7 @@ fn test_vacuum_table_memory_btree() {
         let key = format!("key{:03}", i);
         let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
         assert!(value.is_some(), "Key {} should exist after vacuum", i);
-        
+
         // Verify correct version is present
         let expected = if i < 50 {
             format!("value{:03}_v3", i)
@@ -169,8 +169,11 @@ fn test_vacuum_table_memory_with_deletes() {
     let versions_removed = db
         .vacuum_table(table_id)
         .expect("Failed to vacuum Memory table");
-    
-    println!("Memory table with deletes vacuum removed {} versions", versions_removed);
+
+    println!(
+        "Memory table with deletes vacuum removed {} versions",
+        versions_removed
+    );
 
     // Verify deleted keys are gone
     for i in 0..25 {
@@ -186,6 +189,5 @@ fn test_vacuum_table_memory_with_deletes() {
         assert!(value.is_some(), "Key {} should exist after vacuum", i);
     }
 }
-
 
 // Made with Bob

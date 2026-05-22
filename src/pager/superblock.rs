@@ -104,10 +104,10 @@ impl Superblock {
 
     /// Size of the superblock header in bytes (before inline mapper data)
     pub const HEADER_SIZE: usize = 96;
-    
+
     /// Maximum size for inline page mapper data
     pub const INLINE_MAPPER_SIZE: usize = 256;
-    
+
     /// Total size of the superblock in bytes
     pub const SIZE: usize = Self::HEADER_SIZE + Self::INLINE_MAPPER_SIZE;
 
@@ -158,7 +158,7 @@ impl Superblock {
 
         // Serialize page mapper
         let mapper_bytes = self.page_mapper.to_bytes();
-        
+
         // If mapper fits inline, store it; otherwise it will be in a separate page
         if mapper_bytes.len() <= Self::INLINE_MAPPER_SIZE {
             bytes.extend_from_slice(&mapper_bytes);
@@ -193,25 +193,26 @@ impl Superblock {
         }
 
         let version = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-        
+
         // Support both old version (1) and new version (2)
         let (page_mapper_page, page_mapper) = if version == 1 {
             // Old version without page mapper - initialize with identity mapping
             (PageId::from(0), PageMapper::new())
         } else if version == 2 {
             // New version with page mapper
-            let page_mapper_page = PageId::from(u64::from_le_bytes(bytes[88..96].try_into().unwrap()));
-            
+            let page_mapper_page =
+                PageId::from(u64::from_le_bytes(bytes[88..96].try_into().unwrap()));
+
             // Try to deserialize inline mapper data
             let page_mapper = if page_mapper_page.as_u64() == 0 && bytes.len() >= Self::SIZE {
                 // Mapper is stored inline
                 let mapper_bytes = &bytes[Self::HEADER_SIZE..Self::SIZE];
-                
+
                 // Check if there's actual mapper data (at least 16 bytes for header)
                 // by checking if the first 16 bytes are not all zeros
-                let has_data = mapper_bytes.len() >= 16 &&
-                    mapper_bytes[0..16].iter().any(|&b| b != 0);
-                
+                let has_data =
+                    mapper_bytes.len() >= 16 && mapper_bytes[0..16].iter().any(|&b| b != 0);
+
                 if has_data {
                     // Try to deserialize the mapper data
                     // The PageMapper::from_bytes will read exactly what it needs
@@ -223,7 +224,7 @@ impl Superblock {
                 // Mapper is in separate page (will be loaded later by Pager)
                 PageMapper::new()
             };
-            
+
             (page_mapper_page, page_mapper)
         } else {
             return Err(PagerError::invalid_superblock(
@@ -334,24 +335,30 @@ mod tests {
     #[test]
     fn test_superblock_with_page_mapper() {
         let sb = Superblock::new();
-        
+
         // Add some mappings
         sb.page_mapper.remap(PageId::from(10), PageId::from(20));
         sb.page_mapper.remap(PageId::from(15), PageId::from(25));
-        
+
         let bytes = sb.to_bytes();
         let deserialized = Superblock::from_bytes(&bytes).unwrap();
-        
+
         assert_eq!(deserialized.page_mapper.mapping_count(), 2);
-        assert_eq!(deserialized.page_mapper.translate(PageId::from(10)), PageId::from(20));
-        assert_eq!(deserialized.page_mapper.translate(PageId::from(15)), PageId::from(25));
+        assert_eq!(
+            deserialized.page_mapper.translate(PageId::from(10)),
+            PageId::from(20)
+        );
+        assert_eq!(
+            deserialized.page_mapper.translate(PageId::from(15)),
+            PageId::from(25)
+        );
     }
 
     #[test]
     fn test_version_migration() {
         // Create a version 1 superblock (without page mapper)
         let mut bytes = vec![0u8; Superblock::SIZE];
-        
+
         // Magic
         bytes[0..8].copy_from_slice(&Superblock::MAGIC.to_le_bytes());
         // Version 1
@@ -359,9 +366,9 @@ mod tests {
         // Other fields
         bytes[16..24].copy_from_slice(&2u64.to_le_bytes()); // total_pages
         bytes[48..56].copy_from_slice(&2u64.to_le_bytes()); // next_page_id
-        
+
         let sb = Superblock::from_bytes(&bytes).unwrap();
-        
+
         // Should have migrated to version 2 with empty page mapper
         assert_eq!(sb.version, 2);
         assert_eq!(sb.page_mapper.mapping_count(), 0);

@@ -251,8 +251,11 @@ impl VersionChain {
     /// Returns None if the visible version is external or if no version is visible.
     #[must_use]
     pub fn find_visible_inline(&self, snapshot: &Snapshot) -> Option<&[u8]> {
-        self.find_visible_version(snapshot)
-            .and_then(|v| v.as_inline())
+        match self.find_visible_version(snapshot) {
+            Some(VersionValue::Inline(data)) => Some(data.as_slice()),
+            Some(VersionValue::External(_)) => None,
+            None => None,
+        }
     }
 
     /// Remove obsolete committed versions older than the visibility watermark.

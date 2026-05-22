@@ -1145,6 +1145,13 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(results)
     }
 
+    /// Backward-compatible alias for VACUUM PAGER on all persistent tables.
+    ///
+    /// Existing tests and callers still use the previous API name.
+    pub fn vacuum_full_all(&self) -> Result<HashMap<TableId, VacuumFullStats>, StorageEngineError> {
+        self.vacuum_pager()
+    }
+
     /// Start the background vacuum thread.
     ///
     /// This is called automatically by `new()` and `open()`.

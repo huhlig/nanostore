@@ -79,12 +79,15 @@ fn test_comprehensive_two_level_vacuum_single_table() {
     let stats = db
         .vacuum_full_table(table_id)
         .expect("Failed to run vacuum_full_table");
-    
+
     println!("✓ Pager compaction complete:");
     println!("  Pages moved: {}", stats.pages_moved);
     println!("  Pages truncated: {}", stats.pages_truncated);
     println!("  Bytes reclaimed: {}", stats.bytes_reclaimed);
-    println!("  File size: {} -> {} bytes", stats.file_size_before, stats.file_size_after);
+    println!(
+        "  File size: {} -> {} bytes",
+        stats.file_size_before, stats.file_size_after
+    );
 
     // Verify statistics
     assert!(
@@ -142,7 +145,7 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
             },
         )
         .expect("Failed to create table1");
-    
+
     let table2 = db
         .create_table(
             "table2",
@@ -152,7 +155,7 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
             },
         )
         .expect("Failed to create table2");
-    
+
     let table3 = db
         .create_table(
             "table3",
@@ -162,7 +165,7 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
             },
         )
         .expect("Failed to create table3");
-    
+
     println!("✓ Created 3 tables");
 
     // Phase 2: Insert data into all tables
@@ -200,16 +203,31 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
 
     // Phase 5: Perform pager-level compaction on each table SEQUENTIALLY
     println!("\nPhase 5: Performing pager-level compaction on each table sequentially...");
-    
-    let stats1 = db.vacuum_full_table(table1).expect("Failed to compact table1");
-    println!("✓ Table1 compaction: {} bytes reclaimed", stats1.bytes_reclaimed);
-    
-    let stats2 = db.vacuum_full_table(table2).expect("Failed to compact table2");
-    println!("✓ Table2 compaction: {} bytes reclaimed", stats2.bytes_reclaimed);
-    
-    let stats3 = db.vacuum_full_table(table3).expect("Failed to compact table3");
-    println!("✓ Table3 compaction: {} bytes reclaimed", stats3.bytes_reclaimed);
-    
+
+    let stats1 = db
+        .vacuum_full_table(table1)
+        .expect("Failed to compact table1");
+    println!(
+        "✓ Table1 compaction: {} bytes reclaimed",
+        stats1.bytes_reclaimed
+    );
+
+    let stats2 = db
+        .vacuum_full_table(table2)
+        .expect("Failed to compact table2");
+    println!(
+        "✓ Table2 compaction: {} bytes reclaimed",
+        stats2.bytes_reclaimed
+    );
+
+    let stats3 = db
+        .vacuum_full_table(table3)
+        .expect("Failed to compact table3");
+    println!(
+        "✓ Table3 compaction: {} bytes reclaimed",
+        stats3.bytes_reclaimed
+    );
+
     let total_reclaimed = stats1.bytes_reclaimed + stats2.bytes_reclaimed + stats3.bytes_reclaimed;
     println!("  Total: {} bytes reclaimed", total_reclaimed);
 
@@ -217,14 +235,20 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     println!("\nPhase 6: Verifying data integrity...");
     for i in 350..500 {
         let key = format!("key{:05}", i);
-        
-        let v1 = db.get(table1, key.as_bytes()).expect("Failed to get from table1");
+
+        let v1 = db
+            .get(table1, key.as_bytes())
+            .expect("Failed to get from table1");
         assert!(v1.is_some(), "Data should exist in table1 for key {}", key);
-        
-        let v2 = db.get(table2, key.as_bytes()).expect("Failed to get from table2");
+
+        let v2 = db
+            .get(table2, key.as_bytes())
+            .expect("Failed to get from table2");
         assert!(v2.is_some(), "Data should exist in table2 for key {}", key);
-        
-        let v3 = db.get(table3, key.as_bytes()).expect("Failed to get from table3");
+
+        let v3 = db
+            .get(table3, key.as_bytes())
+            .expect("Failed to get from table3");
         assert!(v3.is_some(), "Data should exist in table3 for key {}", key);
     }
     println!("✓ Verified 150 records in each table");
@@ -232,14 +256,20 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     // Verify deleted data is gone
     for i in 0..350 {
         let key = format!("key{:05}", i);
-        
-        let v1 = db.get(table1, key.as_bytes()).expect("Failed to get from table1");
+
+        let v1 = db
+            .get(table1, key.as_bytes())
+            .expect("Failed to get from table1");
         assert_eq!(v1, None, "Deleted key should return None in table1");
-        
-        let v2 = db.get(table2, key.as_bytes()).expect("Failed to get from table2");
+
+        let v2 = db
+            .get(table2, key.as_bytes())
+            .expect("Failed to get from table2");
         assert_eq!(v2, None, "Deleted key should return None in table2");
-        
-        let v3 = db.get(table3, key.as_bytes()).expect("Failed to get from table3");
+
+        let v3 = db
+            .get(table3, key.as_bytes())
+            .expect("Failed to get from table3");
         assert_eq!(v3, None, "Deleted key should return None in table3");
     }
     println!("✓ Verified 350 deleted records are gone from each table");

@@ -276,17 +276,17 @@ impl FreeList {
     /// exclusive access).
     pub fn snapshot_free_pages(&self) -> Vec<PageId> {
         let mut pages = Vec::new();
-        
+
         // Drain the queue into a vector
         while let Some(page_id) = self.free_pages.pop() {
             pages.push(page_id);
         }
-        
+
         // Repopulate the queue in reverse order to maintain LIFO behavior
         for &page_id in pages.iter().rev() {
             self.free_pages.push(page_id);
         }
-        
+
         pages
     }
 
