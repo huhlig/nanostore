@@ -939,6 +939,8 @@ impl<FS: FileSystem> StorageEngine<FS> {
             }
         }
 
+        // TODO: run vacuum_pager
+
         Ok(results)
     }
 
@@ -1054,6 +1056,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// println!("Reclaimed {} bytes", stats.bytes_reclaimed);
     /// println!("File size: {} -> {}", stats.file_size_before, stats.file_size_after);
     /// ```
+    #[deprecated(since = "0.1", note = "use vacuum_table and vacuum_pager")]
     pub fn vacuum_full_table(
         &self,
         table_id: TableId,

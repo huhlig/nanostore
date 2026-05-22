@@ -27,6 +27,7 @@
 //! - Memory (in-memory BTree)
 //!
 //! Note: Other table types have dedicated vacuum tests:
+//! - AppendLog: Vacuum implementation complete in src/table/appendlog/mod.rs
 //! - PagedBTree: vacuum_virtual_physical_mapping_tests.rs
 //! - Hash: vacuum_tests.rs (test_vacuum_with_hash_engine)
 //! - LsmTree: lsm_vacuum_tests.rs
@@ -99,50 +100,52 @@ fn test_vacuum_table_memory_btree() {
             .expect("Failed to update");
     }
 
-    // Run vacuum_table
+    // Run vacuum_table - should remove old versions
     let versions_removed = db
         .vacuum_table(table_id)
         .expect("Failed to vacuum Memory table");
 
     println!("Memory table vacuum removed {} versions", versions_removed);
 
-    // Verify data integrity - all keys should still be accessible
+    // Verify data integrity - all keys should still be accessible with latest values
     for i in 0..100 {
         let key = format!("key{:03}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
-        assert!(value.is_some(), "Key {} should exist after vacuum", i);
-
-        // Verify correct version is present
-        let expected = if i < 50 {
+        let expected_value = if i < 50 {
             format!("value{:03}_v3", i)
         } else {
             format!("value{:03}_v2", i)
         };
+
+        let value = db
+            .get(table_id, key.as_bytes())
+            .expect("Failed to get")
+            .expect("Key should exist");
         assert_eq!(
-            value.as_ref().map(|v| v.as_ref()),
-            Some(expected.as_bytes()),
-            "Key {} should have correct value after vacuum",
-            i
+            value.as_ref(),
+            expected_value.as_bytes(),
+            "Value mismatch for key {}",
+            key
         );
     }
 
-    // Vacuum should be idempotent
+    // Vacuum should be idempotent - running again should remove 0 versions
     let versions_removed2 = db
         .vacuum_table(table_id)
         .expect("Failed to vacuum Memory table again");
     assert_eq!(
         versions_removed2, 0,
-        "Second vacuum should remove no versions"
+        "Second vacuum should remove 0 versions"
     );
 }
 
 #[test]
-fn test_vacuum_table_memory_with_deletes() {
+fn test_vacuum_table_memory_btree_with_deletes() {
     let db = create_test_db();
 
+    // Create Memory table
     let table_id = db
         .create_table(
-            "memory_deletes",
+            "memory_table_deletes",
             TableOptions {
                 engine: TableEngineKind::Memory,
                 ..Default::default()
