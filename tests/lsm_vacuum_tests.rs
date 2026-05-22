@@ -65,7 +65,9 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -73,7 +75,9 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -88,7 +92,11 @@ fn test_lsm_vacuum_requires_immutable_memtable() {
             // If vacuum succeeds, verify data is still accessible
             for i in 0..10 {
                 let key = format!("key{}", i);
-                let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+                let value = db
+                    .table(table_id)
+                    .unwrap()
+                    .get(key.as_bytes())
+                    .expect("Failed to get");
                 let expected = format!("value{}_v2", i);
                 assert_eq!(
                     value.as_ref().map(|v| v.as_ref()),
@@ -123,7 +131,9 @@ fn test_lsm_vacuum_with_immutable_memtables() {
     for i in 0..20 {
         let key = format!("key{:03}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -136,7 +146,9 @@ fn test_lsm_vacuum_with_immutable_memtables() {
     for i in 0..20 {
         let key = format!("key{:03}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -145,7 +157,7 @@ fn test_lsm_vacuum_with_immutable_memtables() {
     for i in 20..100 {
         let key = format!("key{:03}", i);
         let value = vec![0u8; 1024]; // Large values to fill memtable
-        let _ = db.insert(table_id, key.as_bytes(), &value);
+        let _ = db.table(table_id).unwrap().insert(key.as_bytes(), &value);
     }
 
     // Now vacuum should work on immutable memtables
@@ -162,7 +174,11 @@ fn test_lsm_vacuum_with_immutable_memtables() {
             // Verify data is still accessible
             for i in 0..20 {
                 let key = format!("key{:03}", i);
-                let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+                let value = db
+                    .table(table_id)
+                    .unwrap()
+                    .get(key.as_bytes())
+                    .expect("Failed to get");
                 let expected = format!("value{}_v2", i);
                 assert_eq!(
                     value.as_ref().map(|v| v.as_ref()),
@@ -198,7 +214,9 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}_v1", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -211,7 +229,9 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -224,7 +244,9 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}_v3", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -234,7 +256,11 @@ fn test_lsm_vacuum_preserves_snapshot_visibility() {
     // Verify current data is accessible
     for i in 0..10 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}_v3", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -267,14 +293,18 @@ fn test_lsm_vacuum_with_tombstones() {
     for i in 0..20 {
         let key = format!("key{}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Delete half the keys (creates tombstones)
     for i in 0..10 {
         let key = format!("key{}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
@@ -293,14 +323,22 @@ fn test_lsm_vacuum_with_tombstones() {
     // Verify deleted keys are still deleted
     for i in 0..10 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert_eq!(value, None, "Deleted key should return None");
     }
 
     // Verify remaining keys are accessible
     for i in 10..20 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -329,7 +367,9 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
         for i in 0..100 {
             let key = format!("key{:05}", batch * 100 + i);
             let value = vec![0u8; 512]; // Medium-sized values
-            db.insert(table_id, key.as_bytes(), &value)
+            db.table(table_id)
+                .unwrap()
+                .insert(key.as_bytes(), &value)
                 .expect("Failed to insert");
         }
     }
@@ -338,7 +378,9 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
     for i in 0..50 {
         let key = format!("key{:05}", i);
         let value = vec![1u8; 512];
-        db.update(table_id, key.as_bytes(), &value)
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), &value)
             .expect("Failed to update");
     }
 
@@ -361,7 +403,11 @@ fn test_lsm_sstable_compaction_cleans_old_versions() {
     // Verify data is still accessible
     for i in 0..50 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Key should exist");
     }
 }
@@ -413,13 +459,17 @@ fn test_lsm_vacuum_with_multiple_version_chains() {
         let key = format!("key{}", key_idx);
 
         // Insert initial version
-        db.insert(table_id, key.as_bytes(), b"v1")
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), b"v1")
             .expect("Failed to insert");
 
         // Create multiple versions
         for version in 2..=10 {
             let value = format!("v{}", version);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
     }
@@ -439,7 +489,11 @@ fn test_lsm_vacuum_with_multiple_version_chains() {
     // Verify latest versions are still accessible
     for key_idx in 0..5 {
         let key = format!("key{}", key_idx);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"v10"[..]));
     }
 }
@@ -463,7 +517,9 @@ fn test_lsm_vacuum_coordination_with_compaction() {
     for i in 0..50 {
         let key = format!("key{:03}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -471,7 +527,9 @@ fn test_lsm_vacuum_coordination_with_compaction() {
     for i in 0..50 {
         let key = format!("key{:03}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -496,7 +554,11 @@ fn test_lsm_vacuum_coordination_with_compaction() {
     // Verify data integrity
     for i in 0..50 {
         let key = format!("key{:03}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}_v2", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -523,7 +585,9 @@ fn test_lsm_vacuum_respects_min_visible_lsn() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("v1_{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -537,7 +601,9 @@ fn test_lsm_vacuum_respects_min_visible_lsn() {
         for i in 0..10 {
             let key = format!("key{}", i);
             let value = format!("v{}_{}", version, i);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
     }
@@ -560,7 +626,11 @@ fn test_lsm_vacuum_respects_min_visible_lsn() {
     // Verify latest data is accessible
     for i in 0..10 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("v5_{}", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -591,7 +661,9 @@ fn test_lsm_vacuum_after_memtable_flush() {
     for i in 0..200 {
         let key = format!("key{:05}", i);
         let value = vec![0u8; 1024]; // 1KB values
-        db.insert(table_id, key.as_bytes(), &value)
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), &value)
             .expect("Failed to insert");
     }
 
@@ -599,7 +671,9 @@ fn test_lsm_vacuum_after_memtable_flush() {
     for i in 0..50 {
         let key = format!("key{:05}", i);
         let value = vec![1u8; 1024];
-        db.update(table_id, key.as_bytes(), &value)
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), &value)
             .expect("Failed to update");
     }
 
@@ -619,7 +693,11 @@ fn test_lsm_vacuum_after_memtable_flush() {
     // Verify data integrity
     for i in 0..50 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Updated key should exist");
         let val_ref = value.as_ref().unwrap().as_ref();
         assert_eq!(val_ref.len(), 1024);

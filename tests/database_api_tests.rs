@@ -143,12 +143,16 @@ fn test_insert() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert key-value pair
-    db.insert(table_id, b"user1", b"Alice")
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
         .expect("Failed to insert");
 
     // Verify value
     let value = db
-        .get(table_id, b"user1")
+        .table(table_id)
+        .unwrap()
+        .get(b"user1")
         .expect("Failed to get")
         .expect("Value not found");
     assert_eq!(value.as_ref(), b"Alice");
@@ -160,17 +164,20 @@ fn test_insert_duplicate_key() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert first time
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Try to insert duplicate
-    let result = db.insert(table_id, b"user1", b"Bob");
+    let result = db.table(table_id).unwrap().insert(b"user1", b"Bob");
     assert!(result.is_err());
 
     let err = result.unwrap_err();
     assert_eq!(err.kind, StorageEngineErrorKind::KeyAlreadyExists);
 
     // Verify original value unchanged
-    let value = db.get(table_id, b"user1").unwrap().unwrap();
+    let value = db.table(table_id).unwrap().get(b"user1").unwrap().unwrap();
     assert_eq!(value.as_ref(), b"Alice");
 }
 
@@ -180,14 +187,19 @@ fn test_update() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert initial value
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Update value
-    db.update(table_id, b"user1", b"Alice Smith")
+    db.table(table_id)
+        .unwrap()
+        .update(b"user1", b"Alice Smith")
         .expect("Failed to update");
 
     // Verify updated value
-    let value = db.get(table_id, b"user1").unwrap().unwrap();
+    let value = db.table(table_id).unwrap().get(b"user1").unwrap().unwrap();
     assert_eq!(value.as_ref(), b"Alice Smith");
 }
 
@@ -197,7 +209,7 @@ fn test_update_nonexistent_key() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Try to update non-existent key
-    let result = db.update(table_id, b"user1", b"Alice");
+    let result = db.table(table_id).unwrap().update(b"user1", b"Alice");
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -211,12 +223,14 @@ fn test_upsert_insert() {
 
     // Upsert (insert)
     let is_update = db
-        .upsert(table_id, b"user1", b"Alice")
+        .table(table_id)
+        .unwrap()
+        .upsert(b"user1", b"Alice")
         .expect("Failed to upsert");
     assert!(!is_update); // Was an insert
 
     // Verify value
-    let value = db.get(table_id, b"user1").unwrap().unwrap();
+    let value = db.table(table_id).unwrap().get(b"user1").unwrap().unwrap();
     assert_eq!(value.as_ref(), b"Alice");
 }
 
@@ -226,16 +240,21 @@ fn test_upsert_update() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert initial value
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Upsert (update)
     let is_update = db
-        .upsert(table_id, b"user1", b"Alice Smith")
+        .table(table_id)
+        .unwrap()
+        .upsert(b"user1", b"Alice Smith")
         .expect("Failed to upsert");
     assert!(is_update); // Was an update
 
     // Verify updated value
-    let value = db.get(table_id, b"user1").unwrap().unwrap();
+    let value = db.table(table_id).unwrap().get(b"user1").unwrap().unwrap();
     assert_eq!(value.as_ref(), b"Alice Smith");
 }
 
@@ -245,17 +264,26 @@ fn test_get() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert value
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Get existing key
     let value = db
-        .get(table_id, b"user1")
+        .table(table_id)
+        .unwrap()
+        .get(b"user1")
         .expect("Failed to get")
         .expect("Value not found");
     assert_eq!(value.as_ref(), b"Alice");
 
     // Get non-existent key
-    let value = db.get(table_id, b"user2").expect("Failed to get");
+    let value = db
+        .table(table_id)
+        .unwrap()
+        .get(b"user2")
+        .expect("Failed to get");
     assert!(value.is_none());
 }
 
@@ -265,18 +293,29 @@ fn test_delete() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert value
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Delete existing key
-    let deleted = db.delete(table_id, b"user1").expect("Failed to delete");
+    let deleted = db
+        .table(table_id)
+        .unwrap()
+        .delete(b"user1")
+        .expect("Failed to delete");
     assert!(deleted);
 
     // Verify key no longer exists
-    let value = db.get(table_id, b"user1").unwrap();
+    let value = db.table(table_id).unwrap().get(b"user1").unwrap();
     assert!(value.is_none());
 
     // Delete non-existent key
-    let deleted = db.delete(table_id, b"user2").expect("Failed to delete");
+    let deleted = db
+        .table(table_id)
+        .unwrap()
+        .delete(b"user2")
+        .expect("Failed to delete");
     assert!(!deleted);
 }
 
@@ -347,11 +386,11 @@ fn test_operation_on_nonexistent_table() {
     let fake_table_id = TableId::from(999);
 
     // Try operations on non-existent table
-    let result = db.insert(fake_table_id, b"key", b"value");
+    let result = db.table(fake_table_id).unwrap().insert(b"key", b"value");
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
 
-    let result = db.get(fake_table_id, b"key");
+    let result = db.table(fake_table_id).unwrap().get(b"key");
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
 }
@@ -368,14 +407,20 @@ fn test_multiple_tables() {
     let posts_id = db.create_table("posts", default_table_options()).unwrap();
 
     // Insert into both tables
-    db.insert(users_id, b"user1", b"Alice").unwrap();
-    db.insert(posts_id, b"post1", b"Hello World").unwrap();
+    db.table(users_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
+    db.table(posts_id)
+        .unwrap()
+        .insert(b"post1", b"Hello World")
+        .unwrap();
 
     // Verify isolation
-    assert!(db.get(users_id, b"user1").unwrap().is_some());
-    assert!(db.get(users_id, b"post1").unwrap().is_none());
-    assert!(db.get(posts_id, b"post1").unwrap().is_some());
-    assert!(db.get(posts_id, b"user1").unwrap().is_none());
+    assert!(db.table(users_id).unwrap().get(b"user1").unwrap().is_some());
+    assert!(db.table(users_id).unwrap().get(b"post1").unwrap().is_none());
+    assert!(db.table(posts_id).unwrap().get(b"post1").unwrap().is_some());
+    assert!(db.table(posts_id).unwrap().get(b"user1").unwrap().is_none());
 }
 
 #[test]
@@ -384,26 +429,48 @@ fn test_crud_sequence() {
     let table_id = db.create_table("users", default_table_options()).unwrap();
 
     // Insert multiple keys
-    db.insert(table_id, b"user1", b"Alice").unwrap();
-    db.insert(table_id, b"user2", b"Bob").unwrap();
-    db.insert(table_id, b"user3", b"Charlie").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user2", b"Bob")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user3", b"Charlie")
+        .unwrap();
 
     // Update one
-    db.update(table_id, b"user2", b"Bob Smith").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .update(b"user2", b"Bob Smith")
+        .unwrap();
 
     // Delete one
-    db.delete(table_id, b"user3").unwrap();
+    db.table(table_id).unwrap().delete(b"user3").unwrap();
 
     // Verify final state
     assert_eq!(
-        db.get(table_id, b"user1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Alice"
     );
     assert_eq!(
-        db.get(table_id, b"user2").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user2")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Bob Smith"
     );
-    assert!(db.get(table_id, b"user3").unwrap().is_none());
+    assert!(db.table(table_id).unwrap().get(b"user3").unwrap().is_none());
 }
 
 #[test]
@@ -421,9 +488,13 @@ fn test_btree_table_persists_root_and_reopens_after_restart() {
             .create_table("users", options.clone())
             .expect("Failed to create BTree table");
 
-        db.insert(table_id, b"user1", b"Alice")
+        db.table(table_id)
+            .unwrap()
+            .insert(b"user1", b"Alice")
             .expect("Failed to insert first value");
-        db.insert(table_id, b"user2", b"Bob")
+        db.table(table_id)
+            .unwrap()
+            .insert(b"user2", b"Bob")
             .expect("Failed to insert second value");
 
         table_id
@@ -433,16 +504,11 @@ fn test_btree_table_persists_root_and_reopens_after_restart() {
 
     let reopened = StorageEngine::open(&fs, "btree_restart.wal", "btree_restart.db")
         .expect("Failed to reopen StorageEngine");
+    let table = reopened.table(table_id).unwrap();
 
     assert!(reopened.is_table(table_id).unwrap());
-    assert_eq!(
-        reopened.get(table_id, b"user1").unwrap().unwrap().as_ref(),
-        b"Alice"
-    );
-    assert_eq!(
-        reopened.get(table_id, b"user2").unwrap().unwrap().as_ref(),
-        b"Bob"
-    );
+    assert_eq!(table.get(b"user1").unwrap().unwrap().as_ref(), b"Alice");
+    assert_eq!(table.get(b"user2").unwrap().unwrap().as_ref(), b"Bob");
 }
 
 // =============================================================================
@@ -483,21 +549,45 @@ fn test_lsm_insert_and_get() {
     let table_id = db.create_table("events", lsm_table_options()).unwrap();
 
     // Insert multiple key-value pairs
-    db.insert(table_id, b"event1", b"User login").unwrap();
-    db.insert(table_id, b"event2", b"Page view").unwrap();
-    db.insert(table_id, b"event3", b"User logout").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"event1", b"User login")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"event2", b"Page view")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"event3", b"User logout")
+        .unwrap();
 
     // Verify all values
     assert_eq!(
-        db.get(table_id, b"event1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"event1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"User login"
     );
     assert_eq!(
-        db.get(table_id, b"event2").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"event2")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Page view"
     );
     assert_eq!(
-        db.get(table_id, b"event3").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"event3")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"User logout"
     );
 }
@@ -508,14 +598,25 @@ fn test_lsm_update() {
     let table_id = db.create_table("events", lsm_table_options()).unwrap();
 
     // Insert initial value
-    db.insert(table_id, b"event1", b"User login").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"event1", b"User login")
+        .unwrap();
 
     // Update value
-    db.update(table_id, b"event1", b"Admin login").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .update(b"event1", b"Admin login")
+        .unwrap();
 
     // Verify updated value
     assert_eq!(
-        db.get(table_id, b"event1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"event1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Admin login"
     );
 }
@@ -526,17 +627,32 @@ fn test_lsm_delete() {
     let table_id = db.create_table("events", lsm_table_options()).unwrap();
 
     // Insert value
-    db.insert(table_id, b"event1", b"User login").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"event1", b"User login")
+        .unwrap();
 
     // Verify exists
-    assert!(db.get(table_id, b"event1").unwrap().is_some());
+    assert!(
+        db.table(table_id)
+            .unwrap()
+            .get(b"event1")
+            .unwrap()
+            .is_some()
+    );
 
     // Delete
-    let deleted = db.delete(table_id, b"event1").unwrap();
+    let deleted = db.table(table_id).unwrap().delete(b"event1").unwrap();
     assert!(deleted);
 
     // Verify deleted
-    assert!(db.get(table_id, b"event1").unwrap().is_none());
+    assert!(
+        db.table(table_id)
+            .unwrap()
+            .get(b"event1")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -549,21 +665,38 @@ fn test_lsm_write_heavy_workload() {
     for i in 0..100 {
         let key = format!("log{:04}", i);
         let value = format!("Log entry {}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Verify random reads
     assert_eq!(
-        db.get(table_id, b"log0000").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"log0000")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Log entry 0"
     );
     assert_eq!(
-        db.get(table_id, b"log0050").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"log0050")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Log entry 50"
     );
     assert_eq!(
-        db.get(table_id, b"log0099").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"log0099")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Log entry 99"
     );
 }
@@ -574,16 +707,29 @@ fn test_lsm_upsert() {
     let table_id = db.create_table("events", lsm_table_options()).unwrap();
 
     // Upsert (insert)
-    let is_update = db.upsert(table_id, b"event1", b"User login").unwrap();
+    let is_update = db
+        .table(table_id)
+        .unwrap()
+        .upsert(b"event1", b"User login")
+        .unwrap();
     assert!(!is_update);
 
     // Upsert (update)
-    let is_update = db.upsert(table_id, b"event1", b"Admin login").unwrap();
+    let is_update = db
+        .table(table_id)
+        .unwrap()
+        .upsert(b"event1", b"Admin login")
+        .unwrap();
     assert!(is_update);
 
     // Verify final value
     assert_eq!(
-        db.get(table_id, b"event1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"event1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Admin login"
     );
 }
@@ -597,14 +743,26 @@ fn test_lsm_multiple_tables() {
     let events_id = db.create_table("events", lsm_table_options()).unwrap();
 
     // Insert into both
-    db.insert(logs_id, b"log1", b"System started").unwrap();
-    db.insert(events_id, b"event1", b"User login").unwrap();
+    db.table(logs_id)
+        .unwrap()
+        .insert(b"log1", b"System started")
+        .unwrap();
+    db.table(events_id)
+        .unwrap()
+        .insert(b"event1", b"User login")
+        .unwrap();
 
     // Verify isolation
-    assert!(db.get(logs_id, b"log1").unwrap().is_some());
-    assert!(db.get(logs_id, b"event1").unwrap().is_none());
-    assert!(db.get(events_id, b"event1").unwrap().is_some());
-    assert!(db.get(events_id, b"log1").unwrap().is_none());
+    assert!(db.table(logs_id).unwrap().get(b"log1").unwrap().is_some());
+    assert!(db.table(logs_id).unwrap().get(b"event1").unwrap().is_none());
+    assert!(
+        db.table(events_id)
+            .unwrap()
+            .get(b"event1")
+            .unwrap()
+            .is_some()
+    );
+    assert!(db.table(events_id).unwrap().get(b"log1").unwrap().is_none());
 }
 
 #[test]
@@ -616,16 +774,32 @@ fn test_lsm_mixed_engines() {
     let lsm_table = db.create_table("logs", lsm_table_options()).unwrap();
 
     // Insert into both
-    db.insert(memory_table, b"key1", b"cached_value").unwrap();
-    db.insert(lsm_table, b"log1", b"log_entry").unwrap();
+    db.table(memory_table)
+        .unwrap()
+        .insert(b"key1", b"cached_value")
+        .unwrap();
+    db.table(lsm_table)
+        .unwrap()
+        .insert(b"log1", b"log_entry")
+        .unwrap();
 
     // Verify both work correctly
     assert_eq!(
-        db.get(memory_table, b"key1").unwrap().unwrap().as_ref(),
+        db.table(memory_table)
+            .unwrap()
+            .get(b"key1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"cached_value"
     );
     assert_eq!(
-        db.get(lsm_table, b"log1").unwrap().unwrap().as_ref(),
+        db.table(lsm_table)
+            .unwrap()
+            .get(b"log1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"log_entry"
     );
 
@@ -645,17 +819,29 @@ fn test_lsm_sequential_writes() {
     for i in 0..50 {
         let timestamp = format!("ts{:010}", i);
         let value = format!("value_{}", i);
-        db.insert(table_id, timestamp.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(timestamp.as_bytes(), value.as_bytes())
             .unwrap();
     }
 
     // Verify first and last entries
     assert_eq!(
-        db.get(table_id, b"ts0000000000").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"ts0000000000")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"value_0"
     );
     assert_eq!(
-        db.get(table_id, b"ts0000000049").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"ts0000000049")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"value_49"
     );
 }
@@ -666,17 +852,28 @@ fn test_lsm_overwrite_pattern() {
     let table_id = db.create_table("counters", lsm_table_options()).unwrap();
 
     // Insert initial value
-    db.insert(table_id, b"counter1", b"0").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"counter1", b"0")
+        .unwrap();
 
     // Repeatedly update (LSM handles this with tombstones and compaction)
     for i in 1..=10 {
         let value = format!("{}", i);
-        db.update(table_id, b"counter1", value.as_bytes()).unwrap();
+        db.table(table_id)
+            .unwrap()
+            .update(b"counter1", value.as_bytes())
+            .unwrap();
     }
 
     // Verify final value
     assert_eq!(
-        db.get(table_id, b"counter1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"counter1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"10"
     );
 }
@@ -742,21 +939,45 @@ fn test_btree_insert_and_get() {
     let table_id = db.create_table("users", btree_table_options()).unwrap();
 
     // Insert multiple key-value pairs
-    db.insert(table_id, b"user1", b"Alice").unwrap();
-    db.insert(table_id, b"user2", b"Bob").unwrap();
-    db.insert(table_id, b"user3", b"Charlie").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user2", b"Bob")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user3", b"Charlie")
+        .unwrap();
 
     // Verify all values
     assert_eq!(
-        db.get(table_id, b"user1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Alice"
     );
     assert_eq!(
-        db.get(table_id, b"user2").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user2")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Bob"
     );
     assert_eq!(
-        db.get(table_id, b"user3").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user3")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Charlie"
     );
 }
@@ -767,14 +988,25 @@ fn test_btree_update() {
     let table_id = db.create_table("users", btree_table_options()).unwrap();
 
     // Insert initial value
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Update value
-    db.update(table_id, b"user1", b"Alice Smith").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .update(b"user1", b"Alice Smith")
+        .unwrap();
 
     // Verify updated value
     assert_eq!(
-        db.get(table_id, b"user1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Alice Smith"
     );
 }
@@ -785,17 +1017,20 @@ fn test_btree_delete() {
     let table_id = db.create_table("users", btree_table_options()).unwrap();
 
     // Insert value
-    db.insert(table_id, b"user1", b"Alice").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
 
     // Verify exists
-    assert!(db.get(table_id, b"user1").unwrap().is_some());
+    assert!(db.table(table_id).unwrap().get(b"user1").unwrap().is_some());
 
     // Delete
-    let deleted = db.delete(table_id, b"user1").unwrap();
+    let deleted = db.table(table_id).unwrap().delete(b"user1").unwrap();
     assert!(deleted);
 
     // Verify deleted
-    assert!(db.get(table_id, b"user1").unwrap().is_none());
+    assert!(db.table(table_id).unwrap().get(b"user1").unwrap().is_none());
 }
 
 #[test]
@@ -804,16 +1039,29 @@ fn test_btree_upsert() {
     let table_id = db.create_table("users", btree_table_options()).unwrap();
 
     // Upsert (insert)
-    let is_update = db.upsert(table_id, b"user1", b"Alice").unwrap();
+    let is_update = db
+        .table(table_id)
+        .unwrap()
+        .upsert(b"user1", b"Alice")
+        .unwrap();
     assert!(!is_update);
 
     // Upsert (update)
-    let is_update = db.upsert(table_id, b"user1", b"Alice Smith").unwrap();
+    let is_update = db
+        .table(table_id)
+        .unwrap()
+        .upsert(b"user1", b"Alice Smith")
+        .unwrap();
     assert!(is_update);
 
     // Verify final value
     assert_eq!(
-        db.get(table_id, b"user1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"user1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Alice Smith"
     );
 }
@@ -824,31 +1072,71 @@ fn test_btree_ordered_keys() {
     let table_id = db.create_table("products", btree_table_options()).unwrap();
 
     // BTree maintains key order - insert in random order
-    db.insert(table_id, b"product_005", b"Widget").unwrap();
-    db.insert(table_id, b"product_001", b"Gadget").unwrap();
-    db.insert(table_id, b"product_003", b"Doohickey").unwrap();
-    db.insert(table_id, b"product_002", b"Thingamajig").unwrap();
-    db.insert(table_id, b"product_004", b"Whatsit").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"product_005", b"Widget")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"product_001", b"Gadget")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"product_003", b"Doohickey")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"product_002", b"Thingamajig")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"product_004", b"Whatsit")
+        .unwrap();
 
     // Verify all can be retrieved
     assert_eq!(
-        db.get(table_id, b"product_001").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"product_001")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Gadget"
     );
     assert_eq!(
-        db.get(table_id, b"product_002").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"product_002")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Thingamajig"
     );
     assert_eq!(
-        db.get(table_id, b"product_003").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"product_003")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Doohickey"
     );
     assert_eq!(
-        db.get(table_id, b"product_004").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"product_004")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Whatsit"
     );
     assert_eq!(
-        db.get(table_id, b"product_005").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"product_005")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Widget"
     );
 }
@@ -863,7 +1151,9 @@ fn test_btree_read_heavy_workload() {
     for i in 0..50 {
         let key = format!("key{:04}", i);
         let value = format!("value_{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -873,7 +1163,12 @@ fn test_btree_read_heavy_workload() {
             let key = format!("key{:04}", i);
             let expected = format!("value_{}", i);
             assert_eq!(
-                db.get(table_id, key.as_bytes()).unwrap().unwrap().as_ref(),
+                db.table(table_id)
+                    .unwrap()
+                    .get(key.as_bytes())
+                    .unwrap()
+                    .unwrap()
+                    .as_ref(),
                 expected.as_bytes()
             );
         }
@@ -889,14 +1184,32 @@ fn test_btree_multiple_tables() {
     let products_id = db.create_table("products", btree_table_options()).unwrap();
 
     // Insert into both
-    db.insert(users_id, b"user1", b"Alice").unwrap();
-    db.insert(products_id, b"prod1", b"Widget").unwrap();
+    db.table(users_id)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
+    db.table(products_id)
+        .unwrap()
+        .insert(b"prod1", b"Widget")
+        .unwrap();
 
     // Verify isolation
-    assert!(db.get(users_id, b"user1").unwrap().is_some());
-    assert!(db.get(users_id, b"prod1").unwrap().is_none());
-    assert!(db.get(products_id, b"prod1").unwrap().is_some());
-    assert!(db.get(products_id, b"user1").unwrap().is_none());
+    assert!(db.table(users_id).unwrap().get(b"user1").unwrap().is_some());
+    assert!(db.table(users_id).unwrap().get(b"prod1").unwrap().is_none());
+    assert!(
+        db.table(products_id)
+            .unwrap()
+            .get(b"prod1")
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        db.table(products_id)
+            .unwrap()
+            .get(b"user1")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -909,21 +1222,45 @@ fn test_btree_mixed_engines() {
     let lsm_table = db.create_table("logs", lsm_table_options()).unwrap();
 
     // Insert into all three
-    db.insert(btree_table, b"user1", b"Alice").unwrap();
-    db.insert(memory_table, b"key1", b"cached_value").unwrap();
-    db.insert(lsm_table, b"log1", b"log_entry").unwrap();
+    db.table(btree_table)
+        .unwrap()
+        .insert(b"user1", b"Alice")
+        .unwrap();
+    db.table(memory_table)
+        .unwrap()
+        .insert(b"key1", b"cached_value")
+        .unwrap();
+    db.table(lsm_table)
+        .unwrap()
+        .insert(b"log1", b"log_entry")
+        .unwrap();
 
     // Verify all work correctly
     assert_eq!(
-        db.get(btree_table, b"user1").unwrap().unwrap().as_ref(),
+        db.table(btree_table)
+            .unwrap()
+            .get(b"user1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"Alice"
     );
     assert_eq!(
-        db.get(memory_table, b"key1").unwrap().unwrap().as_ref(),
+        db.table(memory_table)
+            .unwrap()
+            .get(b"key1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"cached_value"
     );
     assert_eq!(
-        db.get(lsm_table, b"log1").unwrap().unwrap().as_ref(),
+        db.table(lsm_table)
+            .unwrap()
+            .get(b"log1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"log_entry"
     );
 
@@ -945,21 +1282,38 @@ fn test_btree_range_operations() {
     for i in 0..20 {
         let key = format!("item{:03}", i);
         let value = format!("quantity_{}", i * 10);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .unwrap();
     }
 
     // Verify specific range
     assert_eq!(
-        db.get(table_id, b"item000").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"item000")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"quantity_0"
     );
     assert_eq!(
-        db.get(table_id, b"item010").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"item010")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"quantity_100"
     );
     assert_eq!(
-        db.get(table_id, b"item019").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"item019")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"quantity_190"
     );
 }
@@ -970,17 +1324,28 @@ fn test_btree_update_pattern() {
     let table_id = db.create_table("accounts", btree_table_options()).unwrap();
 
     // Insert initial value
-    db.insert(table_id, b"account1", b"balance:100").unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"account1", b"balance:100")
+        .unwrap();
 
     // Update multiple times (BTree handles in-place updates efficiently)
     for i in 1..=10 {
         let value = format!("balance:{}", 100 + i * 10);
-        db.update(table_id, b"account1", value.as_bytes()).unwrap();
+        db.table(table_id)
+            .unwrap()
+            .update(b"account1", value.as_bytes())
+            .unwrap();
     }
 
     // Verify final value
     assert_eq!(
-        db.get(table_id, b"account1").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"account1")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"balance:200"
     );
 }
@@ -1018,17 +1383,23 @@ fn test_btree_large_values() {
 
     // Insert large values (BTree should handle these efficiently)
     let large_value = vec![b'X'; 1024]; // 1KB value
-    db.insert(table_id, b"doc1", &large_value).unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"doc1", &large_value)
+        .unwrap();
 
     let very_large_value = vec![b'Y'; 4096]; // 4KB value
-    db.insert(table_id, b"doc2", &very_large_value).unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"doc2", &very_large_value)
+        .unwrap();
 
     // Verify retrieval
-    let retrieved1 = db.get(table_id, b"doc1").unwrap().unwrap();
+    let retrieved1 = db.table(table_id).unwrap().get(b"doc1").unwrap().unwrap();
     assert_eq!(retrieved1.as_ref().len(), 1024);
     assert_eq!(retrieved1.as_ref(), &large_value[..]);
 
-    let retrieved2 = db.get(table_id, b"doc2").unwrap().unwrap();
+    let retrieved2 = db.table(table_id).unwrap().get(b"doc2").unwrap().unwrap();
     assert_eq!(retrieved2.as_ref().len(), 4096);
     assert_eq!(retrieved2.as_ref(), &very_large_value[..]);
 }
@@ -1039,10 +1410,10 @@ fn test_btree_empty_values() {
     let table_id = db.create_table("flags", btree_table_options()).unwrap();
 
     // Insert empty value (valid use case for flags/markers)
-    db.insert(table_id, b"flag1", b"").unwrap();
+    db.table(table_id).unwrap().insert(b"flag1", b"").unwrap();
 
     // Verify retrieval - empty values may or may not be supported depending on engine
-    let value = db.get(table_id, b"flag1").unwrap();
+    let value = db.table(table_id).unwrap().get(b"flag1").unwrap();
     if let Some(v) = value {
         assert_eq!(v.as_ref(), b"");
         assert_eq!(v.as_ref().len(), 0);
@@ -1059,22 +1430,42 @@ fn test_btree_special_keys() {
     let table_id = db.create_table("special", btree_table_options()).unwrap();
 
     // Test with various special byte sequences
-    db.insert(table_id, b"\x00\x00\x00", b"null_bytes").unwrap();
-    db.insert(table_id, b"\xFF\xFF\xFF", b"max_bytes").unwrap();
-    db.insert(table_id, b"key\x00with\x00nulls", b"embedded_nulls")
+    db.table(table_id)
+        .unwrap()
+        .insert(b"\x00\x00\x00", b"null_bytes")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"\xFF\xFF\xFF", b"max_bytes")
+        .unwrap();
+    db.table(table_id)
+        .unwrap()
+        .insert(b"key\x00with\x00nulls", b"embedded_nulls")
         .unwrap();
 
     // Verify retrieval
     assert_eq!(
-        db.get(table_id, b"\x00\x00\x00").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"\x00\x00\x00")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"null_bytes"
     );
     assert_eq!(
-        db.get(table_id, b"\xFF\xFF\xFF").unwrap().unwrap().as_ref(),
+        db.table(table_id)
+            .unwrap()
+            .get(b"\xFF\xFF\xFF")
+            .unwrap()
+            .unwrap()
+            .as_ref(),
         b"max_bytes"
     );
     assert_eq!(
-        db.get(table_id, b"key\x00with\x00nulls")
+        db.table(table_id)
+            .unwrap()
+            .get(b"key\x00with\x00nulls")
             .unwrap()
             .unwrap()
             .as_ref(),
@@ -1091,20 +1482,22 @@ fn test_btree_stress_insert_delete() {
     for i in 0..100 {
         let key = format!("key{:04}", i);
         let value = format!("value_{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .unwrap();
     }
 
     // Delete every other key
     for i in (0..100).step_by(2) {
         let key = format!("key{:04}", i);
-        db.delete(table_id, key.as_bytes()).unwrap();
+        db.table(table_id).unwrap().delete(key.as_bytes()).unwrap();
     }
 
     // Verify remaining keys
     for i in 0..100 {
         let key = format!("key{:04}", i);
-        let result = db.get(table_id, key.as_bytes()).unwrap();
+        let result = db.table(table_id).unwrap().get(key.as_bytes()).unwrap();
         if i % 2 == 0 {
             assert!(result.is_none(), "Key {} should be deleted", i);
         } else {

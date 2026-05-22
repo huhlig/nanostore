@@ -572,7 +572,7 @@ impl<FS: FileSystem> AppendLog<FS> {
         let active_segment_id = state.active_segment.id();
         let immutable_segment_ids: std::collections::HashSet<_> =
             state.immutable_segments.keys().copied().collect();
-        
+
         state.index.retain(|_, (seg_id, _, _)| {
             immutable_segment_ids.contains(seg_id) || *seg_id == active_segment_id
         });

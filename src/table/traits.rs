@@ -809,8 +809,8 @@ pub struct VacuumReport {
     pub pages_freed: u64,
     /// Bytes reclaimed from removing obsolete versions
     pub bytes_reclaimed: u64,
-    /// VACUUM FULL statistics (only populated when full=true)
-    pub full_stats: Option<crate::engine::VacuumFullStats>,
+    /// VACUUM PAGER statistics (only populated when full=true)
+    pub full_stats: Option<crate::engine::VacuumPagerStats>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -231,17 +231,36 @@ fn test_data_persistence_btree_table() {
             .expect("Failed to create users table");
 
         // Insert test data
-        db.insert(users_id, b"user1", b"Alice").unwrap();
-        db.insert(users_id, b"user2", b"Bob").unwrap();
-        db.insert(users_id, b"user3", b"Charlie").unwrap();
+        db.table(users_id)
+            .unwrap()
+            .insert(b"user1", b"Alice")
+            .unwrap();
+        db.table(users_id)
+            .unwrap()
+            .insert(b"user2", b"Bob")
+            .unwrap();
+        db.table(users_id)
+            .unwrap()
+            .insert(b"user3", b"Charlie")
+            .unwrap();
 
         // Verify data exists
         assert_eq!(
-            db.get(users_id, b"user1").unwrap().unwrap().as_ref(),
+            db.table(users_id)
+                .unwrap()
+                .get(b"user1")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
             b"Alice"
         );
         assert_eq!(
-            db.get(users_id, b"user2").unwrap().unwrap().as_ref(),
+            db.table(users_id)
+                .unwrap()
+                .get(b"user2")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
             b"Bob"
         );
     }
@@ -255,16 +274,31 @@ fn test_data_persistence_btree_table() {
 
         // Verify data persisted
         assert_eq!(
-            db.get(users_id, b"user1").unwrap().unwrap().as_ref(),
+            db.table(users_id)
+                .unwrap()
+                .get(b"user1")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
             b"Alice",
             "Data should persist across reopen"
         );
         assert_eq!(
-            db.get(users_id, b"user2").unwrap().unwrap().as_ref(),
+            db.table(users_id)
+                .unwrap()
+                .get(b"user2")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
             b"Bob"
         );
         assert_eq!(
-            db.get(users_id, b"user3").unwrap().unwrap().as_ref(),
+            db.table(users_id)
+                .unwrap()
+                .get(b"user3")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
             b"Charlie"
         );
     }
@@ -288,13 +322,27 @@ fn test_data_persistence_lsm_table() {
         for i in 0..100 {
             let key = format!("log{:04}", i);
             let value = format!("Log entry {}", i);
-            db.insert(logs_id, key.as_bytes(), value.as_bytes())
+            db.table(logs_id)
+                .unwrap()
+                .insert(key.as_bytes(), value.as_bytes())
                 .unwrap();
         }
 
         // Verify some entries
-        assert!(db.get(logs_id, b"log0000").unwrap().is_some());
-        assert!(db.get(logs_id, b"log0050").unwrap().is_some());
+        assert!(
+            db.table(logs_id)
+                .unwrap()
+                .get(b"log0000")
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            db.table(logs_id)
+                .unwrap()
+                .get(b"log0050")
+                .unwrap()
+                .is_some()
+        );
     }
 
     // Phase 2: Reopen and verify LSM data
@@ -309,7 +357,9 @@ fn test_data_persistence_lsm_table() {
             let key = format!("log{:04}", i);
             let expected_value = format!("Log entry {}", i);
             let actual_value = db
-                .get(logs_id, key.as_bytes())
+                .table(logs_id)
+                .unwrap()
+                .get(key.as_bytes())
                 .unwrap()
                 .expect("Log entry should exist");
             assert_eq!(actual_value.as_ref(), expected_value.as_bytes());
@@ -341,24 +391,36 @@ fn test_mixed_operations_with_persistence() {
         let cache_id = db.create_table("cache", memory_table_options()).unwrap();
 
         // Populate users
-        db.insert(users_id, b"u1", b"Alice").unwrap();
-        db.insert(users_id, b"u2", b"Bob").unwrap();
+        db.table(users_id).unwrap().insert(b"u1", b"Alice").unwrap();
+        db.table(users_id).unwrap().insert(b"u2", b"Bob").unwrap();
 
         // Populate logs (write-heavy)
         for i in 0..50 {
             let key = format!("log{:03}", i);
-            db.insert(logs_id, key.as_bytes(), b"event").unwrap();
+            db.table(logs_id)
+                .unwrap()
+                .insert(key.as_bytes(), b"event")
+                .unwrap();
         }
 
         // Populate cache
-        db.insert(cache_id, b"key1", b"value1").unwrap();
-        db.insert(cache_id, b"key2", b"value2").unwrap();
+        db.table(cache_id)
+            .unwrap()
+            .insert(b"key1", b"value1")
+            .unwrap();
+        db.table(cache_id)
+            .unwrap()
+            .insert(b"key2", b"value2")
+            .unwrap();
 
         // Perform updates
-        db.upsert(users_id, b"u1", b"Alice Updated").unwrap();
+        db.table(users_id)
+            .unwrap()
+            .upsert(b"u1", b"Alice Updated")
+            .unwrap();
 
         // Perform deletes
-        db.delete(cache_id, b"key2").unwrap();
+        db.table(cache_id).unwrap().delete(b"key2").unwrap();
     }
 
     // Phase 2: Reopen and verify all operations persisted
@@ -372,22 +434,35 @@ fn test_mixed_operations_with_persistence() {
 
         // Verify users (including update)
         assert_eq!(
-            db.get(users_id, b"u1").unwrap().unwrap().as_ref(),
+            db.table(users_id)
+                .unwrap()
+                .get(b"u1")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
             b"Alice Updated"
         );
-        assert_eq!(db.get(users_id, b"u2").unwrap().unwrap().as_ref(), b"Bob");
+        assert_eq!(
+            db.table(users_id)
+                .unwrap()
+                .get(b"u2")
+                .unwrap()
+                .unwrap()
+                .as_ref(),
+            b"Bob"
+        );
 
         // Verify logs
-        assert!(db.get(logs_id, b"log000").unwrap().is_some());
-        assert!(db.get(logs_id, b"log049").unwrap().is_some());
+        assert!(db.table(logs_id).unwrap().get(b"log000").unwrap().is_some());
+        assert!(db.table(logs_id).unwrap().get(b"log049").unwrap().is_some());
 
         // Verify cache (Memory table doesn't persist, so data is lost)
         // This is expected behavior - Memory tables are intentionally non-persistent
         assert!(
-            db.get(cache_id, b"key1").unwrap().is_none(),
+            db.table(cache_id).unwrap().get(b"key1").unwrap().is_none(),
             "Memory table data should not persist"
         );
-        assert!(db.get(cache_id, b"key2").unwrap().is_none());
+        assert!(db.table(cache_id).unwrap().get(b"key2").unwrap().is_none());
     }
 }
 

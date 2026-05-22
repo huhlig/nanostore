@@ -64,28 +64,40 @@ fn test_vacuum_table_btree() {
     for i in 0..500 {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}_data", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Verify pre-vacuum visibility baseline for retained keys
     for i in 400..500 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Data should exist before vacuum_table");
     }
 
     // Delete 80% of records
     for i in 0..400 {
         let key = format!("key{:05}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
     // Verify deletes did not affect retained keys before vacuum
     for i in 400..500 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(
             value.is_some(),
             "Data should exist after deletes before vacuum_table"
@@ -106,7 +118,11 @@ fn test_vacuum_table_btree() {
     // Verify remaining data integrity
     for i in 400..500 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Data should exist after vacuum_table");
     }
 
@@ -135,28 +151,40 @@ fn test_vacuum_pager_btree() {
     for i in 0..500 {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}_data", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Verify pre-vacuum visibility baseline for retained keys
     for i in 400..500 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Data should exist before vacuum_pager");
     }
 
     // Delete 80% of records
     for i in 0..400 {
         let key = format!("key{:05}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
     // Verify deletes did not affect retained keys before vacuum
     for i in 400..500 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(
             value.is_some(),
             "Data should exist after deletes before vacuum_pager"
@@ -167,23 +195,18 @@ fn test_vacuum_pager_btree() {
     let _versions_removed = db.vacuum_table(table_id).expect("Failed to vacuum table");
 
     // Run vacuum_pager to compact physical pages
-    let results = db.vacuum_pager().expect("Failed to run vacuum_pager");
+    let stats = db.vacuum_pager().expect("Failed to run vacuum_pager");
 
     println!("✓ vacuum_pager completed:");
-    for (tid, stats) in &results {
-        println!("  Table {:?}:", tid);
-        println!("    Pages moved: {}", stats.pages_moved);
-        println!("    Pages truncated: {}", stats.pages_truncated);
-        println!("    Bytes reclaimed: {}", stats.bytes_reclaimed);
-        println!(
-            "    File size: {} -> {} bytes",
-            stats.file_size_before, stats.file_size_after
-        );
-    }
+    println!("  Pages moved: {}", stats.pages_moved);
+    println!("  Pages truncated: {}", stats.pages_truncated);
+    println!("  Bytes reclaimed: {}", stats.bytes_reclaimed);
+    println!(
+        "  File size: {} -> {} bytes",
+        stats.file_size_before, stats.file_size_after
+    );
 
     // Assert that vacuum_pager actually did work
-    let stats = results.get(&table_id).expect("Should have stats for table");
-
     assert!(
         stats.pages_moved > 0 || stats.pages_truncated > 0,
         "vacuum_pager should have moved or truncated pages (moved: {}, truncated: {})",
@@ -207,7 +230,11 @@ fn test_vacuum_pager_btree() {
     // Verify data integrity after vacuum_pager
     for i in 400..500 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Data should exist after vacuum_pager");
     }
 
@@ -259,11 +286,17 @@ fn test_vacuum_table_all_types() {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}_data", i);
 
-        db.insert(btree_id, key.as_bytes(), value.as_bytes())
+        db.table(btree_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert into BTree");
-        db.insert(lsm_id, key.as_bytes(), value.as_bytes())
+        db.table(lsm_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert into LSM");
-        db.insert(hash_id, key.as_bytes(), value.as_bytes())
+        db.table(hash_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert into Hash");
     }
 
@@ -273,13 +306,17 @@ fn test_vacuum_table_all_types() {
     for i in 70..100 {
         let key = format!("key{:05}", i);
         assert!(
-            db.get(btree_id, key.as_bytes())
+            db.table(btree_id)
+                .unwrap()
+                .get(key.as_bytes())
                 .expect("Failed to get from BTree before deletes")
                 .is_some(),
             "BTree data should exist before deletes"
         );
         assert!(
-            db.get(hash_id, key.as_bytes())
+            db.table(hash_id)
+                .unwrap()
+                .get(key.as_bytes())
                 .expect("Failed to get from Hash before deletes")
                 .is_some(),
             "Hash data should exist before deletes"
@@ -290,9 +327,13 @@ fn test_vacuum_table_all_types() {
     for i in 0..70 {
         let key = format!("key{:05}", i);
 
-        db.delete(btree_id, key.as_bytes())
+        db.table(btree_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete from BTree");
-        db.delete(hash_id, key.as_bytes())
+        db.table(hash_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete from Hash");
     }
 
@@ -302,13 +343,17 @@ fn test_vacuum_table_all_types() {
     for i in 70..100 {
         let key = format!("key{:05}", i);
         assert!(
-            db.get(btree_id, key.as_bytes())
+            db.table(btree_id)
+                .unwrap()
+                .get(key.as_bytes())
                 .expect("Failed to get from BTree after deletes")
                 .is_some(),
             "BTree data should exist after deletes before vacuum"
         );
         assert!(
-            db.get(hash_id, key.as_bytes())
+            db.table(hash_id)
+                .unwrap()
+                .get(key.as_bytes())
                 .expect("Failed to get from Hash after deletes")
                 .is_some(),
             "Hash data should exist after deletes before vacuum"
@@ -335,33 +380,27 @@ fn test_vacuum_table_all_types() {
     // Phase 2: Run vacuum_pager to compact physical pages
     println!("\nPhase 2: Running vacuum_pager to compact physical pages...");
 
-    let results = db.vacuum_pager().expect("Failed to run vacuum_pager");
+    let stats = db.vacuum_pager().expect("Failed to run vacuum_pager");
 
     println!("✓ vacuum_pager completed:");
-    for (tid, stats) in &results {
-        println!("  Table {:?}:", tid);
-        println!("    Pages moved: {}", stats.pages_moved);
-        println!("    Pages truncated: {}", stats.pages_truncated);
-        println!("    Bytes reclaimed: {}", stats.bytes_reclaimed);
-        println!(
-            "    File size: {} -> {} bytes",
-            stats.file_size_before, stats.file_size_after
-        );
-    }
+    println!("  Pages moved: {}", stats.pages_moved);
+    println!("  Pages truncated: {}", stats.pages_truncated);
+    println!("  Bytes reclaimed: {}", stats.bytes_reclaimed);
+    println!(
+        "  File size: {} -> {} bytes",
+        stats.file_size_before, stats.file_size_after
+    );
 
-    // Assert vacuum_pager did work on at least one table
-    let total_pages_moved: u64 = results.values().map(|s| s.pages_moved).sum();
-    let total_bytes_reclaimed: u64 = results.values().map(|s| s.bytes_reclaimed).sum();
-
+    // Assert vacuum_pager did work
     assert!(
-        total_pages_moved > 0 || results.values().any(|s| s.pages_truncated > 0),
-        "vacuum_pager should have moved or truncated pages across all tables"
+        stats.pages_moved > 0 || stats.pages_truncated > 0,
+        "vacuum_pager should have moved or truncated pages"
     );
 
     assert!(
-        total_bytes_reclaimed > 0,
+        stats.bytes_reclaimed > 0,
         "vacuum_pager should have reclaimed bytes (got {})",
-        total_bytes_reclaimed
+        stats.bytes_reclaimed
     );
 
     // Phase 3: Verify data integrity for all tables
@@ -372,7 +411,9 @@ fn test_vacuum_table_all_types() {
         let expected_value = format!("value{:05}_data", i);
 
         let btree_value = db
-            .get(btree_id, key.as_bytes())
+            .table(btree_id)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from BTree")
             .expect("BTree data should exist");
         assert_eq!(
@@ -382,7 +423,9 @@ fn test_vacuum_table_all_types() {
         );
 
         let hash_value = db
-            .get(hash_id, key.as_bytes())
+            .table(hash_id)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from Hash")
             .expect("Hash data should exist");
         assert_eq!(
@@ -416,13 +459,17 @@ fn test_vacuum_idempotency() {
     for i in 0..200 {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     for i in 0..150 {
         let key = format!("key{:05}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
@@ -464,15 +511,8 @@ fn test_vacuum_idempotency() {
     );
 
     // Run vacuum_pager multiple times
-    let results1 = db.vacuum_pager().expect("Failed to vacuum_pager (1)");
-    let results2 = db.vacuum_pager().expect("Failed to vacuum_pager (2)");
-
-    let stats1 = results1
-        .get(&table_id)
-        .expect("Should have stats for table");
-    let stats2 = results2
-        .get(&table_id)
-        .expect("Should have stats for table");
+    let stats1 = db.vacuum_pager().expect("Failed to vacuum_pager (1)");
+    let stats2 = db.vacuum_pager().expect("Failed to vacuum_pager (2)");
 
     println!("vacuum_pager runs:");
     println!(
@@ -504,7 +544,11 @@ fn test_vacuum_idempotency() {
     // Verify data integrity
     for i in 150..200 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(
             value.is_some(),
             "Data should exist after multiple vacuum operations"
@@ -535,14 +579,18 @@ fn test_vacuum_mapping_preservation() {
     for i in 0..400 {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}_large_data_to_use_more_pages", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Delete most data
     for i in 0..350 {
         let key = format!("key{:05}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
@@ -552,7 +600,11 @@ fn test_vacuum_mapping_preservation() {
     // Verify data is still accessible (virtual IDs should still work)
     for i in 350..400 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Data should be accessible via virtual IDs");
     }
 
@@ -563,7 +615,9 @@ fn test_vacuum_mapping_preservation() {
     for i in 350..400 {
         let key = format!("key{:05}", i);
         let value = db
-            .get(table_id, key.as_bytes())
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get after vacuum_pager");
         assert!(
             value.is_some(),

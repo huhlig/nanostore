@@ -20,7 +20,7 @@
 //! transaction manager, WAL, and registered table/index engines. ACID semantics are coordinated
 //! at this layer.
 //!
-//! # Phase 4: Core API - StorageEngine & Table Handles
+//! # Phase 4: Core API - `StorageEngine` & Table Handles
 //!
 //! This implementation provides:
 //! - Storage engine-level CRUD operations with automatic index maintenance
@@ -31,9 +31,9 @@
 //! ## Design Philosophy: "All Collections Are Tables"
 //!
 //! Following ADR-007 and ADR-011, this implementation treats indexes as specialty tables:
-//! - Both tables and indexes use TableId at the storage layer
+//! - Both tables and indexes use `TableId` at the storage layer
 //! - Transaction layer treats them uniformly
-//! - StorageEngine layer maintains semantic distinction and handles index maintenance
+//! - `StorageEngine` layer maintains semantic distinction and handles index maintenance
 //! - Index updates are explicit and visible in transaction write sets
 
 use crate::pager::{Page, PageId, PageType, Pager, PagerConfig};
@@ -48,7 +48,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::warn;
 
 /// Configuration for automatic vacuum operations.
 #[derive(Debug, Clone)]
@@ -85,6 +84,7 @@ pub struct VacuumMetrics {
 
 impl VacuumMetrics {
     /// Create a new metrics instance with start time
+    #[must_use]
     pub fn new() -> Self {
         Self {
             started_at: Some(Instant::now()),
@@ -111,12 +111,12 @@ impl VacuumMetrics {
     }
 }
 
-/// Statistics for VACUUM FULL operation.
+/// Statistics for VACUUM PAGER operation.
 ///
-/// VACUUM FULL is a blocking operation that compacts the database file by moving
+/// VACUUM PAGER is a blocking operation that compacts the database file by moving
 /// data from high-numbered pages to low-numbered pages, then truncating the file.
 #[derive(Debug, Clone, Default)]
-pub struct VacuumFullStats {
+pub struct VacuumPagerStats {
     /// Number of pages moved during compaction
     pub pages_moved: u64,
     /// Number of pages freed and truncated from the end of the file
@@ -131,8 +131,9 @@ pub struct VacuumFullStats {
     pub duration: Duration,
 }
 
-impl VacuumFullStats {
+impl VacuumPagerStats {
     /// Create a new stats instance with the initial file size
+    #[must_use]
     pub fn new(file_size_before: u64) -> Self {
         Self {
             pages_moved: 0,
@@ -889,7 +890,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         };
 
         // Get table info to determine engine type
-        let table_info = self
+        let _table_info = self
             .get_object_info(table_id)?
             .ok_or_else(|| StorageEngineError::not_found(table_id))?;
 
@@ -900,55 +901,29 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
     /// Vacuum all tables in the storage engine.
     ///
-    /// This is a convenience method that vacuums all tables that support it.
+    /// This is a convenience method that vacuums all tables that support it,
+    /// then calls vacuum_pager() to compact the page file.
     /// Tables that don't support vacuuming are skipped.
     ///
     /// # Returns
     ///
-    /// Returns a map of table_id -> versions_removed for all vacuumed tables.
+    /// Returns detailed metrics about the vacuum operation including versions
+    /// removed per table and duration.
     ///
     /// # Examples
     ///
     /// ```ignore
     /// // Vacuum all tables
-    /// let results = db.vacuum_all()?;
-    /// for (table_id, removed) in results {
+    /// let metrics = db.vacuum_all()?;
+    /// println!("Removed {} versions in {:?}",
+    ///          metrics.total_versions_removed,
+    ///          metrics.duration);
+    /// // Access per-table results
+    /// for (table_id, removed) in &metrics.versions_removed_per_table {
     ///     println!("Table {}: removed {} versions", table_id, removed);
     /// }
     /// ```
-    pub fn vacuum_all(
-        &self,
-    ) -> Result<std::collections::HashMap<TableId, usize>, StorageEngineError> {
-        let mut results = std::collections::HashMap::new();
-
-        // Get all tables
-        let tables = self.list_tables()?;
-
-        for table_info in tables {
-            // Try to vacuum each table, but don't fail if a table doesn't support it
-            match self.vacuum_table(table_info.id) {
-                Ok(removed) => {
-                    if removed > 0 {
-                        results.insert(table_info.id, removed);
-                    }
-                }
-                Err(_) => {
-                    // Skip tables that don't support vacuuming
-                    continue;
-                }
-            }
-        }
-
-        // TODO: run vacuum_pager
-
-        Ok(results)
-    }
-
-    /// Vacuum all tables with metrics collection.
-    ///
-    /// This is an internal method that collects detailed metrics during vacuum.
-    /// Used by both manual triggers and the background vacuum thread.
-    fn vacuum_all_with_metrics(&self) -> Result<VacuumMetrics, StorageEngineError> {
+    pub fn vacuum_all(&self) -> Result<VacuumMetrics, StorageEngineError> {
         let mut metrics = VacuumMetrics::new();
 
         // Get all tables
@@ -970,29 +945,6 @@ impl<FS: FileSystem> StorageEngine<FS> {
         }
 
         metrics.complete();
-        Ok(metrics)
-    }
-
-    /// Manually trigger a vacuum operation with metrics collection.
-    ///
-    /// This performs an immediate vacuum of all tables and returns detailed metrics.
-    /// Unlike the automatic background vacuum, this is synchronous and returns results.
-    ///
-    /// # Returns
-    ///
-    /// Returns metrics about the vacuum operation including versions removed and duration.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// // Manually trigger vacuum
-    /// let metrics = db.trigger_vacuum()?;
-    /// println!("Removed {} versions in {:?}",
-    ///          metrics.total_versions_removed,
-    ///          metrics.duration);
-    /// ```
-    pub fn trigger_vacuum(&self) -> Result<VacuumMetrics, StorageEngineError> {
-        let metrics = self.vacuum_all_with_metrics()?;
 
         // Update stats
         let mut stats = self.vacuum_stats.write().unwrap();
@@ -1056,11 +1008,11 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// println!("Reclaimed {} bytes", stats.bytes_reclaimed);
     /// println!("File size: {} -> {}", stats.file_size_before, stats.file_size_after);
     /// ```
-    #[deprecated(since = "0.1", note = "use vacuum_table and vacuum_pager")]
+    #[deprecated(since = "0.1.0", note = "use vacuum_table and vacuum_pager")]
     pub fn vacuum_full_table(
         &self,
         table_id: TableId,
-    ) -> Result<VacuumFullStats, StorageEngineError> {
+    ) -> Result<VacuumPagerStats, StorageEngineError> {
         let start = Instant::now();
 
         // Verify table exists
@@ -1093,66 +1045,42 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(full_stats)
     }
 
-    /// Perform VACUUM PAGER on the entire database.
+    /// Perform VACUUM PAGER to compact the page file.
     ///
-    /// This is a convenience method that runs VACUUM PAGER on all persistent
-    /// tables. In-memory tables are skipped. Each table is compacted
-    /// independently with exclusive locking.
+    /// This compacts the database file by moving data from high-numbered pages
+    /// to low-numbered pages, then truncating the file to reclaim disk space.
+    /// This is a blocking operation that requires exclusive access.
     ///
     /// # Returns
     ///
-    /// Returns a map of table_id -> VacuumFullStats for all tables that
-    /// were successfully compacted.
+    /// Returns statistics about the compaction including pages moved,
+    /// bytes reclaimed, and file size reduction.
     ///
     /// # Errors
     ///
-    /// Returns an error if any table compaction fails. Tables that were
-    /// successfully compacted before the error will have their statistics
-    /// in the returned map.
+    /// Returns an error if the pager-level compaction or file truncation fails.
     ///
     /// # Examples
     ///
     /// ```ignore
-    /// // Compact all tables
-    /// let results = db.vacuum_full_all()?;
-    /// for (table_id, stats) in results {
-    ///     println!("Table {:?}: reclaimed {} bytes", table_id, stats.bytes_reclaimed);
-    /// }
+    /// // Compact the page file
+    /// let stats = db.vacuum_pager()?;
+    /// println!("Reclaimed {} bytes", stats.bytes_reclaimed);
+    /// println!("File size: {} -> {}", stats.file_size_before, stats.file_size_after);
     /// ```
-    pub fn vacuum_pager(&self) -> Result<HashMap<TableId, VacuumFullStats>, StorageEngineError> {
-        let mut results = HashMap::new();
+    pub fn vacuum_pager(&self) -> Result<VacuumPagerStats, StorageEngineError> {
+        let start = Instant::now();
 
-        // Get all tables
-        let tables = self.list_tables()?;
+        // Perform pager-level compaction
+        let mut full_stats = self
+            .pager
+            .compact_and_truncate()
+            .map_err(|e| StorageEngineError::pager_failed(format!("Compaction failed: {}", e)))?;
 
-        for table_info in tables {
-            // Only compact persistent tables
-            if !table_info.options.engine.is_persistent() {
-                continue;
-            }
+        // Update duration
+        full_stats.duration = start.elapsed();
 
-            // Try to compact each table
-            match self.vacuum_full_table(table_info.id) {
-                Ok(stats) => {
-                    results.insert(table_info.id, stats);
-                }
-                Err(e) => {
-                    // For now, we skip tables that fail
-                    // In the future, we might want to make this configurable
-                    warn!("Failed to VACUUM FULL table {:?}: {}", table_info.id, e);
-                    continue;
-                }
-            }
-        }
-
-        Ok(results)
-    }
-
-    /// Backward-compatible alias for VACUUM PAGER on all persistent tables.
-    ///
-    /// Existing tests and callers still use the previous API name.
-    pub fn vacuum_full_all(&self) -> Result<HashMap<TableId, VacuumFullStats>, StorageEngineError> {
-        self.vacuum_pager()
+        Ok(full_stats)
     }
 
     /// Start the background vacuum thread.
@@ -1270,168 +1198,11 @@ impl<FS: FileSystem> StorageEngine<FS> {
     // Phase 4: Enhanced CRUD Operations with Index Maintenance
     // =========================================================================
 
-    /// Insert a key-value pair into a table with automatic index maintenance.
-    ///
-    /// This is a convenience method that:
-    /// 1. Begins a write transaction
-    /// 2. Inserts the key-value pair into the table
-    /// 3. Updates all indexes on the table
-    /// 4. Commits the transaction atomically
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The table does not exist
-    /// - The key already exists (use `upsert` for update-or-insert)
-    /// - Index maintenance fails
-    /// - Transaction commit fails
-    pub fn insert(
-        &self,
-        table: TableId,
-        key: &[u8],
-        value: &[u8],
-    ) -> Result<(), StorageEngineError> {
-        // Validate table exists and is a regular table
-        if !self.is_table(table)? {
-            return Err(StorageEngineError::not_a_table(table));
-        }
-
-        let mut txn = self.begin_write(Durability::SyncOnCommit)?;
-
-        // Check if key already exists
-        if txn.get(table, key)?.is_some() {
-            return Err(StorageEngineError::key_already_exists(table, key));
-        }
-
-        // Insert into table
-        txn.put(table, key, value)?;
-
-        // Commit transaction
-        txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Insert commit failed: {}", e))
-        })?;
-
-        Ok(())
-    }
-
-    /// Update an existing key-value pair in a table with automatic index maintenance.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The table does not exist
-    /// - The key does not exist (use `upsert` for insert-or-update)
-    /// - Index maintenance fails
-    /// - Transaction commit fails
-    pub fn update(
-        &self,
-        table: TableId,
-        key: &[u8],
-        value: &[u8],
-    ) -> Result<(), StorageEngineError> {
-        // Validate table exists and is a regular table
-        if !self.is_table(table)? {
-            return Err(StorageEngineError::not_a_table(table));
-        }
-
-        let mut txn = self.begin_write(Durability::SyncOnCommit)?;
-
-        // Get old value for index maintenance
-        let _old_value = txn
-            .get(table, key)?
-            .ok_or_else(|| StorageEngineError::key_not_found(table, key))?;
-
-        // Update in table
-        txn.put(table, key, value)?;
-
-        // Commit transaction
-        txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Update commit failed: {}", e))
-        })?;
-
-        Ok(())
-    }
-
-    /// Insert or update a key-value pair in a table with automatic index maintenance.
-    ///
-    /// This is a convenience method that inserts if the key doesn't exist,
-    /// or updates if it does.
-    pub fn upsert(
-        &self,
-        table: TableId,
-        key: &[u8],
-        value: &[u8],
-    ) -> Result<bool, StorageEngineError> {
-        // Validate table exists and is a regular table
-        if !self.is_table(table)? {
-            return Err(StorageEngineError::not_a_table(table));
-        }
-
-        let mut txn = self.begin_write(Durability::SyncOnCommit)?;
-
-        // Check if key exists
-        let old_value = txn.get(table, key)?;
-        let is_update = old_value.is_some();
-
-        // Put the new value
-        txn.put(table, key, value)?;
-
-        // Commit transaction
-        txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Upsert commit failed: {}", e))
-        })?;
-
-        Ok(is_update)
-    }
-
-    /// Get a value from a table.
-    ///
-    /// This is a convenience method that begins a read transaction and
-    /// retrieves the value.
-    pub fn get(&self, table: TableId, key: &[u8]) -> Result<Option<ValueBuf>, StorageEngineError> {
-        // Validate table exists
-        if !self.is_table(table)? {
-            return Err(StorageEngineError::not_a_table(table));
-        }
-
-        let txn = self.begin_read()?;
-        txn.get(table, key)
-            .map_err(|e| StorageEngineError::transaction_failed(format!("Get failed: {}", e)))
-    }
-
-    /// Delete a key from a table with automatic index maintenance.
-    ///
-    /// Returns true if the key existed and was deleted, false if it didn't exist.
-    pub fn delete(&self, table: TableId, key: &[u8]) -> Result<bool, StorageEngineError> {
-        // Validate table exists and is a regular table
-        if !self.is_table(table)? {
-            return Err(StorageEngineError::not_a_table(table));
-        }
-
-        let mut txn = self.begin_write(Durability::SyncOnCommit)?;
-
-        // Get current value for index maintenance
-        let old_value = txn.get(table, key)?;
-
-        if old_value.is_none() {
-            return Ok(false);
-        }
-
-        // Delete from table
-        let deleted = txn.delete(table, key)?;
-
-        // Commit transaction
-        txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Delete commit failed: {}", e))
-        })?;
-
-        Ok(deleted)
-    }
-
-    /// Open a table handle for ergonomic access.
+    /// Open a table handle for ergonomic access with auto-transactions.
     ///
     /// Returns a `TableHandle` that provides convenient methods for
-    /// working with the table.
+    /// working with the table. Each operation automatically creates,
+    /// commits, and rolls back transactions as needed.
     pub fn table(&self, table: TableId) -> Result<TableHandle<'_, FS>, StorageEngineError> {
         // Validate table exists and is a regular table
         if !self.is_table(table)? {
@@ -1523,10 +1294,13 @@ impl<FS: FileSystem> Drop for StorageEngine<FS> {
     }
 }
 
-/// Table handle for ergonomic access to a specific table.
+/// Table handle for ergonomic access to a specific table with auto-transactions.
 ///
-/// Provides convenient methods for CRUD operations without needing to
-/// pass the table ID repeatedly.
+/// Each operation automatically creates a transaction, performs the operation,
+/// and commits (or rolls back on error). This provides a simple API for
+/// single-operation use cases while maintaining ACID guarantees.
+///
+/// For multi-operation transactions, use `StorageEngine::begin_write()` directly.
 pub struct TableHandle<'db, FS: FileSystem> {
     db: &'db StorageEngine<FS>,
     table_id: TableId,
@@ -1543,32 +1317,125 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
         self.db.get_object_info(self.table_id)
     }
 
-    /// Insert a key-value pair.
+    /// Insert a key-value pair with auto-transaction.
+    ///
+    /// Creates a write transaction, inserts the key-value pair, and commits.
+    /// Automatically rolls back on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The key already exists (use `upsert` for update-or-insert)
+    /// - Transaction commit fails
     pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
-        self.db.insert(self.table_id, key, value)
+        let mut txn = self.db.begin_write(Durability::SyncOnCommit)?;
+
+        // Check if key already exists
+        if txn.get(self.table_id, key)?.is_some() {
+            return Err(StorageEngineError::key_already_exists(self.table_id, key));
+        }
+
+        // Insert into table
+        txn.put(self.table_id, key, value)?;
+
+        // Commit transaction
+        txn.commit().map_err(|e| {
+            StorageEngineError::transaction_failed(format!("Insert commit failed: {}", e))
+        })?;
+
+        Ok(())
     }
 
-    /// Update an existing key-value pair.
+    /// Update an existing key-value pair with auto-transaction.
+    ///
+    /// Creates a write transaction, updates the key-value pair, and commits.
+    /// Automatically rolls back on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The key does not exist (use `upsert` for insert-or-update)
+    /// - Transaction commit fails
     pub fn update(&self, key: &[u8], value: &[u8]) -> Result<(), StorageEngineError> {
-        self.db.update(self.table_id, key, value)
+        let mut txn = self.db.begin_write(Durability::SyncOnCommit)?;
+
+        // Check if key exists
+        let _old_value = txn
+            .get(self.table_id, key)?
+            .ok_or_else(|| StorageEngineError::key_not_found(self.table_id, key))?;
+
+        // Update in table
+        txn.put(self.table_id, key, value)?;
+
+        // Commit transaction
+        txn.commit().map_err(|e| {
+            StorageEngineError::transaction_failed(format!("Update commit failed: {}", e))
+        })?;
+
+        Ok(())
     }
 
-    /// Insert or update a key-value pair.
+    /// Insert or update a key-value pair with auto-transaction.
+    ///
+    /// Creates a write transaction, inserts or updates the key-value pair, and commits.
+    /// Returns true if the key existed (update), false if it was new (insert).
+    /// Automatically rolls back on error.
     pub fn upsert(&self, key: &[u8], value: &[u8]) -> Result<bool, StorageEngineError> {
-        self.db.upsert(self.table_id, key, value)
+        let mut txn = self.db.begin_write(Durability::SyncOnCommit)?;
+
+        // Check if key exists
+        let old_value = txn.get(self.table_id, key)?;
+        let is_update = old_value.is_some();
+
+        // Put the new value
+        txn.put(self.table_id, key, value)?;
+
+        // Commit transaction
+        txn.commit().map_err(|e| {
+            StorageEngineError::transaction_failed(format!("Upsert commit failed: {}", e))
+        })?;
+
+        Ok(is_update)
     }
 
-    /// Get a value.
+    /// Get a value with auto-transaction.
+    ///
+    /// Creates a read transaction and retrieves the value.
     pub fn get(&self, key: &[u8]) -> Result<Option<ValueBuf>, StorageEngineError> {
-        self.db.get(self.table_id, key)
+        let txn = self.db.begin_read()?;
+        txn.get(self.table_id, key)
+            .map_err(|e| StorageEngineError::transaction_failed(format!("Get failed: {}", e)))
     }
 
-    /// Delete a key.
+    /// Delete a key with auto-transaction.
+    ///
+    /// Creates a write transaction, deletes the key, and commits.
+    /// Returns true if the key existed and was deleted, false if it didn't exist.
+    /// Automatically rolls back on error.
     pub fn delete(&self, key: &[u8]) -> Result<bool, StorageEngineError> {
-        self.db.delete(self.table_id, key)
+        let mut txn = self.db.begin_write(Durability::SyncOnCommit)?;
+
+        // Get current value
+        let old_value = txn.get(self.table_id, key)?;
+
+        if old_value.is_none() {
+            return Ok(false);
+        }
+
+        // Delete from table
+        let deleted = txn.delete(self.table_id, key)?;
+
+        // Commit transaction
+        txn.commit().map_err(|e| {
+            StorageEngineError::transaction_failed(format!("Delete commit failed: {}", e))
+        })?;
+
+        Ok(deleted)
     }
 
-    /// Check if a key exists.
+    /// Check if a key exists with auto-transaction.
+    ///
+    /// Creates a read transaction and checks for key existence.
     pub fn contains(&self, key: &[u8]) -> Result<bool, StorageEngineError> {
         Ok(self.get(key)?.is_some())
     }

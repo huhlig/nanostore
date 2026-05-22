@@ -57,13 +57,17 @@ fn test_basic_vacuum_removes_old_versions() {
 
     // Insert initial data
     let key = b"test_key";
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
 
     // Create multiple versions by updating
     for i in 2..=5 {
         let value = format!("value{}", i);
-        db.update(table_id, key, value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key, value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -76,7 +80,7 @@ fn test_basic_vacuum_removes_old_versions() {
     assert!(removed >= 0, "Vacuum should complete successfully");
 
     // Verify current value is still accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value5"[..]));
 }
 
@@ -91,7 +95,9 @@ fn test_vacuum_respects_min_visible_lsn_watermark() {
     let key = b"test_key";
 
     // Insert initial value
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
 
     // Create a snapshot to pin this version
@@ -100,9 +106,13 @@ fn test_vacuum_respects_min_visible_lsn_watermark() {
         .expect("Failed to create snapshot");
 
     // Update to create new versions
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update");
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update");
 
     // Vacuum should NOT remove versions visible to snapshot1
@@ -120,7 +130,7 @@ fn test_vacuum_respects_min_visible_lsn_watermark() {
     assert!(removed2 >= 0);
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value3"[..]));
 }
 
@@ -135,12 +145,16 @@ fn test_vacuum_preserves_one_old_version_as_base() {
     let key = b"test_key";
 
     // Create a long version chain
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
 
     for i in 2..=10 {
         let value = format!("value{}", i);
-        db.update(table_id, key, value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key, value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -150,7 +164,7 @@ fn test_vacuum_preserves_one_old_version_as_base() {
     }
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value10"[..]));
 
     // The implementation should preserve at least one old version as a base
@@ -168,15 +182,21 @@ fn test_vacuum_with_active_snapshots() {
     let key = b"test_key";
 
     // Insert and create snapshot at each version
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
     let snap1 = db.create_snapshot("snap1").expect("Failed to create");
 
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update");
     let snap2 = db.create_snapshot("snap2").expect("Failed to create");
 
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update");
     let snap3 = db.create_snapshot("snap3").expect("Failed to create");
 
@@ -184,7 +204,7 @@ fn test_vacuum_with_active_snapshots() {
     db.vacuum_table(table_id).expect("Failed to vacuum");
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value3"[..]));
 
     // Release oldest snapshot
@@ -194,7 +214,7 @@ fn test_vacuum_with_active_snapshots() {
     db.vacuum_table(table_id).expect("Failed to vacuum");
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value3"[..]));
 
     // Clean up
@@ -213,12 +233,16 @@ fn test_vacuum_with_no_active_snapshots() {
     let key = b"test_key";
 
     // Create version chain
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
 
     for i in 2..=5 {
         let value = format!("value{}", i);
-        db.update(table_id, key, value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key, value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -235,7 +259,7 @@ fn test_vacuum_with_no_active_snapshots() {
     assert!(removed >= 0);
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value5"[..]));
 }
 
@@ -250,21 +274,31 @@ fn test_vacuum_with_multiple_snapshots_at_different_lsns() {
     let key = b"test_key";
 
     // Create versions with snapshots at different points
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
 
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update");
     let snap_old = db.create_snapshot("old").expect("Failed to create");
 
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update");
-    db.update(table_id, key, b"value4")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value4")
         .expect("Failed to update");
 
     let snap_new = db.create_snapshot("new").expect("Failed to create");
 
-    db.update(table_id, key, b"value5")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value5")
         .expect("Failed to update");
 
     // min_visible_lsn should be the older snapshot's LSN
@@ -276,7 +310,7 @@ fn test_vacuum_with_multiple_snapshots_at_different_lsns() {
     db.vacuum_table(table_id).expect("Failed to vacuum");
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value5"[..]));
 
     // Clean up
@@ -294,11 +328,17 @@ fn test_vacuum_table_api() {
 
     // Insert and update to create versions
     let key = b"test_key";
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update");
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update");
 
     // Test vacuum_table returns count
@@ -332,7 +372,9 @@ fn test_vacuum_all_api() {
         for i in 0..3 {
             let key = format!("key{}", i);
             let value = format!("value{}", i);
-            db.insert(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .insert(key.as_bytes(), value.as_bytes())
                 .expect("Failed to insert");
         }
 
@@ -340,20 +382,29 @@ fn test_vacuum_all_api() {
         for i in 0..3 {
             let key = format!("key{}", i);
             let value = format!("value{}_v2", i);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
     }
 
     // Vacuum all tables
-    let results = db.vacuum_all().expect("Failed to vacuum all");
+    let metrics = db.vacuum_all().expect("Failed to vacuum all");
 
     // Should have results for tables that support vacuum
     // (exact count depends on which tables support it)
-    assert!(results.len() <= 2, "Should not exceed number of tables");
+    assert!(
+        metrics.versions_removed_per_table.len() <= 2,
+        "Should not exceed number of tables"
+    );
 
     // Verify data is still accessible
-    let value = db.get(table1, b"key0").expect("Failed to get");
+    let value = db
+        .table(table1)
+        .unwrap()
+        .get(b"key0")
+        .expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value0_v2"[..]));
 }
 
@@ -376,7 +427,9 @@ fn test_vacuum_with_btree_engine() {
     for i in 0..10 {
         let key = format!("key{:03}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -384,7 +437,9 @@ fn test_vacuum_with_btree_engine() {
     for i in 0..10 {
         let key = format!("key{:03}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -395,7 +450,11 @@ fn test_vacuum_with_btree_engine() {
     // Verify all keys are still accessible
     for i in 0..10 {
         let key = format!("key{:03}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}_v2", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -423,7 +482,9 @@ fn test_vacuum_with_hash_engine() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -431,7 +492,9 @@ fn test_vacuum_with_hash_engine() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -442,7 +505,11 @@ fn test_vacuum_with_hash_engine() {
     // Verify data integrity
     for i in 0..10 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}_v2", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -481,7 +548,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..10 {
             let key = format!("key{}", i);
             let value = format!("value{}", i);
-            db.insert(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .insert(key.as_bytes(), value.as_bytes())
                 .expect("Failed to insert");
         }
 
@@ -489,7 +558,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..10 {
             let key = format!("key{}", i);
             let value = format!("value{}_v2", i);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
 
@@ -500,7 +571,11 @@ fn test_vacuum_handles_concurrent_reads() {
         // Verify data integrity
         for i in 0..10 {
             let key = format!("key{}", i);
-            let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+            let value = db
+                .table(table_id)
+                .unwrap()
+                .get(key.as_bytes())
+                .expect("Failed to get");
             let expected = format!("value{}_v2", i);
             assert_eq!(
                 value.as_ref().map(|v| v.as_ref()),
@@ -528,7 +603,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..10 {
             let key = format!("key{}", i);
             let value = format!("value{}", i);
-            db.insert(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .insert(key.as_bytes(), value.as_bytes())
                 .expect("Failed to insert");
         }
 
@@ -536,7 +613,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..10 {
             let key = format!("key{}", i);
             let value = format!("value{}_v2", i);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
 
@@ -547,7 +626,11 @@ fn test_vacuum_handles_concurrent_reads() {
         // Verify data
         for i in 0..10 {
             let key = format!("key{}", i);
-            let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+            let value = db
+                .table(table_id)
+                .unwrap()
+                .get(key.as_bytes())
+                .expect("Failed to get");
             let expected = format!("value{}_v2", i);
             assert_eq!(
                 value.as_ref().map(|v| v.as_ref()),
@@ -575,7 +658,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..10 {
             let key = format!("key{:03}", i);
             let value = format!("value{}", i);
-            db.insert(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .insert(key.as_bytes(), value.as_bytes())
                 .expect("Failed to insert");
         }
 
@@ -583,7 +668,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..10 {
             let key = format!("key{:03}", i);
             let value = format!("value{}_v2", i);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
 
@@ -594,7 +681,11 @@ fn test_vacuum_handles_concurrent_reads() {
         // Verify data
         for i in 0..10 {
             let key = format!("key{:03}", i);
-            let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+            let value = db
+                .table(table_id)
+                .unwrap()
+                .get(key.as_bytes())
+                .expect("Failed to get");
             let expected = format!("value{}_v2", i);
             assert_eq!(
                 value.as_ref().map(|v| v.as_ref()),
@@ -622,7 +713,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..5 {
             let key = format!("edge{}", i);
             let value = format!("data{}", i);
-            db.insert(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .insert(key.as_bytes(), value.as_bytes())
                 .expect("Failed to insert");
         }
 
@@ -630,7 +723,9 @@ fn test_vacuum_handles_concurrent_reads() {
         for i in 0..5 {
             let key = format!("edge{}", i);
             let value = format!("data{}_v2", i);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
 
@@ -643,7 +738,11 @@ fn test_vacuum_handles_concurrent_reads() {
         // Verify data
         for i in 0..5 {
             let key = format!("edge{}", i);
-            let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+            let value = db
+                .table(table_id)
+                .unwrap()
+                .get(key.as_bytes())
+                .expect("Failed to get");
             let expected = format!("data{}_v2", i);
             assert_eq!(
                 value.as_ref().map(|v| v.as_ref()),
@@ -659,7 +758,9 @@ fn test_vacuum_handles_concurrent_reads() {
     for i in 0..100 {
         let key = format!("key{}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -667,7 +768,9 @@ fn test_vacuum_handles_concurrent_reads() {
     for i in 0..100 {
         let key = format!("key{}", i);
         let value = format!("value{}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -678,7 +781,7 @@ fn test_vacuum_handles_concurrent_reads() {
         let handle = thread::spawn(move || {
             for i in 0..50 {
                 let key = format!("key{}", (thread_id * 25 + i) % 100);
-                let _ = db_clone.get(table_id, key.as_bytes());
+                let _ = db_clone.table(table_id).unwrap().get(key.as_bytes());
                 thread::sleep(Duration::from_micros(10));
             }
         });
@@ -698,7 +801,11 @@ fn test_vacuum_handles_concurrent_reads() {
     // Verify data integrity after concurrent access
     for i in 0..100 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}_v2", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -719,14 +826,18 @@ fn test_vacuum_with_deleted_keys() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Delete some keys
     for i in 0..5 {
         let key = format!("key{}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
@@ -737,14 +848,22 @@ fn test_vacuum_with_deleted_keys() {
     // Verify deleted keys are still deleted
     for i in 0..5 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert_eq!(value, None, "Deleted key should return None");
     }
 
     // Verify remaining keys are accessible
     for i in 5..10 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -780,7 +899,9 @@ fn test_vacuum_single_version_keys() {
     for i in 0..10 {
         let key = format!("key{}", i);
         let value = format!("value{}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -793,7 +914,11 @@ fn test_vacuum_single_version_keys() {
     // Verify all data is still accessible
     for i in 0..10 {
         let key = format!("key{}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -820,7 +945,9 @@ fn test_vacuum_multiple_concurrent_snapshots_different_lsns() {
     let key = b"test_key";
 
     // Create initial version
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
 
     // Create first snapshot at LSN after value1
@@ -828,9 +955,13 @@ fn test_vacuum_multiple_concurrent_snapshots_different_lsns() {
     let snap1_lsn = snap1.lsn;
 
     // Add more versions
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update to value2");
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update to value3");
 
     // Create second snapshot at LSN after value3
@@ -838,9 +969,13 @@ fn test_vacuum_multiple_concurrent_snapshots_different_lsns() {
     let snap2_lsn = snap2.lsn;
 
     // Add more versions
-    db.update(table_id, key, b"value4")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value4")
         .expect("Failed to update to value4");
-    db.update(table_id, key, b"value5")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value5")
         .expect("Failed to update to value5");
 
     // Create third snapshot at LSN after value5
@@ -848,9 +983,13 @@ fn test_vacuum_multiple_concurrent_snapshots_different_lsns() {
     let snap3_lsn = snap3.lsn;
 
     // Add final versions
-    db.update(table_id, key, b"value6")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value6")
         .expect("Failed to update to value6");
-    db.update(table_id, key, b"value7")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value7")
         .expect("Failed to update to value7");
 
     // Verify min_visible_lsn is the oldest snapshot's LSN
@@ -866,7 +1005,11 @@ fn test_vacuum_multiple_concurrent_snapshots_different_lsns() {
     assert!(removed >= 0, "Vacuum should complete successfully");
 
     // Verify current value is still accessible
-    let value = db.get(table_id, key).expect("Failed to get current value");
+    let value = db
+        .table(table_id)
+        .unwrap()
+        .get(key)
+        .expect("Failed to get current value");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value7"[..]));
 
     // Verify all snapshots can still read their respective values
@@ -896,26 +1039,38 @@ fn test_vacuum_oldest_snapshot_released() {
     let key = b"test_key";
 
     // Create version chain with snapshots at different points
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
     let snap_oldest = db.create_snapshot("oldest").expect("Failed to create");
     let oldest_lsn = snap_oldest.lsn;
 
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update");
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update");
     let snap_middle = db.create_snapshot("middle").expect("Failed to create");
     let middle_lsn = snap_middle.lsn;
 
-    db.update(table_id, key, b"value4")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value4")
         .expect("Failed to update");
-    db.update(table_id, key, b"value5")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value5")
         .expect("Failed to update");
     let snap_newest = db.create_snapshot("newest").expect("Failed to create");
     let newest_lsn = snap_newest.lsn;
 
-    db.update(table_id, key, b"value6")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value6")
         .expect("Failed to update");
 
     // Verify min_visible_lsn is oldest snapshot
@@ -965,7 +1120,7 @@ fn test_vacuum_oldest_snapshot_released() {
     assert!(removed4 >= 0);
 
     // Current value should still be accessible
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value6"[..]));
 }
 
@@ -983,23 +1138,33 @@ fn test_vacuum_mixed_active_released_snapshots() {
     let key = b"test_key";
 
     // Create initial versions with snapshots
-    db.insert(table_id, key, b"value1")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value1")
         .expect("Failed to insert");
     let snap1 = db.create_snapshot("snap1").expect("Failed to create");
 
-    db.update(table_id, key, b"value2")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value2")
         .expect("Failed to update");
     let snap2 = db.create_snapshot("snap2").expect("Failed to create");
 
-    db.update(table_id, key, b"value3")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value3")
         .expect("Failed to update");
     let snap3 = db.create_snapshot("snap3").expect("Failed to create");
 
-    db.update(table_id, key, b"value4")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value4")
         .expect("Failed to update");
     let snap4 = db.create_snapshot("snap4").expect("Failed to create");
 
-    db.update(table_id, key, b"value5")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value5")
         .expect("Failed to update");
 
     // Release snapshots 2 and 4 (non-contiguous)
@@ -1016,7 +1181,9 @@ fn test_vacuum_mixed_active_released_snapshots() {
     assert!(removed1 >= 0);
 
     // Create new snapshot after vacuum
-    db.update(table_id, key, b"value6")
+    db.table(table_id)
+        .unwrap()
+        .update(key, b"value6")
         .expect("Failed to update");
     let snap5 = db.create_snapshot("snap5").expect("Failed to create");
 
@@ -1041,7 +1208,7 @@ fn test_vacuum_mixed_active_released_snapshots() {
     assert!(removed3 >= 0);
 
     // Verify current value
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value6"[..]));
 }
 
@@ -1063,7 +1230,9 @@ fn test_vacuum_performance_with_long_running_snapshots() {
     for i in 0..num_keys {
         let key = format!("key{:03}", i);
         let value = format!("value{}_v0", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -1077,7 +1246,9 @@ fn test_vacuum_performance_with_long_running_snapshots() {
         for i in 0..num_keys {
             let key = format!("key{:03}", i);
             let value = format!("value{}_v{}", i, version);
-            db.update(table_id, key.as_bytes(), value.as_bytes())
+            db.table(table_id)
+                .unwrap()
+                .update(key.as_bytes(), value.as_bytes())
                 .expect("Failed to update");
         }
     }
@@ -1101,7 +1272,9 @@ fn test_vacuum_performance_with_long_running_snapshots() {
     for i in 0..num_keys {
         let key = format!("key{:03}", i);
         let value = format!("value{}_v{}", i, num_versions);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -1134,7 +1307,11 @@ fn test_vacuum_performance_with_long_running_snapshots() {
     // Verify all data is still accessible
     for i in 0..num_keys {
         let key = format!("key{:03}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{}_v{}", i, num_versions);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -1157,7 +1334,9 @@ fn test_vacuum_with_rapidly_changing_snapshots() {
     let key = b"test_key";
 
     // Create initial version
-    db.insert(table_id, key, b"value0")
+    db.table(table_id)
+        .unwrap()
+        .insert(key, b"value0")
         .expect("Failed to insert");
 
     // Simulate rapid snapshot creation/release with updates
@@ -1165,7 +1344,9 @@ fn test_vacuum_with_rapidly_changing_snapshots() {
     for i in 1..=20 {
         // Update value
         let value = format!("value{}", i);
-        db.update(table_id, key, value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key, value.as_bytes())
             .expect("Failed to update");
 
         // Create snapshot
@@ -1198,7 +1379,7 @@ fn test_vacuum_with_rapidly_changing_snapshots() {
     }
 
     // Verify final value
-    let value = db.get(table_id, key).expect("Failed to get");
+    let value = db.table(table_id).unwrap().get(key).expect("Failed to get");
     assert_eq!(value.as_ref().map(|v| v.as_ref()), Some(&b"value20"[..]));
 }
 

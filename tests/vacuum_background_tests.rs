@@ -59,18 +59,24 @@ fn test_manual_vacuum_trigger() {
     for i in 0..10 {
         let key = format!("key{}", i).into_bytes();
         let value = format!("value{}", i).into_bytes();
-        db.insert(table_id, &key, &value).expect("Failed to insert");
+        db.table(table_id)
+            .unwrap()
+            .insert(&key, &value)
+            .expect("Failed to insert");
     }
 
     // Update some keys to create version chains
     for i in 0..5 {
         let key = format!("key{}", i).into_bytes();
         let value = format!("value{}_v2", i).into_bytes();
-        db.update(table_id, &key, &value).expect("Failed to update");
+        db.table(table_id)
+            .unwrap()
+            .update(&key, &value)
+            .expect("Failed to update");
     }
 
     // Trigger manual vacuum
-    let metrics = db.trigger_vacuum().expect("Failed to trigger vacuum");
+    let metrics = db.vacuum_all().expect("Failed to vacuum all");
 
     // Verify metrics were collected
     assert!(metrics.started_at.is_some());
@@ -105,14 +111,20 @@ fn test_vacuum_stats_accumulation() {
             let key = format!("key{}", i).into_bytes();
             let value = format!("value{}_{}", i, round).into_bytes();
             if round == 0 {
-                db.insert(table_id, &key, &value).expect("Failed to insert");
+                db.table(table_id)
+                    .unwrap()
+                    .insert(&key, &value)
+                    .expect("Failed to insert");
             } else {
-                db.update(table_id, &key, &value).expect("Failed to update");
+                db.table(table_id)
+                    .unwrap()
+                    .update(&key, &value)
+                    .expect("Failed to update");
             }
         }
 
         // Trigger vacuum after each round
-        db.trigger_vacuum().expect("Failed to trigger vacuum");
+        db.vacuum_all().expect("Failed to vacuum all");
     }
 
     // Check accumulated stats
@@ -164,7 +176,10 @@ fn test_vacuum_with_snapshots() {
     for i in 0..10 {
         let key = format!("key{}", i).into_bytes();
         let value = format!("value{}", i).into_bytes();
-        db.insert(table_id, &key, &value).expect("Failed to insert");
+        db.table(table_id)
+            .unwrap()
+            .insert(&key, &value)
+            .expect("Failed to insert");
     }
 
     // Create a snapshot to pin old versions
@@ -176,11 +191,14 @@ fn test_vacuum_with_snapshots() {
     for i in 0..10 {
         let key = format!("key{}", i).into_bytes();
         let value = format!("value{}_v2", i).into_bytes();
-        db.update(table_id, &key, &value).expect("Failed to update");
+        db.table(table_id)
+            .unwrap()
+            .update(&key, &value)
+            .expect("Failed to update");
     }
 
     // Vacuum should not remove versions visible to snapshot
-    let metrics = db.trigger_vacuum().expect("Failed to trigger vacuum");
+    let metrics = db.vacuum_all().expect("Failed to vacuum all");
 
     // With snapshot active, old versions should be retained
     // (exact count depends on implementation details)
@@ -190,7 +208,7 @@ fn test_vacuum_with_snapshots() {
         .expect("Failed to release snapshot");
 
     // Now vacuum should be able to remove old versions
-    let metrics2 = db.trigger_vacuum().expect("Failed to trigger vacuum");
+    let metrics2 = db.vacuum_all().expect("Failed to vacuum all");
 
     // Second vacuum should potentially remove more versions
     // (exact behavior depends on implementation)
@@ -220,18 +238,24 @@ fn test_vacuum_metrics_per_table() {
         for i in 0..5 {
             let key = format!("key{}", i).into_bytes();
             let value = format!("value{}", i).into_bytes();
-            db.insert(table_id, &key, &value).expect("Failed to insert");
+            db.table(table_id)
+                .unwrap()
+                .insert(&key, &value)
+                .expect("Failed to insert");
         }
 
         for i in 0..5 {
             let key = format!("key{}", i).into_bytes();
             let value = format!("value{}_v2", i).into_bytes();
-            db.update(table_id, &key, &value).expect("Failed to update");
+            db.table(table_id)
+                .unwrap()
+                .update(&key, &value)
+                .expect("Failed to update");
         }
     }
 
     // Trigger vacuum
-    let metrics = db.trigger_vacuum().expect("Failed to trigger vacuum");
+    let metrics = db.vacuum_all().expect("Failed to vacuum all");
 
     // Verify per-table metrics
     assert!(metrics.versions_removed_per_table.len() <= 2);

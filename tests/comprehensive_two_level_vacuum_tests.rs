@@ -55,7 +55,9 @@ fn test_comprehensive_two_level_vacuum_single_table() {
     for i in 0..1200 {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}_extra_data_to_make_larger", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
     println!("✓ Inserted 1200 records");
@@ -64,7 +66,9 @@ fn test_comprehensive_two_level_vacuum_single_table() {
     println!("\nPhase 2: Deleting 80% of data (960 records)...");
     for i in 0..960 {
         let key = format!("key{:05}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
     println!("✓ Deleted 960 records (80%)");
@@ -105,7 +109,11 @@ fn test_comprehensive_two_level_vacuum_single_table() {
     let mut verified = 0;
     for i in 960..1200 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         let expected = format!("value{:05}_extra_data_to_make_larger", i);
         assert_eq!(
             value.as_ref().map(|v| v.as_ref()),
@@ -120,7 +128,11 @@ fn test_comprehensive_two_level_vacuum_single_table() {
     // Verify deleted data is gone
     for i in 0..960 {
         let key = format!("key{:05}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert_eq!(value, None, "Deleted key {} should return None", key);
     }
     println!("✓ Verified 960 deleted records are gone");
@@ -173,11 +185,17 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     for i in 0..500 {
         let key = format!("key{:05}", i);
         let value = format!("value{:05}_data", i);
-        db.insert(table1, key.as_bytes(), value.as_bytes())
+        db.table(table1)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
-        db.insert(table2, key.as_bytes(), value.as_bytes())
+        db.table(table2)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
-        db.insert(table3, key.as_bytes(), value.as_bytes())
+        db.table(table3)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
     println!("✓ Inserted 500 records into each table");
@@ -186,9 +204,18 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
     println!("\nPhase 3: Deleting 70% from each table (350 records)...");
     for i in 0..350 {
         let key = format!("key{:05}", i);
-        db.delete(table1, key.as_bytes()).expect("Failed to delete");
-        db.delete(table2, key.as_bytes()).expect("Failed to delete");
-        db.delete(table3, key.as_bytes()).expect("Failed to delete");
+        db.table(table1)
+            .unwrap()
+            .delete(key.as_bytes())
+            .expect("Failed to delete");
+        db.table(table2)
+            .unwrap()
+            .delete(key.as_bytes())
+            .expect("Failed to delete");
+        db.table(table3)
+            .unwrap()
+            .delete(key.as_bytes())
+            .expect("Failed to delete");
     }
     println!("✓ Deleted 350 records from each table");
 
@@ -237,17 +264,23 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
         let key = format!("key{:05}", i);
 
         let v1 = db
-            .get(table1, key.as_bytes())
+            .table(table1)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from table1");
         assert!(v1.is_some(), "Data should exist in table1 for key {}", key);
 
         let v2 = db
-            .get(table2, key.as_bytes())
+            .table(table2)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from table2");
         assert!(v2.is_some(), "Data should exist in table2 for key {}", key);
 
         let v3 = db
-            .get(table3, key.as_bytes())
+            .table(table3)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from table3");
         assert!(v3.is_some(), "Data should exist in table3 for key {}", key);
     }
@@ -258,17 +291,23 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
         let key = format!("key{:05}", i);
 
         let v1 = db
-            .get(table1, key.as_bytes())
+            .table(table1)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from table1");
         assert_eq!(v1, None, "Deleted key should return None in table1");
 
         let v2 = db
-            .get(table2, key.as_bytes())
+            .table(table2)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from table2");
         assert_eq!(v2, None, "Deleted key should return None in table2");
 
         let v3 = db
-            .get(table3, key.as_bytes())
+            .table(table3)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get from table3");
         assert_eq!(v3, None, "Deleted key should return None in table3");
     }

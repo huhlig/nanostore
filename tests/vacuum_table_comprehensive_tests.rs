@@ -80,7 +80,9 @@ fn test_vacuum_table_memory_btree() {
     for i in 0..100 {
         let key = format!("key{:03}", i);
         let value = format!("value{:03}_v1", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
@@ -88,7 +90,9 @@ fn test_vacuum_table_memory_btree() {
     for i in 0..100 {
         let key = format!("key{:03}", i);
         let value = format!("value{:03}_v2", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -96,7 +100,9 @@ fn test_vacuum_table_memory_btree() {
     for i in 0..50 {
         let key = format!("key{:03}", i);
         let value = format!("value{:03}_v3", i);
-        db.update(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .update(key.as_bytes(), value.as_bytes())
             .expect("Failed to update");
     }
 
@@ -117,7 +123,9 @@ fn test_vacuum_table_memory_btree() {
         };
 
         let value = db
-            .get(table_id, key.as_bytes())
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
             .expect("Failed to get")
             .expect("Key should exist");
         assert_eq!(
@@ -157,14 +165,18 @@ fn test_vacuum_table_memory_btree_with_deletes() {
     for i in 0..50 {
         let key = format!("key{:03}", i);
         let value = format!("value{:03}", i);
-        db.insert(table_id, key.as_bytes(), value.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .insert(key.as_bytes(), value.as_bytes())
             .expect("Failed to insert");
     }
 
     // Delete half the keys
     for i in 0..25 {
         let key = format!("key{:03}", i);
-        db.delete(table_id, key.as_bytes())
+        db.table(table_id)
+            .unwrap()
+            .delete(key.as_bytes())
             .expect("Failed to delete");
     }
 
@@ -181,14 +193,22 @@ fn test_vacuum_table_memory_btree_with_deletes() {
     // Verify deleted keys are gone
     for i in 0..25 {
         let key = format!("key{:03}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_none(), "Deleted key {} should not exist", i);
     }
 
     // Verify remaining keys are intact
     for i in 25..50 {
         let key = format!("key{:03}", i);
-        let value = db.get(table_id, key.as_bytes()).expect("Failed to get");
+        let value = db
+            .table(table_id)
+            .unwrap()
+            .get(key.as_bytes())
+            .expect("Failed to get");
         assert!(value.is_some(), "Key {} should exist after vacuum", i);
     }
 }
