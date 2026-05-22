@@ -114,18 +114,15 @@ impl<FS: FileSystem> Pager<FS> {
 
         // Initialize page mapper from superblock
         let mut page_mapper = superblock.page_mapper.clone();
-        
+
         // Sync page mapper's next_virtual_id with superblock's next_page_id
         // For new databases, both should be 2, but we ensure consistency
         let next_page_id = superblock.next_page_id();
         let next_virtual_id = page_mapper.next_virtual_id();
         if next_virtual_id.as_u64() < next_page_id.as_u64() {
-            page_mapper = PageMapper::from_state(
-                page_mapper.get_mappings(),
-                next_page_id,
-            );
+            page_mapper = PageMapper::from_state(page_mapper.get_mappings(), next_page_id);
         }
-        
+
         let page_mapper = Arc::new(page_mapper);
 
         Ok(Self {
@@ -211,7 +208,7 @@ impl<FS: FileSystem> Pager<FS> {
 
         // Initialize page mapper from superblock
         let mut page_mapper = superblock.page_mapper.clone();
-        
+
         // CRITICAL FIX: Sync page mapper's next_virtual_id with superblock's next_page_id
         // When opening an existing database, the page mapper needs to know about all
         // pages that have been allocated. For databases created before PageMapper,
@@ -223,12 +220,9 @@ impl<FS: FileSystem> Pager<FS> {
             // Update the page mapper to account for all existing pages
             // This ensures that when we allocate new virtual IDs, they don't conflict
             // with existing physical pages that use identity mapping
-            page_mapper = PageMapper::from_state(
-                page_mapper.get_mappings(),
-                next_page_id,
-            );
+            page_mapper = PageMapper::from_state(page_mapper.get_mappings(), next_page_id);
         }
-        
+
         let page_mapper = Arc::new(page_mapper);
 
         Ok(Self {
@@ -1299,7 +1293,9 @@ impl<FS: FileSystem> Pager<FS> {
 
         // Find all virtual pages that map to the source physical page
         // This is critical for maintaining data integrity during compaction
-        let virtual_pages = self.page_mapper.find_virtual_pages_for_physical(from_page_id);
+        let virtual_pages = self
+            .page_mapper
+            .find_virtual_pages_for_physical(from_page_id);
         debug!(
             virtual_page_count = virtual_pages.len(),
             "Found virtual pages mapping to source physical page"

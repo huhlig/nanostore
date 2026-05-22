@@ -95,7 +95,7 @@ fn test_vacuum_table_btree() {
     // Run vacuum_table to free pages
     let versions_removed = db.vacuum_table(table_id).expect("Failed to vacuum table");
     println!("✓ vacuum_table removed {} versions", versions_removed);
-    
+
     // Assert that vacuum actually freed pages
     assert!(
         versions_removed > 0,
@@ -182,23 +182,21 @@ fn test_vacuum_pager_btree() {
     }
 
     // Assert that vacuum_pager actually did work
-    let stats = results
-        .get(&table_id)
-        .expect("Should have stats for table");
-    
+    let stats = results.get(&table_id).expect("Should have stats for table");
+
     assert!(
         stats.pages_moved > 0 || stats.pages_truncated > 0,
         "vacuum_pager should have moved or truncated pages (moved: {}, truncated: {})",
         stats.pages_moved,
         stats.pages_truncated
     );
-    
+
     assert!(
         stats.bytes_reclaimed > 0,
         "vacuum_pager should have reclaimed bytes (got {})",
         stats.bytes_reclaimed
     );
-    
+
     assert!(
         stats.file_size_after < stats.file_size_before,
         "vacuum_pager should have reduced file size ({} -> {})",
@@ -354,12 +352,12 @@ fn test_vacuum_table_all_types() {
     // Assert vacuum_pager did work on at least one table
     let total_pages_moved: u64 = results.values().map(|s| s.pages_moved).sum();
     let total_bytes_reclaimed: u64 = results.values().map(|s| s.bytes_reclaimed).sum();
-    
+
     assert!(
         total_pages_moved > 0 || results.values().any(|s| s.pages_truncated > 0),
         "vacuum_pager should have moved or truncated pages across all tables"
     );
-    
+
     assert!(
         total_bytes_reclaimed > 0,
         "vacuum_pager should have reclaimed bytes (got {})",
@@ -443,14 +441,14 @@ fn test_vacuum_idempotency() {
         "vacuum_table runs: {} -> {} -> {}",
         removed1, removed2, removed3
     );
-    
+
     // First run should do work
     assert!(
         removed1 > 0,
         "First vacuum_table should have removed versions (got {})",
         removed1
     );
-    
+
     // Subsequent runs should do less work
     assert!(
         removed2 < removed1,

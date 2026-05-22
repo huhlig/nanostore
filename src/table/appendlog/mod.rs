@@ -504,14 +504,100 @@ impl<FS: FileSystem> AppendLog<FS> {
         let mut state = self.state.write().unwrap();
         let mut total_removed = 0usize;
 
+        // First, vacuum version chains
         for (_, _, chain) in state.index.values_mut() {
             total_removed += Self::vacuum_chain(chain, min_visible_lsn);
         }
+
+        // Identify segments that have no visible data
+        // A segment has no visible data if all its index entries have been vacuumed away
+        // or if all remaining versions are older than min_visible_lsn
+        let mut segments_with_visible_data = std::collections::HashSet::new();
+
+        for (_, (segment_id, _, chain)) in state.index.iter() {
+            // Check if this chain has any visible versions
+            if Self::has_visible_version(chain, min_visible_lsn) {
+                segments_with_visible_data.insert(*segment_id);
+            }
+        }
+
+        // Free pages from segments that have no visible data
+        let segments_to_remove: Vec<SegmentId> = state
+            .immutable_segments
+            .keys()
+            .filter(|seg_id| !segments_with_visible_data.contains(seg_id))
+            .copied()
+            .collect();
+
+        let mut pages_freed = 0usize;
+        for segment_id in segments_to_remove {
+            if let Some(segment) = state.immutable_segments.remove(&segment_id) {
+                // Free all pages in this segment
+                let flushed_pages = segment.flushed_pages();
+                for page_id in flushed_pages.iter() {
+                    self.pager.free_page(*page_id).map_err(|e| {
+                        crate::table::TableError::Other(format!(
+                            "Failed to free segment page {}: {}",
+                            page_id.as_u64(),
+                            e
+                        ))
+                    })?;
+                    pages_freed += 1;
+                }
+
+                // Also free the segment's first page if it's not in flushed_pages
+                let metadata = segment.metadata();
+                let first_page = metadata.first_page_id;
+
+                // The first page might already be in flushed_pages, so check before freeing
+                if !flushed_pages.contains(&first_page) {
+                    self.pager.free_page(first_page).map_err(|e| {
+                        crate::table::TableError::Other(format!(
+                            "Failed to free segment first page {}: {}",
+                            first_page.as_u64(),
+                            e
+                        ))
+                    })?;
+                    pages_freed += 1;
+                }
+
+                debug!(
+                    "Vacuumed segment {} and freed {} pages",
+                    segment_id.0, pages_freed
+                );
+            }
+        }
+
+        // Remove index entries for vacuumed segments
+        let active_segment_id = state.active_segment.id();
+        let immutable_segment_ids: std::collections::HashSet<_> =
+            state.immutable_segments.keys().copied().collect();
+        
+        state.index.retain(|_, (seg_id, _, _)| {
+            immutable_segment_ids.contains(seg_id) || *seg_id == active_segment_id
+        });
 
         drop(state);
         self.persist_metadata()?;
 
         Ok(total_removed)
+    }
+
+    /// Check if a version chain has any visible versions.
+    fn has_visible_version(chain: &VersionChain, min_visible_lsn: LogSequenceNumber) -> bool {
+        let mut current = Some(chain);
+        while let Some(version) = current {
+            if let Some(commit_lsn) = version.commit_lsn {
+                if commit_lsn >= min_visible_lsn {
+                    return true;
+                }
+            } else {
+                // Uncommitted version is visible
+                return true;
+            }
+            current = version.prev_version.as_deref();
+        }
+        false
     }
 
     fn latest_chain_lsn(chain: &VersionChain) -> Option<LogSequenceNumber> {

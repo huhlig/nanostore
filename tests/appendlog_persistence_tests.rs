@@ -148,3 +148,4 @@ fn test_appendlog_table_reopens_with_flushed_segment_rows() {
 }
 
 // Made with Bob
+

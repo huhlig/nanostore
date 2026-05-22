@@ -241,6 +241,11 @@ impl Segment {
         LogSequenceNumber::from(self.metadata.read().unwrap().created_at)
     }
 
+    /// Get a copy of the flushed page IDs.
+    pub fn flushed_pages(&self) -> Vec<PageId> {
+        self.flushed_pages.read().unwrap().clone()
+    }
+
     fn flush_locked(&self, buffer: &mut Vec<u8>) -> TableResult<()> {
         let page_payload_size = self.page_payload_size();
         if page_payload_size == 0 || buffer.is_empty() {
