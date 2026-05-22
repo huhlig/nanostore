@@ -251,14 +251,20 @@ fn test_concurrent_readers_and_writers() {
             while !stop_flag.load(Ordering::Relaxed) {
                 let mut tx = db.begin_write(Durability::SyncOnCommit).unwrap();
 
-                // Update a few keys
+                // Update a few keys - conflicts are expected and handled
+                let mut conflict = false;
                 for i in 0..5 {
                     let key = format!("key_{:04}", (writer_id * 20 + i) % 100);
                     let value = format!("writer_{}_{}", writer_id, op_count);
-                    tx.put(table_id, key.as_bytes(), value.as_bytes()).unwrap();
+                    if let Err(_) = tx.put(table_id, key.as_bytes(), value.as_bytes()) {
+                        // Write-write conflict detected, abort this transaction
+                        conflict = true;
+                        break;
+                    }
                 }
 
-                if tx.commit().is_ok() {
+                // Only commit if no conflicts occurred
+                if !conflict && tx.commit().is_ok() {
                     write_count.fetch_add(1, Ordering::Relaxed);
                     op_count += 1;
                 }

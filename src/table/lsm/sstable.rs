@@ -1338,9 +1338,13 @@ impl<FS: FileSystem> SStableReader<FS> {
             if let Some(commit_lsn) = version.commit_lsn {
                 // Check if this version is visible at the snapshot LSN
                 if commit_lsn <= snapshot_lsn {
-                    // Found a visible version - extract inline value
+                    // Found a visible version - check for tombstone first
                     match &version.value {
                         VersionValue::Inline(data) => {
+                            // Empty value means tombstone (deleted)
+                            if data.is_empty() {
+                                return Ok(None);
+                            }
                             return Ok(Some(data.clone()));
                         }
                         VersionValue::External(_) => {
