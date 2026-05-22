@@ -44,7 +44,7 @@ fn create_test_db() -> StorageEngine<MemoryFileSystem> {
 
 /// Test vacuum_table() independently on BTree
 #[test]
-fn test_vacuum_table_btree_with_virtual_mapping() {
+fn test_vacuum_table_btree() {
     println!("\n=== Test vacuum_table() on BTree ===\n");
 
     let db = create_test_db();
@@ -95,6 +95,13 @@ fn test_vacuum_table_btree_with_virtual_mapping() {
     // Run vacuum_table to free pages
     let versions_removed = db.vacuum_table(table_id).expect("Failed to vacuum table");
     println!("✓ vacuum_table removed {} versions", versions_removed);
+    
+    // Assert that vacuum actually freed pages
+    assert!(
+        versions_removed > 0,
+        "vacuum_table should have removed deleted versions (expected > 0, got {})",
+        versions_removed
+    );
 
     // Verify remaining data integrity
     for i in 400..500 {
@@ -108,7 +115,7 @@ fn test_vacuum_table_btree_with_virtual_mapping() {
 
 /// Test vacuum_pager() independently
 #[test]
-fn test_vacuum_pager_with_virtual_mapping() {
+fn test_vacuum_pager_btree() {
     println!("\n=== Test vacuum_pager() with Virtual Mapping ===\n");
 
     let db = create_test_db();
@@ -168,7 +175,36 @@ fn test_vacuum_pager_with_virtual_mapping() {
         println!("    Pages moved: {}", stats.pages_moved);
         println!("    Pages truncated: {}", stats.pages_truncated);
         println!("    Bytes reclaimed: {}", stats.bytes_reclaimed);
+        println!(
+            "    File size: {} -> {} bytes",
+            stats.file_size_before, stats.file_size_after
+        );
     }
+
+    // Assert that vacuum_pager actually did work
+    let stats = results
+        .get(&table_id)
+        .expect("Should have stats for table");
+    
+    assert!(
+        stats.pages_moved > 0 || stats.pages_truncated > 0,
+        "vacuum_pager should have moved or truncated pages (moved: {}, truncated: {})",
+        stats.pages_moved,
+        stats.pages_truncated
+    );
+    
+    assert!(
+        stats.bytes_reclaimed > 0,
+        "vacuum_pager should have reclaimed bytes (got {})",
+        stats.bytes_reclaimed
+    );
+    
+    assert!(
+        stats.file_size_after < stats.file_size_before,
+        "vacuum_pager should have reduced file size ({} -> {})",
+        stats.file_size_before,
+        stats.file_size_after
+    );
 
     // Verify data integrity after vacuum_pager
     for i in 400..500 {
@@ -182,7 +218,7 @@ fn test_vacuum_pager_with_virtual_mapping() {
 
 /// Test both vacuum_table() and vacuum_pager() together on all table types
 #[test]
-fn test_two_level_vacuum_all_table_types() {
+fn test_vacuum_table_all_types() {
     println!("\n=== Test Two-Level Vacuum on All Table Types ===\n");
 
     let db = create_test_db();
@@ -233,7 +269,7 @@ fn test_two_level_vacuum_all_table_types() {
             .expect("Failed to insert into Hash");
     }
 
-    println!("✓ Inserted 200 records into each table");
+    println!("✓ Inserted 300 records into each table");
 
     // Verify pre-vacuum visibility baseline for retained keys
     for i in 70..100 {
@@ -286,9 +322,17 @@ fn test_two_level_vacuum_all_table_types() {
 
     let btree_removed = db.vacuum_table(btree_id).expect("Failed to vacuum BTree");
     println!("  BTree: {} versions removed", btree_removed);
+    assert!(
+        btree_removed > 0,
+        "BTree vacuum_table should have removed versions"
+    );
 
     let hash_removed = db.vacuum_table(hash_id).expect("Failed to vacuum Hash");
     println!("  Hash: {} versions removed", hash_removed);
+    assert!(
+        hash_removed > 0,
+        "Hash vacuum_table should have removed versions"
+    );
 
     // Phase 2: Run vacuum_pager to compact physical pages
     println!("\nPhase 2: Running vacuum_pager to compact physical pages...");
@@ -306,6 +350,21 @@ fn test_two_level_vacuum_all_table_types() {
             stats.file_size_before, stats.file_size_after
         );
     }
+
+    // Assert vacuum_pager did work on at least one table
+    let total_pages_moved: u64 = results.values().map(|s| s.pages_moved).sum();
+    let total_bytes_reclaimed: u64 = results.values().map(|s| s.bytes_reclaimed).sum();
+    
+    assert!(
+        total_pages_moved > 0 || results.values().any(|s| s.pages_truncated > 0),
+        "vacuum_pager should have moved or truncated pages across all tables"
+    );
+    
+    assert!(
+        total_bytes_reclaimed > 0,
+        "vacuum_pager should have reclaimed bytes (got {})",
+        total_bytes_reclaimed
+    );
 
     // Phase 3: Verify data integrity for all tables
     println!("\nPhase 3: Verifying data integrity...");
@@ -384,13 +443,26 @@ fn test_vacuum_idempotency() {
         "vacuum_table runs: {} -> {} -> {}",
         removed1, removed2, removed3
     );
+    
+    // First run should do work
     assert!(
-        removed2 <= removed1,
-        "Second vacuum should remove same or fewer versions"
+        removed1 > 0,
+        "First vacuum_table should have removed versions (got {})",
+        removed1
+    );
+    
+    // Subsequent runs should do less work
+    assert!(
+        removed2 < removed1,
+        "Second vacuum should remove fewer versions than first ({} vs {})",
+        removed2,
+        removed1
     );
     assert!(
         removed3 <= removed2,
-        "Third vacuum should remove same or fewer versions"
+        "Third vacuum should remove same or fewer versions than second ({} vs {})",
+        removed3,
+        removed2
     );
 
     // Run vacuum_pager multiple times
@@ -414,14 +486,22 @@ fn test_vacuum_idempotency() {
         stats2.pages_moved, stats2.bytes_reclaimed
     );
 
+    // Verify idempotency: second run should do same or less work
     assert!(
         stats2.pages_moved <= stats1.pages_moved,
-        "Second vacuum_pager should move same or fewer pages"
+        "Second vacuum_pager should move same or fewer pages ({} vs {})",
+        stats2.pages_moved,
+        stats1.pages_moved
     );
     assert!(
         stats2.bytes_reclaimed <= stats1.bytes_reclaimed,
-        "Second vacuum_pager should reclaim same or fewer bytes"
+        "Second vacuum_pager should reclaim same or fewer bytes ({} vs {})",
+        stats2.bytes_reclaimed,
+        stats1.bytes_reclaimed
     );
+
+    // NOTE: vacuum_pager currently doesn't move/truncate pages (tracked in nanokv-zdps)
+    // The test verifies idempotency: multiple runs produce consistent results
 
     // Verify data integrity
     for i in 150..200 {
@@ -438,7 +518,7 @@ fn test_vacuum_idempotency() {
 
 /// Test virtual-to-physical mapping preservation across vacuum operations
 #[test]
-fn test_virtual_physical_mapping_preservation() {
+fn test_vacuum_mapping_preservation() {
     println!("\n=== Test Virtual-Physical Mapping Preservation ===\n");
 
     let db = create_test_db();
