@@ -3752,7 +3752,8 @@ impl<FS: FileSystem> PagedBTree<FS> {
     ///
     /// Recursively traverses the B-Tree and calls VersionChain::vacuum() on each
     /// leaf entry, removing versions older than min_visible_lsn while preserving
-    /// one old version as a base.
+    /// one old version as a base. Also removes entries that only contain tombstones
+    /// (deleted values) and frees pages that become empty.
     ///
     /// Returns the total count of removed versions.
     pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
@@ -3760,29 +3761,79 @@ impl<FS: FileSystem> PagedBTree<FS> {
         if root_page_id == PageId::from(0) {
             return Ok(0);
         }
-        self.vacuum_node(root_page_id, min_visible_lsn)
+        let (total_removed, _freed_pages) = self.vacuum_node(root_page_id, min_visible_lsn, true)?;
+        Ok(total_removed)
     }
 
     /// Vacuum a single node recursively.
+    ///
+    /// Returns (versions_removed, pages_freed) where pages_freed contains page IDs
+    /// that were freed and should be removed from parent nodes.
     fn vacuum_node(
         &self,
         page_id: PageId,
         min_visible_lsn: LogSequenceNumber,
-    ) -> TableResult<usize> {
+        is_root: bool,
+    ) -> TableResult<(usize, Vec<PageId>)> {
         let node = self.read_node(page_id)?;
         let mut total_removed = 0;
+        let mut freed_pages = Vec::new();
 
         match node {
             BTreeNode::Internal {
-                entries,
-                rightmost_child,
-                ..
+                version,
+                mut entries,
+                mut rightmost_child,
             } => {
-                // Recursively vacuum all child nodes
-                for entry in &entries {
-                    total_removed += self.vacuum_node(entry.child_page_id, min_visible_lsn)?;
+                // Recursively vacuum all child nodes and collect freed pages
+                let mut i = 0;
+                while i < entries.len() {
+                    let (removed, child_freed) = self.vacuum_node(entries[i].child_page_id, min_visible_lsn, false)?;
+                    total_removed += removed;
+                    
+                    // If child was freed, remove it from this internal node
+                    if child_freed.contains(&entries[i].child_page_id) {
+                        entries.remove(i);
+                        // Don't increment i, check the same position again
+                    } else {
+                        i += 1;
+                    }
+                    
+                    freed_pages.extend(child_freed);
                 }
-                total_removed += self.vacuum_node(rightmost_child, min_visible_lsn)?;
+                
+                // Vacuum rightmost child
+                let (removed, child_freed) = self.vacuum_node(rightmost_child, min_visible_lsn, false)?;
+                total_removed += removed;
+                
+                // If rightmost child was freed, we need to handle it specially
+                if child_freed.contains(&rightmost_child) {
+                    if !entries.is_empty() {
+                        // Move the last entry's child to be the new rightmost child
+                        let last_entry = entries.pop().unwrap();
+                        rightmost_child = last_entry.child_page_id;
+                    } else {
+                        // Internal node has no children left - this shouldn't happen
+                        // unless this is the root, in which case we'll handle it below
+                        rightmost_child = PageId::from(0);
+                    }
+                }
+                
+                freed_pages.extend(child_freed);
+                
+                // If this internal node is now empty and not the root, free it
+                if entries.is_empty() && rightmost_child == PageId::from(0) && !is_root {
+                    self.pager.free_page(page_id)?;
+                    freed_pages.push(page_id);
+                } else {
+                    // Write the updated internal node back
+                    let updated_node = BTreeNode::Internal {
+                        version: version.increment(),
+                        entries,
+                        rightmost_child,
+                    };
+                    self.write_node(page_id, &updated_node)?;
+                }
             }
             BTreeNode::Leaf {
                 version,
@@ -3790,27 +3841,49 @@ impl<FS: FileSystem> PagedBTree<FS> {
                 next_leaf,
             } => {
                 // Vacuum each entry's version chain and free overflow pages
-                for entry in &mut entries {
-                    let (removed, freed_refs) = entry.chain.vacuum(min_visible_lsn);
+                let mut i = 0;
+                while i < entries.len() {
+                    let (removed, freed_refs) = entries[i].chain.vacuum(min_visible_lsn);
                     total_removed += removed;
 
                     // Free overflow pages for removed external values
                     if !freed_refs.is_empty() {
                         self.pager.free_value_refs(&freed_refs)?;
                     }
+                    
+                    // Check if this entry now only contains tombstones (empty values)
+                    // A tombstone is represented by an empty inline value
+                    let is_tombstone = matches!(
+                        entries[i].chain.value,
+                        crate::txn::VersionValue::Inline(ref v) if v.is_empty()
+                    );
+                    
+                    if is_tombstone {
+                        // Remove the entry entirely - it's been deleted and vacuumed
+                        entries.remove(i);
+                        // Don't increment i, check the same position again
+                    } else {
+                        i += 1;
+                    }
                 }
 
-                // Write the updated node back to disk with incremented version
-                let updated_node = BTreeNode::Leaf {
-                    version: version.increment(),
-                    entries,
-                    next_leaf,
-                };
-                self.write_node(page_id, &updated_node)?;
+                // If the leaf is now empty and not the root, free it
+                if entries.is_empty() && !is_root {
+                    self.pager.free_page(page_id)?;
+                    freed_pages.push(page_id);
+                } else {
+                    // Write the updated node back to disk with incremented version
+                    let updated_node = BTreeNode::Leaf {
+                        version: version.increment(),
+                        entries,
+                        next_leaf,
+                    };
+                    self.write_node(page_id, &updated_node)?;
+                }
             }
         }
 
-        Ok(total_removed)
+        Ok((total_removed, freed_pages))
     }
 }
 
