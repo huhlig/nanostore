@@ -1511,6 +1511,7 @@ impl<FS: FileSystem> Table for PagedRTree<FS> {
 
         Ok(crate::table::TableStatistics {
             row_count: Some(count),
+            page_count: None, // TODO: Track actual page count
             total_size_bytes: Some(estimated_size),
             key_stats: Some(crate::table::KeyStatistics {
                 min_size: 0,

@@ -625,6 +625,7 @@ impl<FS: FileSystem> Table for TimeSeriesTable<FS> {
         let state = self.state.read().unwrap();
         Ok(TableStatistics {
             row_count: Some(state.total_points),
+            page_count: None, // TODO: Track actual page count across buckets
             total_size_bytes: Some(state.total_size),
             key_stats: None,
             value_stats: None,

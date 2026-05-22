@@ -734,6 +734,7 @@ pub struct BatchReport {
 #[derive(Clone, Debug, Default)]
 pub struct TableStatistics {
     pub row_count: Option<u64>,
+    pub page_count: Option<u64>,
     pub total_size_bytes: Option<u64>,
     pub key_stats: Option<KeyStatistics>,
     pub value_stats: Option<ValueStatistics>,

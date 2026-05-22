@@ -1161,6 +1161,7 @@ impl<FS: FileSystem> Table for PagedHnswVector<FS> {
 
         Ok(crate::table::TableStatistics {
             row_count: Some(num_vectors),
+            page_count: None, // TODO: Track actual page count
             total_size_bytes: Some(estimated_size),
             key_stats: None,
             value_stats: None,

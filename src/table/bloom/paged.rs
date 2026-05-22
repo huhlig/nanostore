@@ -483,6 +483,7 @@ impl<FS: FileSystem> Table for PagedBloomFilter<FS> {
         let size_bytes = self.bitmap_pages.len() * self.pager.page_size().to_u32() as usize;
         Ok(crate::table::TableStatistics {
             row_count: Some(*self.num_items.read().unwrap() as u64),
+            page_count: Some(self.bitmap_pages.len() as u64),
             total_size_bytes: Some(size_bytes as u64),
             key_stats: None,
             value_stats: None,

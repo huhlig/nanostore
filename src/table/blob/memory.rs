@@ -352,6 +352,7 @@ impl Table for MemoryBlob {
 
         Ok(TableStatistics {
             row_count: Some(metadata.len() as u64),
+            page_count: None, // Memory-based implementation doesn't use pages
             total_size_bytes: Some(memory_usage as u64),
             key_stats: None,
             value_stats: None,

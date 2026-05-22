@@ -155,6 +155,7 @@ impl Table for MemoryBTree {
         let data = self.data.read().unwrap();
         Ok(TableStatistics {
             row_count: Some(data.len() as u64),
+            page_count: None, // Memory-based implementation doesn't use pages
             total_size_bytes: Some(self.get_memory_usage() as u64),
             key_stats: None,
             value_stats: None,

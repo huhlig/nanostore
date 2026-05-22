@@ -664,6 +664,7 @@ impl<FS: FileSystem> Table for PagedFullTextIndex<FS> {
     fn stats(&self) -> TableResult<TableStatistics> {
         Ok(TableStatistics {
             row_count: Some(*self.num_documents.read().unwrap()),
+            page_count: None, // TODO: Track actual page count
             total_size_bytes: None,
             ..Default::default()
         })

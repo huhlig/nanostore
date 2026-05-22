@@ -637,6 +637,7 @@ impl<FS: FileSystem> Table for LsmTree<FS> {
 
         Ok(TableStatistics {
             row_count: Some(total_entries),
+            page_count: None, // TODO: Track actual page count across SSTables
             total_size_bytes: Some(total_size),
             key_stats: None,
             value_stats: None,

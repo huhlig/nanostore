@@ -2235,6 +2235,7 @@ impl<FS: FileSystem> Table for PagedBTree<FS> {
 
         Ok(TableStatistics {
             row_count: Some(stats.row_count),
+            page_count: None, // TODO: Track actual page count
             total_size_bytes: Some(stats.total_size_bytes),
             key_stats: Some(crate::table::KeyStatistics {
                 min_size: stats.key_min_size,

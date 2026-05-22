@@ -320,6 +320,7 @@ impl<FS: FileSystem> Table for FileBlob<FS> {
         let index = self.index.read().unwrap();
         Ok(TableStatistics {
             row_count: Some(index.len() as u64),
+            page_count: None, // File-based implementation doesn't use pages
             total_size_bytes: None,
             key_stats: None,
             value_stats: None,

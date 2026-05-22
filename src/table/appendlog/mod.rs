@@ -606,6 +606,7 @@ impl<FS: FileSystem> Table for AppendLog<FS> {
         let state = self.state.read().unwrap();
         Ok(TableStatistics {
             row_count: Some(state.entry_count),
+            page_count: None, // TODO: Track actual page count across segments
             total_size_bytes: Some(state.total_size),
             key_stats: None,
             value_stats: None,

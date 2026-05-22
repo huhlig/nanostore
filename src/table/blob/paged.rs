@@ -451,6 +451,7 @@ impl<FS: FileSystem> Table for PagedBlob<FS> {
         let index = self.index.read().unwrap();
         Ok(TableStatistics {
             row_count: Some(index.len() as u64),
+            page_count: None, // TODO: Track actual page count
             total_size_bytes: None,
             key_stats: None,
             value_stats: None,
