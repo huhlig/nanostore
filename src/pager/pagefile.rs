@@ -1260,21 +1260,23 @@ impl<FS: FileSystem> Pager<FS> {
         Ok(None)
     }
 
-    /// Move a page from one location to another.
+    /// Move a page from one PHYSICAL location to another.
     ///
-    /// Copies page data from source to destination, updating the page ID in the header.
-    /// This is used by VACUUM FULL to move pages from high page IDs to low page IDs.
+    /// Copies page data from source to destination, updating the page ID in the header
+    /// and updating virtual-to-physical mappings. This is used by VACUUM FULL to move
+    /// pages from high page IDs to low page IDs.
     ///
     /// # Arguments
-    /// * `from_page_id` - Source page ID to move from
-    /// * `to_page_id` - Destination page ID to move to
+    /// * `from_page_id` - Source PHYSICAL page ID to move from
+    /// * `to_page_id` - Destination PHYSICAL page ID to move to
     ///
     /// # Lock Ordering
     /// Follows the hierarchy: page_table → file
     ///
-    /// # Note
-    /// This does NOT update references to the page (e.g., in indexes or overflow chains).
-    /// The caller is responsible for updating all references.
+    /// # Virtual-Physical Mapping
+    /// This method updates the PageMapper to remap all virtual pages that pointed to
+    /// the old physical location to point to the new physical location. This ensures
+    /// that table references remain valid after the page is moved.
     #[instrument(skip(self), fields(from = %from_page_id, to = %to_page_id))]
     pub fn move_page(&self, from_page_id: PageId, to_page_id: PageId) -> PagerResult<()> {
         let start = Instant::now();
@@ -1295,14 +1297,34 @@ impl<FS: FileSystem> Pager<FS> {
             return Err(PagerError::InvalidPageId(to_page_id));
         }
 
+        // Find all virtual pages that map to the source physical page
+        // This is critical for maintaining data integrity during compaction
+        let virtual_pages = self.page_mapper.find_virtual_pages_for_physical(from_page_id);
+        debug!(
+            virtual_page_count = virtual_pages.len(),
+            "Found virtual pages mapping to source physical page"
+        );
+
         // Read the source page
         let mut page = self.read_page(from_page_id)?;
 
-        // Update the page ID in the header
+        // Update the page ID in the header to the new physical location
         page.header.page_id = to_page_id;
 
         // Write to the destination
         self.write_page_to_disk(&page)?;
+
+        // Update virtual-to-physical mappings for all affected virtual pages
+        // This ensures that all table references continue to work after the move
+        for virtual_page_id in virtual_pages {
+            self.page_mapper.remap(virtual_page_id, to_page_id);
+            debug!(
+                virtual_id = %virtual_page_id,
+                old_physical = %from_page_id,
+                new_physical = %to_page_id,
+                "Updated virtual-to-physical mapping"
+            );
+        }
 
         // Mark the source page as free
         let mut free_page = Page::new(
@@ -1317,7 +1339,7 @@ impl<FS: FileSystem> Pager<FS> {
         counter!("nanostore.pager.vacuum_full.pages_moved").increment(1);
         histogram!("nanostore.pager.vacuum_full.move_page.duration_seconds")
             .record(start.elapsed().as_secs_f64());
-        debug!("Page moved successfully");
+        debug!("Page moved successfully with virtual-physical mappings updated");
         Ok(())
     }
 
