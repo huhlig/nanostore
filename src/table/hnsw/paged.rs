@@ -1086,25 +1086,22 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         Ok(())
     }
 
-    /// Select M neighbors from candidates using a simple greedy selection
+    /// Select M neighbors from candidates using bounded diversity pruning
     ///
-    /// NOTE: This uses greedy k-NN selection for performance. The proper RobustPrune
-    /// diversity heuristic from the HNSW paper would provide better cluster navigation
-    /// but requires significant optimization (batching, better caching) to be practical.
+    /// This implements a practical middle-ground between greedy k-NN and full RobustPrune:
+    /// 1. Sort candidates by distance to query
+    /// 2. Keep top K candidates (K = M * 3) as pruning pool
+    /// 3. Apply diversity heuristic within this bounded pool
+    /// 4. This gives O((3M)²) instead of O(candidates²) complexity
     ///
-    /// Current performance: ~400s for 15K vectors with greedy
-    /// RobustPrune attempt: >1500s for 15K vectors (too slow)
-    ///
-    /// TODO: Implement optimized RobustPrune with:
-    /// - Batch distance calculations
-    /// - GPU acceleration for distance computations
-    /// - Approximate diversity checks
+    /// The diversity check prevents redundant edges: if a candidate is closer to an
+    /// already-selected neighbor than to the query, it's redundant and skipped.
     fn select_neighbors(
         &self,
         mut candidates: Vec<Candidate>,
         m: usize,
         _layer: usize,
-        _extend_candidates: bool,
+        extend_candidates: bool,
     ) -> Vec<NodeId> {
         if candidates.is_empty() {
             return Vec::new();
@@ -1117,8 +1114,63 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // Return M closest neighbors
-        candidates.into_iter().take(m).map(|c| c.node_id).collect()
+        // If we don't need diversity or have few candidates, use simple selection
+        if !extend_candidates || candidates.len() <= m {
+            return candidates.into_iter().take(m).map(|c| c.node_id).collect();
+        }
+
+        // Bounded diversity pruning: limit pool size to 3*M
+        let pool_size = (m * 3).min(candidates.len());
+        let prune_pool: Vec<Candidate> = candidates.into_iter().take(pool_size).collect();
+
+        // Pre-load vectors for the pruning pool only
+        let mut candidate_vectors: std::collections::HashMap<NodeId, Vec<f32>> =
+            std::collections::HashMap::with_capacity(pool_size);
+        
+        for candidate in &prune_pool {
+            if let Ok(node) = self.load_node(candidate.node_id) {
+                candidate_vectors.insert(candidate.node_id, node.vector);
+            }
+        }
+
+        // Select diverse neighbors from the pool
+        let mut result = Vec::with_capacity(m);
+        let mut selected_vectors: Vec<Vec<f32>> = Vec::with_capacity(m);
+
+        for candidate in prune_pool {
+            if result.len() >= m {
+                break;
+            }
+            
+            // Get candidate vector (already loaded)
+            let candidate_vector = match candidate_vectors.get(&candidate.node_id) {
+                Some(v) => v,
+                None => continue, // Skip if we couldn't load it
+            };
+            
+            // Check if this candidate is diverse enough
+            let mut is_diverse = true;
+            
+            // Check distance to already-selected neighbors
+            for selected_vector in &selected_vectors {
+                // Calculate distance between candidate and selected neighbor
+                let dist_to_selected = self.distance(candidate_vector, selected_vector);
+                
+                // If candidate is closer to an already-selected neighbor than to the query,
+                // it's redundant (not diverse enough)
+                if dist_to_selected < candidate.distance {
+                    is_diverse = false;
+                    break;
+                }
+            }
+            
+            if is_diverse {
+                result.push(candidate.node_id);
+                selected_vectors.push(candidate_vector.to_vec());
+            }
+        }
+
+        result
     }
 
     /// Add bidirectional connections between nodes
