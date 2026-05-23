@@ -1326,8 +1326,11 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
                     .collect();
             }
 
-            // Insert at layers 0..=layer
-            for lc in 0..=layer {
+            // Insert at layers from top down to bottom (0)
+            // Only insert up to min(layer, max_layer) since higher layers don't exist yet
+            let top_insert_layer = layer.min(max_layer);
+            
+            for lc in (0..=top_insert_layer).rev() {
                 let m = if lc == 0 {
                     self.config.read().unwrap().max_connections_layer0
                 } else {
@@ -1341,18 +1344,20 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
                     lc,
                 )?;
 
-                let neighbors = self.select_neighbors(candidates, m, lc, true);
+                let neighbors = self.select_neighbors(candidates.clone(), m, lc, true);
 
                 // Add bidirectional connections
                 self.connect_nodes(node_id, neighbors.clone(), lc)?;
 
                 // Update neighbors' connections
-                for neighbor_id in neighbors {
-                    self.prune_connections(neighbor_id, lc)?;
+                for neighbor_id in &neighbors {
+                    self.prune_connections(*neighbor_id, lc)?;
                 }
 
-                // Update current_nearest for next layer
-                current_nearest = vec![node_id];
+                // Update current_nearest for next layer down
+                // Use the candidates found during search as entry points for the next lower layer
+                // This maintains proper HNSW hierarchical navigation structure
+                current_nearest = candidates.into_iter().map(|c| c.node_id).collect();
             }
 
             // Update max layer if needed
@@ -1707,8 +1712,11 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                     .collect();
             }
 
-            // Insert at layers 0..=layer
-            for lc in 0..=layer {
+            // Insert at layers from top down to bottom (0)
+            // Only insert up to min(layer, max_layer) since higher layers don't exist yet
+            let top_insert_layer = layer.min(max_layer);
+            
+            for lc in (0..=top_insert_layer).rev() {
                 let m = if lc == 0 {
                     self.config.read().unwrap().max_connections_layer0
                 } else {
@@ -1722,18 +1730,20 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                     lc,
                 )?;
 
-                let neighbors = self.select_neighbors(candidates, m, lc, true);
+                let neighbors = self.select_neighbors(candidates.clone(), m, lc, true);
 
                 // Add bidirectional connections
                 self.connect_nodes(node_id, neighbors.clone(), lc)?;
 
                 // Update neighbors' connections
-                for neighbor_id in neighbors {
-                    self.prune_connections(neighbor_id, lc)?;
+                for neighbor_id in &neighbors {
+                    self.prune_connections(*neighbor_id, lc)?;
                 }
 
-                // Update current_nearest for next layer
-                current_nearest = vec![node_id];
+                // Update current_nearest for next layer down
+                // Use the candidates found during search as entry points for the next lower layer
+                // This maintains proper HNSW hierarchical navigation structure
+                current_nearest = candidates.into_iter().map(|c| c.node_id).collect();
             }
 
             // Update max layer if needed

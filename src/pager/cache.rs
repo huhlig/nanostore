@@ -104,7 +104,7 @@ pub struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            capacity: 1000,   // Default to 1000 pages
+            capacity: 10_000, // Default to 10,000 pages (~40MB with 4KB pages)
             write_back: true, // Default to write-back for better performance
         }
     }
