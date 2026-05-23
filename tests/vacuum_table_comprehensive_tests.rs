@@ -49,11 +49,6 @@ fn create_test_db() -> StorageEngine<MemoryFileSystem> {
     let db =
         StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
-    // Disable background vacuum for manual control in tests
-    let mut config = db.vacuum_config();
-    config.enabled = false;
-    db.set_vacuum_config(config);
-
     db
 }
 

@@ -38,11 +38,6 @@ fn create_test_db() -> StorageEngine<MemoryFileSystem> {
     let db =
         StorageEngine::new(&fs, "/test.wal", "/test.db").expect("Failed to create StorageEngine");
 
-    // Disable background vacuum for manual control in tests
-    let mut config = db.vacuum_config();
-    config.enabled = false;
-    db.set_vacuum_config(config);
-
     db
 }
 
@@ -389,7 +384,7 @@ fn test_vacuum_all_api() {
     }
 
     // Vacuum all tables
-    let metrics = db.vacuum_all().expect("Failed to vacuum all");
+    let metrics = db.vacuum_full().expect("Failed to vacuum all");
 
     // Should have results for tables that support vacuum
     // (exact count depends on which tables support it)

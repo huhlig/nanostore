@@ -919,8 +919,8 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// # Examples
     ///
     /// ```ignore
-    /// // Vacuum all tables
-    /// let stats = db.vacuum_all()?;
+    /// // Perform a full Vacuum. All Tables and Pagefile
+    /// let stats = db.vacuum_full()?;
     /// println!("Removed {} versions", stats.total_versions_removed);
     /// println!("Reclaimed {} bytes", stats.pager_stats.bytes_reclaimed);
     /// // Access per-table results
@@ -928,7 +928,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
     ///     println!("Table {}: removed {} versions", table_id, removed);
     /// }
     /// ```
-    pub fn vacuum_all(&self) -> Result<VacuumFullStats, StorageEngineError> {
+    pub fn vacuum_full(&self) -> Result<VacuumFullStats, StorageEngineError> {
         let start = Instant::now();
         let mut full_stats = VacuumFullStats::new();
 
