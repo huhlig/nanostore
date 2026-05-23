@@ -1091,14 +1091,15 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     /// This implements Algorithm 4 from the HNSW paper with bounded candidate pool:
     /// 1. Sort candidates by distance to query
     /// 2. Limit pool to top 3*M candidates (bounded diversity pruning)
-    /// 3. For each candidate in order, check if it's closer to query than to any selected neighbor
-    /// 4. If yes (diverse), add to result; if no (redundant), skip
+    /// 3. Pre-load vectors for bounded pool (amortizes I/O cost)
+    /// 4. For each candidate in order, check if it's closer to query than to any selected neighbor
+    /// 5. If yes (diverse), add to result; if no (redundant), skip
     ///
     /// The diversity check prevents redundant edges by ensuring each selected neighbor
     /// provides a unique direction from the query point. This preserves bridge edges
     /// between clusters while limiting complexity to O((3M)²) instead of O(candidates²).
     ///
-    /// Vectors are loaded on-demand during diversity checks, not pre-loaded.
+    /// Pre-loading vectors for the bounded pool amortizes the I/O cost across all diversity checks.
     fn select_neighbors(
         &self,
         mut candidates: Vec<Candidate>,
@@ -1127,6 +1128,18 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let pool_size = (m * 3).min(candidates.len());
         let prune_pool: Vec<Candidate> = candidates.into_iter().take(pool_size).collect();
 
+        // Pre-load vectors for the pruning pool to amortize I/O cost
+        // This is critical for performance - loading on-demand during diversity checks
+        // would cause O(pool_size) loads instead of O(pool_size) with caching benefits
+        let mut candidate_vectors: std::collections::HashMap<NodeId, Vec<f32>> =
+            std::collections::HashMap::with_capacity(pool_size);
+        
+        for candidate in &prune_pool {
+            if let Ok(node) = self.load_node(candidate.node_id) {
+                candidate_vectors.insert(candidate.node_id, node.vector);
+            }
+        }
+
         // Select diverse neighbors using the paper's heuristic (Algorithm 4, lines 9-14)
         let mut result = Vec::with_capacity(m);
         let mut selected_vectors: Vec<Vec<f32>> = Vec::with_capacity(m);
@@ -1136,10 +1149,10 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                 break;
             }
             
-            // Load candidate vector on-demand (only when checking this candidate)
-            let candidate_vector = match self.load_node(candidate.node_id) {
-                Ok(node) => node.vector,
-                Err(_) => continue, // Skip if we can't load it
+            // Get pre-loaded candidate vector
+            let candidate_vector = match candidate_vectors.get(&candidate.node_id) {
+                Some(v) => v,
+                None => continue, // Skip if we couldn't load it
             };
             
             // Check if this candidate is closer to query than to any already-selected neighbor
@@ -1147,7 +1160,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             let mut is_diverse = true;
             
             for selected_vector in &selected_vectors {
-                let dist_to_selected = self.distance(&candidate_vector, selected_vector);
+                let dist_to_selected = self.distance(candidate_vector, selected_vector);
                 
                 // If candidate is closer to a selected neighbor than to query, it's redundant
                 // (the selected neighbor already "covers" this direction from the query)
@@ -1159,7 +1172,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             
             if is_diverse {
                 result.push(candidate.node_id);
-                selected_vectors.push(candidate_vector);
+                selected_vectors.push(candidate_vector.clone());
             }
         }
 
