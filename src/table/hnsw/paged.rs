@@ -39,9 +39,9 @@ use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-/// Node cache statistics
+/// Cache statistics
 #[derive(Debug, Clone, Default)]
-struct NodeCacheStats {
+struct CacheStats {
     /// Total cache hits
     hits: u64,
     /// Total cache misses
@@ -50,7 +50,7 @@ struct NodeCacheStats {
     evictions: u64,
 }
 
-impl NodeCacheStats {
+impl CacheStats {
     fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
         if total == 0 {
@@ -61,7 +61,66 @@ impl NodeCacheStats {
     }
 }
 
-/// Simple LRU cache for HNSW nodes
+/// Lightweight vector-only cache for fast distance calculations
+///
+/// This cache stores only vectors (not full nodes) to minimize memory overhead
+/// and maximize cache hit rate during neighbor selection and pruning operations.
+///
+/// Key design decisions:
+/// - Stores only Vec<f32> instead of full HnswNode (10-100x smaller)
+/// - No LRU tracking to avoid lock contention on reads
+/// - Pre-populated during insertion to ensure hot vectors are cached
+/// - Separate from node cache to allow different eviction policies
+struct VectorCache {
+    /// Cached vectors indexed by NodeId
+    vectors: HashMap<NodeId, Vec<f32>>,
+    /// Maximum cache size (number of vectors)
+    capacity: usize,
+    /// Cache statistics
+    stats: CacheStats,
+}
+
+impl VectorCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            vectors: HashMap::with_capacity(capacity),
+            capacity,
+            stats: CacheStats::default(),
+        }
+    }
+
+    fn get(&mut self, node_id: NodeId) -> Option<&Vec<f32>> {
+        if let Some(vector) = self.vectors.get(&node_id) {
+            self.stats.hits += 1;
+            Some(vector)
+        } else {
+            self.stats.misses += 1;
+            None
+        }
+    }
+
+    fn insert(&mut self, node_id: NodeId, vector: Vec<f32>) {
+        // Simple eviction: if at capacity, remove a random entry
+        if self.vectors.len() >= self.capacity && !self.vectors.contains_key(&node_id) {
+            // Remove first entry (arbitrary but deterministic)
+            if let Some(&key) = self.vectors.keys().next() {
+                self.vectors.remove(&key);
+                self.stats.evictions += 1;
+            }
+        }
+        self.vectors.insert(node_id, vector);
+    }
+
+    fn stats(&self) -> &CacheStats {
+        &self.stats
+    }
+
+    fn clear(&mut self) {
+        self.vectors.clear();
+    }
+}
+
+/// Simple cache for HNSW nodes
 ///
 /// Uses a simplified approach: just cache nodes without LRU tracking
 /// to avoid lock contention. This is acceptable because:
@@ -75,7 +134,7 @@ struct NodeCache {
     /// Maximum cache size
     capacity: usize,
     /// Cache statistics
-    stats: NodeCacheStats,
+    stats: CacheStats,
     /// Whether cache is preloaded (all nodes loaded at startup)
     preloaded: bool,
 }
@@ -85,7 +144,7 @@ impl NodeCache {
         Self {
             nodes: HashMap::with_capacity(capacity),
             capacity,
-            stats: NodeCacheStats::default(),
+            stats: CacheStats::default(),
             preloaded: false,
         }
     }
@@ -124,7 +183,7 @@ impl NodeCache {
         self.stats.misses += 1;
     }
 
-    fn stats(&self) -> &NodeCacheStats {
+    fn stats(&self) -> &CacheStats {
         &self.stats
     }
 
@@ -179,6 +238,11 @@ pub struct PagedHnswVector<FS: FileSystem> {
 
     /// Node cache for fast access during insertion and search
     node_cache: RwLock<NodeCache>,
+
+    /// Vector-only cache for fast distance calculations during neighbor selection
+    /// This is separate from node_cache to minimize memory overhead and maximize
+    /// cache hit rate for the hot path (distance calculations in RobustPrune)
+    vector_cache: RwLock<VectorCache>,
 }
 
 /// HNSW configuration parameters.
@@ -447,6 +511,10 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         // Write metadata to root page
         Self::write_metadata(&pager, root_page_id, &metadata)?;
 
+        // Calculate vector cache capacity based on config
+        // Vector cache should be larger than node cache since vectors are smaller
+        let vector_cache_capacity = config.cache_capacity.max(20_000);
+        
         Ok(Self {
             table_id,
             name,
@@ -459,6 +527,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             id_to_node: RwLock::new(HashMap::new()),
             rng_state: RwLock::new(12345), // Simple seed
             node_cache: RwLock::new(NodeCache::new(10000)), // Cache up to 10K nodes
+            vector_cache: RwLock::new(VectorCache::new(vector_cache_capacity)),
         })
     }
 
@@ -517,6 +586,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             Some(NodeId(metadata.entry_point))
         };
 
+        // Calculate vector cache capacity
+        let vector_cache_capacity = config.cache_capacity.max(20_000);
+        
         // Load id_to_node mapping from pages
         let temp_self = Self {
             table_id,
@@ -530,6 +602,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             id_to_node: RwLock::new(HashMap::new()),
             rng_state: RwLock::new(12345),
             node_cache: RwLock::new(NodeCache::new(10000)),
+            vector_cache: RwLock::new(VectorCache::new(vector_cache_capacity)),
         };
 
         let id_to_node = temp_self.deserialize_mapping(PageId::from(metadata.mapping_page_id))?;
@@ -546,6 +619,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             id_to_node: RwLock::new(id_to_node),
             rng_state: RwLock::new(12345),
             node_cache: RwLock::new(NodeCache::new(10000)),
+            vector_cache: RwLock::new(VectorCache::new(vector_cache_capacity)),
         };
 
         // Preload all nodes into cache for fast query performance
@@ -804,8 +878,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         let node = Self::deserialize_node(page.data())?;
 
-        // Store in cache
+        // Store in both caches
         self.node_cache.write().unwrap().insert(node_id, node.clone());
+        self.vector_cache.write().unwrap().insert(node_id, node.vector.clone());
 
         Ok(node)
     }
@@ -829,8 +904,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         let node_id = NodeId(page_id.as_u64() as u32);
         
-        // Store in cache
+        // Store in both caches
         self.node_cache.write().unwrap().insert(node_id, node.clone());
+        self.vector_cache.write().unwrap().insert(node_id, node.vector.clone());
 
         Ok(node_id)
     }
@@ -849,8 +925,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             .write_page(&page)
             .map_err(|e| TableError::Other(format!("Failed to update node page: {}", e)))?;
 
-        // Update cache
+        // Update both caches
         self.node_cache.write().unwrap().insert(node_id, node.clone());
+        self.vector_cache.write().unwrap().insert(node_id, node.vector.clone());
 
         Ok(())
     }
@@ -1220,15 +1297,29 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         let pool_size = (m * 3).min(candidates.len());
         let prune_pool: Vec<Candidate> = candidates.into_iter().take(pool_size).collect();
 
-        // Pre-load vectors for the pruning pool to amortize I/O cost
-        // This is critical for performance - loading on-demand during diversity checks
-        // would cause O(pool_size) loads instead of O(pool_size) with caching benefits
+        // Pre-load vectors for the pruning pool using vector cache
+        // First try to get from cache, then load missing ones
         let mut candidate_vectors: std::collections::HashMap<NodeId, Vec<f32>> =
             std::collections::HashMap::with_capacity(pool_size);
         
-        for candidate in &prune_pool {
-            if let Ok(node) = self.load_node(candidate.node_id) {
-                candidate_vectors.insert(candidate.node_id, node.vector);
+        let mut missing_nodes = Vec::new();
+        
+        // Try vector cache first (fast path)
+        {
+            let mut cache = self.vector_cache.write().unwrap();
+            for candidate in &prune_pool {
+                if let Some(vector) = cache.get(candidate.node_id) {
+                    candidate_vectors.insert(candidate.node_id, vector.clone());
+                } else {
+                    missing_nodes.push(candidate.node_id);
+                }
+            }
+        }
+        
+        // Load missing vectors (slow path)
+        for node_id in missing_nodes {
+            if let Ok(node) = self.load_node(node_id) {
+                candidate_vectors.insert(node_id, node.vector);
             }
         }
 
@@ -1307,8 +1398,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
     /// Prune connections if a node has too many neighbors
     ///
-    /// Keeps the M closest neighbors and removes reverse edges from pruned neighbors
-    /// to maintain bidirectional consistency.
+    /// Uses greedy k-NN selection for performance. The diversity heuristic is applied
+    /// during initial neighbor selection in select_neighbors, not during pruning.
+    /// Maintains bidirectional consistency by removing reverse edges from pruned neighbors.
     fn prune_connections(&self, node_id: NodeId, layer: usize) -> TableResult<()> {
         let max_connections = if layer == 0 {
             self.config.read().unwrap().max_connections_layer0
@@ -1321,19 +1413,49 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             let node_vector = node.vector.clone();
             let old_neighbors = node.neighbors[layer].clone();
             
-            // Build candidates from current neighbors
+            // Build candidates from current neighbors with distances
+            // Use vector cache for fast distance calculations
             let mut candidates: Vec<Candidate> = Vec::new();
             
-            for &neighbor_id in &old_neighbors {
-                let neighbor = self.load_node(neighbor_id)?;
-                let dist = self.distance(&node_vector, &neighbor.vector);
-                candidates.push(Candidate {
-                    node_id: neighbor_id,
-                    distance: dist,
-                });
+            let mut missing_nodes = Vec::new();
+            let mut neighbor_vectors: std::collections::HashMap<NodeId, Vec<f32>> =
+                std::collections::HashMap::with_capacity(old_neighbors.len());
+            
+            // Try vector cache first (fast path)
+            {
+                let mut cache = self.vector_cache.write().unwrap();
+                for &neighbor_id in &old_neighbors {
+                    if let Some(vector) = cache.get(neighbor_id) {
+                        neighbor_vectors.insert(neighbor_id, vector.clone());
+                    } else {
+                        missing_nodes.push(neighbor_id);
+                    }
+                }
             }
             
-            // Sort by distance and keep only the closest M neighbors
+            // Load missing vectors (slow path)
+            for neighbor_id in missing_nodes {
+                if let Ok(neighbor) = self.load_node(neighbor_id) {
+                    neighbor_vectors.insert(neighbor_id, neighbor.vector);
+                }
+            }
+            
+            // Build candidate list with distances
+            for &neighbor_id in &old_neighbors {
+                if let Some(neighbor_vector) = neighbor_vectors.get(&neighbor_id) {
+                    let dist = self.distance(&node_vector, neighbor_vector);
+                    candidates.push(Candidate {
+                        node_id: neighbor_id,
+                        distance: dist,
+                    });
+                }
+            }
+            
+            // Sort by distance and keep only the closest M neighbors (greedy selection)
+            // NOTE: We use greedy selection here instead of RobustPrune because:
+            // 1. prune_connections is called frequently during insertion (O(N) times)
+            // 2. RobustPrune's O(M²) complexity makes it too expensive here
+            // 3. The diversity heuristic in select_neighbors (during initial selection) is sufficient
             candidates.sort_by(|a, b| {
                 a.distance
                     .partial_cmp(&b.distance)
@@ -2026,17 +2148,31 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
             }
         }
 
-        // Add cache statistics
-        let (hit_rate, hits, misses, evictions) = {
+        // Add node cache statistics
+        let (node_hit_rate, node_hits, node_misses, node_evictions) = {
             let cache = self.node_cache.read().unwrap();
             let stats = cache.stats();
             (stats.hit_rate() * 100.0, stats.hits, stats.misses, stats.evictions)
         };
         report.warnings.push(crate::table::ConsistencyWarning {
-            location: "hnsw_cache".to_string(),
+            location: "hnsw_node_cache".to_string(),
             description: format!(
                 "Node cache: hit_rate={:.1}%, hits={}, misses={}, evictions={}",
-                hit_rate, hits, misses, evictions
+                node_hit_rate, node_hits, node_misses, node_evictions
+            ),
+        });
+
+        // Add vector cache statistics
+        let (vec_hit_rate, vec_hits, vec_misses, vec_evictions) = {
+            let cache = self.vector_cache.read().unwrap();
+            let stats = cache.stats();
+            (stats.hit_rate() * 100.0, stats.hits, stats.misses, stats.evictions)
+        };
+        report.warnings.push(crate::table::ConsistencyWarning {
+            location: "hnsw_vector_cache".to_string(),
+            description: format!(
+                "Vector cache: hit_rate={:.1}%, hits={}, misses={}, evictions={}",
+                vec_hit_rate, vec_hits, vec_misses, vec_evictions
             ),
         });
 
