@@ -445,6 +445,7 @@ fn test_hnsw_vector_insert_and_search() {
         max_connections_layer0: 32,
         ef_construction: 200,
         ml: 1.0,
+        cache_capacity: 20_000,
     };
     let hnsw = PagedHnswVector::new(
         TableId::from(1),
@@ -997,6 +998,7 @@ fn test_vector_search_dimension_mismatch() {
         max_connections_layer0: 32,
         ef_construction: 200,
         ml: 1.0,
+        cache_capacity: 20_000,
     };
     let hnsw = PagedHnswVector::new(
         TableId::from(1),

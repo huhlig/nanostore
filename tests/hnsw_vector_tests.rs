@@ -42,6 +42,7 @@ fn test_hnsw_creation() {
         max_connections_layer0: 32,
         ef_construction: 200,
         ml: 1.0 / (16.0_f64).ln(),
+        cache_capacity: 20_000,
     };
 
     let hnsw = PagedHnswVector::new(1.into(), "test_hnsw".to_string(), pager, config);
@@ -67,6 +68,7 @@ fn test_hnsw_euclidean_metric() {
         max_connections_layer0: 32,
         ef_construction: 200,
         ml: 1.0 / (16.0_f64).ln(),
+        cache_capacity: 20_000,
     };
 
     let hnsw = PagedHnswVector::new(1.into(), "test_euclidean".to_string(), pager, config).unwrap();
@@ -88,6 +90,7 @@ fn test_hnsw_cosine_metric() {
         max_connections_layer0: 64,
         ef_construction: 400,
         ml: 1.0 / (32.0_f64).ln(),
+        cache_capacity: 20_000,
     };
 
     let hnsw = PagedHnswVector::new(2.into(), "test_cosine".to_string(), pager, config).unwrap();
@@ -109,6 +112,7 @@ fn test_hnsw_manhattan_metric() {
         max_connections_layer0: 32,
         ef_construction: 200,
         ml: 1.0 / (16.0_f64).ln(),
+        cache_capacity: 20_000,
     };
 
     let hnsw = PagedHnswVector::new(3.into(), "test_manhattan".to_string(), pager, config).unwrap();
@@ -131,6 +135,7 @@ fn test_hnsw_configuration_parameters() {
         max_connections_layer0: 96,
         ef_construction: 500,
         ml: 1.0 / (48.0_f64).ln(),
+        cache_capacity: 20_000,
     };
 
     let hnsw = PagedHnswVector::new(4.into(), "test_config".to_string(), pager, config);
@@ -154,6 +159,7 @@ fn test_hnsw_delete_vector_removes_deleted_id_from_search_results() {
         max_connections_layer0: 8,
         ef_construction: 16,
         ml: 10.0,
+        cache_capacity: 20_000,
     };
 
     let hnsw =
@@ -221,6 +227,7 @@ fn test_hnsw_delete_vector_updates_entry_point_and_keeps_graph_searchable() {
         max_connections_layer0: 8,
         ef_construction: 16,
         ml: 10.0,
+        cache_capacity: 20_000,
     };
 
     let hnsw =

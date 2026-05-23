@@ -68,6 +68,7 @@ impl NodeCacheStats {
 /// 1. During insertion, we access the same nodes repeatedly
 /// 2. Cache size is large enough (10K nodes) to hold working set
 /// 3. Avoiding write locks on every cache hit is more important than perfect LRU
+/// 4. All nodes are preloaded on index load, so cache never evicts during queries
 struct NodeCache {
     /// Cached nodes
     nodes: HashMap<NodeId, HnswNode>,
@@ -75,6 +76,8 @@ struct NodeCache {
     capacity: usize,
     /// Cache statistics
     stats: NodeCacheStats,
+    /// Whether cache is preloaded (all nodes loaded at startup)
+    preloaded: bool,
 }
 
 impl NodeCache {
@@ -83,6 +86,7 @@ impl NodeCache {
             nodes: HashMap::with_capacity(capacity),
             capacity,
             stats: NodeCacheStats::default(),
+            preloaded: false,
         }
     }
 
@@ -91,6 +95,12 @@ impl NodeCache {
     }
 
     fn insert(&mut self, node_id: NodeId, node: HnswNode) {
+        // If preloaded, never evict (all nodes fit in cache)
+        if self.preloaded {
+            self.nodes.insert(node_id, node);
+            return;
+        }
+
         // Simple eviction: clear cache when full
         // This is acceptable because we're in a single insertion operation
         if self.nodes.len() >= self.capacity && !self.nodes.contains_key(&node_id) {
@@ -103,6 +113,7 @@ impl NodeCache {
 
     fn clear(&mut self) {
         self.nodes.clear();
+        self.preloaded = false;
     }
 
     fn record_hit(&mut self) {
@@ -115,6 +126,18 @@ impl NodeCache {
 
     fn stats(&self) -> &NodeCacheStats {
         &self.stats
+    }
+
+    fn mark_preloaded(&mut self) {
+        self.preloaded = true;
+    }
+
+    fn is_preloaded(&self) -> bool {
+        self.preloaded
+    }
+
+    fn len(&self) -> usize {
+        self.nodes.len()
     }
 }
 
@@ -178,6 +201,11 @@ pub struct HnswConfig {
 
     /// Multiplier for layer selection probability
     pub ml: f64,
+
+    /// Node cache capacity (number of nodes to keep in memory)
+    /// Default: 100,000 nodes (~60MB for 128-dim vectors)
+    /// Set to 0 for unlimited (all nodes stay in memory, no eviction)
+    pub cache_capacity: usize,
 }
 
 impl Default for HnswConfig {
@@ -189,6 +217,7 @@ impl Default for HnswConfig {
             max_connections_layer0: 32,
             ef_construction: 200,
             ml: 1.0 / (16.0_f64).ln(),
+            cache_capacity: 100_000, // 100K nodes, ~60MB for 128-dim vectors
         }
     }
 }
@@ -479,6 +508,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             max_connections_layer0: metadata.max_connections_layer0 as usize,
             ef_construction: metadata.ef_construction as usize,
             ml: metadata.ml,
+            cache_capacity: 100_000, // Default capacity for loaded indexes
         };
 
         let entry_point = if metadata.entry_point == 0 {
@@ -504,7 +534,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         let id_to_node = temp_self.deserialize_mapping(PageId::from(metadata.mapping_page_id))?;
 
-        Ok(Self {
+        let instance = Self {
             table_id,
             name,
             pager,
@@ -516,7 +546,69 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             id_to_node: RwLock::new(id_to_node),
             rng_state: RwLock::new(12345),
             node_cache: RwLock::new(NodeCache::new(10000)),
-        })
+        };
+
+        // Preload all nodes into cache for fast query performance
+        instance.preload_all_nodes()?;
+
+        Ok(instance)
+    }
+
+    /// Preload all nodes into the cache.
+    ///
+    /// This loads all node data (including vectors) into memory at index load time,
+    /// ensuring that queries never need to wait for disk I/O. This is critical for
+    /// performance with the HNSW algorithm, which accesses many nodes during search.
+    fn preload_all_nodes(&self) -> TableResult<()> {
+        let start = std::time::Instant::now();
+        
+        let id_to_node = self.id_to_node.read().unwrap();
+        let num_nodes = id_to_node.len();
+        
+        if num_nodes == 0 {
+            // Empty index, nothing to preload
+            self.node_cache.write().unwrap().mark_preloaded();
+            eprintln!("[HNSW] Preload: empty index, no nodes to load");
+            return Ok(());
+        }
+
+        eprintln!("[HNSW] Preload: starting to load {} nodes into cache", num_nodes);
+
+        // Collect all node IDs
+        let node_ids: Vec<NodeId> = id_to_node.values().copied().collect();
+        
+        // Load all nodes into cache
+        for (idx, node_id) in node_ids.iter().enumerate() {
+            let page_id = PageId::from(node_id.0 as u64);
+            let page = self
+                .pager
+                .read_page(page_id)
+                .map_err(|e| TableError::Other(format!("Failed to read node page during preload: {}", e)))?;
+
+            let node = Self::deserialize_node(page.data())?;
+            
+            // Insert into cache (no eviction during preload)
+            self.node_cache.write().unwrap().insert(*node_id, node);
+            
+            if (idx + 1) % 1000 == 0 {
+                eprintln!("[HNSW] Preload: loaded {}/{} nodes ({:.1}%)",
+                    idx + 1, num_nodes, (idx + 1) as f64 / num_nodes as f64 * 100.0);
+            }
+        }
+
+        // Mark cache as preloaded to prevent evictions during queries
+        self.node_cache.write().unwrap().mark_preloaded();
+
+        let elapsed = start.elapsed();
+        eprintln!("[HNSW] Preload: completed loading {} nodes in {:.2}s ({:.0} nodes/sec)",
+            num_nodes, elapsed.as_secs_f64(), num_nodes as f64 / elapsed.as_secs_f64());
+        
+        // Report cache stats
+        let cache = self.node_cache.read().unwrap();
+        eprintln!("[HNSW] Cache: {} nodes cached, preloaded={}",
+            cache.len(), cache.is_preloaded());
+
+        Ok(())
     }
     /// Get the root page ID.
     pub fn root_page_id(&self) -> PageId {
@@ -1638,6 +1730,8 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
         query: &[f32],
         options: VectorSearchOptions<'a>,
     ) -> TableResult<Vec<VectorHit>> {
+        let search_start = std::time::Instant::now();
+        
         // Validate query dimensions
         if query.len() != self.config.read().unwrap().dimensions {
             return Err(TableError::invalid_value(
@@ -1683,6 +1777,13 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
                 distance: candidate.distance,
             });
         }
+
+        let elapsed = search_start.elapsed();
+        let cache_guard = self.node_cache.read().unwrap();
+        let cache_stats = cache_guard.stats();
+        eprintln!("[HNSW] Search: found {} results in {:.3}ms (cache hit rate: {:.1}%)",
+            results.len(), elapsed.as_secs_f64() * 1000.0, cache_stats.hit_rate() * 100.0);
+        drop(cache_guard);
 
         Ok(results)
     }

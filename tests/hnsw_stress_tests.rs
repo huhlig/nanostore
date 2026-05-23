@@ -46,6 +46,7 @@ fn create_test_hnsw(dimensions: usize, metric: VectorMetric) -> PagedHnswVector<
         max_connections_layer0: 32,
         ef_construction: 200,
         ml: 1.0 / (16.0_f64).ln(),
+        cache_capacity: 20_000,
     };
 
     PagedHnswVector::new(TableId::from(1), "stress_hnsw".to_string(), pager, config).unwrap()
@@ -426,6 +427,7 @@ fn test_varying_ef_construction_5k_vectors() {
             max_connections_layer0: 32,
             ef_construction: ef,
             ml: 1.0 / (16.0_f64).ln(),
+            cache_capacity: 20_000,
         };
 
         let hnsw =
