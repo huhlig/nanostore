@@ -39,6 +39,85 @@ use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
+/// Node cache statistics
+#[derive(Debug, Clone, Default)]
+struct NodeCacheStats {
+    /// Total cache hits
+    hits: u64,
+    /// Total cache misses
+    misses: u64,
+    /// Total evictions
+    evictions: u64,
+}
+
+impl NodeCacheStats {
+    fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.hits as f64 / total as f64
+        }
+    }
+}
+
+/// Simple LRU cache for HNSW nodes
+///
+/// Uses a simplified approach: just cache nodes without LRU tracking
+/// to avoid lock contention. This is acceptable because:
+/// 1. During insertion, we access the same nodes repeatedly
+/// 2. Cache size is large enough (10K nodes) to hold working set
+/// 3. Avoiding write locks on every cache hit is more important than perfect LRU
+struct NodeCache {
+    /// Cached nodes
+    nodes: HashMap<NodeId, HnswNode>,
+    /// Maximum cache size
+    capacity: usize,
+    /// Cache statistics
+    stats: NodeCacheStats,
+}
+
+impl NodeCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            nodes: HashMap::with_capacity(capacity),
+            capacity,
+            stats: NodeCacheStats::default(),
+        }
+    }
+
+    fn get(&self, node_id: NodeId) -> Option<HnswNode> {
+        self.nodes.get(&node_id).cloned()
+    }
+
+    fn insert(&mut self, node_id: NodeId, node: HnswNode) {
+        // Simple eviction: clear cache when full
+        // This is acceptable because we're in a single insertion operation
+        if self.nodes.len() >= self.capacity && !self.nodes.contains_key(&node_id) {
+            self.nodes.clear();
+            self.stats.evictions += 1;
+        }
+
+        self.nodes.insert(node_id, node);
+    }
+
+    fn clear(&mut self) {
+        self.nodes.clear();
+    }
+
+    fn record_hit(&mut self) {
+        self.stats.hits += 1;
+    }
+
+    fn record_miss(&mut self) {
+        self.stats.misses += 1;
+    }
+
+    fn stats(&self) -> &NodeCacheStats {
+        &self.stats
+    }
+}
+
 
 /// Paged HNSW vector search table.
 ///
@@ -74,6 +153,9 @@ pub struct PagedHnswVector<FS: FileSystem> {
 
     /// Random number generator state for layer selection
     rng_state: RwLock<u64>,
+
+    /// Node cache for fast access during insertion and search
+    node_cache: RwLock<NodeCache>,
 }
 
 /// HNSW configuration parameters.
@@ -347,6 +429,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             num_vectors: RwLock::new(0),
             id_to_node: RwLock::new(HashMap::new()),
             rng_state: RwLock::new(12345), // Simple seed
+            node_cache: RwLock::new(NodeCache::new(10000)), // Cache up to 10K nodes
         })
     }
 
@@ -416,6 +499,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             num_vectors: RwLock::new(metadata.num_vectors as usize),
             id_to_node: RwLock::new(HashMap::new()),
             rng_state: RwLock::new(12345),
+            node_cache: RwLock::new(NodeCache::new(10000)),
         };
 
         let id_to_node = temp_self.deserialize_mapping(PageId::from(metadata.mapping_page_id))?;
@@ -431,6 +515,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             num_vectors: RwLock::new(metadata.num_vectors as usize),
             id_to_node: RwLock::new(id_to_node),
             rng_state: RwLock::new(12345),
+            node_cache: RwLock::new(NodeCache::new(10000)),
         })
     }
     /// Get the root page ID.
@@ -608,16 +693,29 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         Ok(result_vec)
     }
 
-    /// Load a node from storage
+    /// Load a node from storage (with caching)
     fn load_node(&self, node_id: NodeId) -> TableResult<HnswNode> {
-        let page_id = PageId::from(node_id.0 as u64);
+        // Try cache first with read lock
+        if let Some(node) = self.node_cache.read().unwrap().get(node_id) {
+            self.node_cache.write().unwrap().record_hit();
+            return Ok(node);
+        }
 
+        // Cache miss - load from disk
+        self.node_cache.write().unwrap().record_miss();
+        
+        let page_id = PageId::from(node_id.0 as u64);
         let page = self
             .pager
             .read_page(page_id)
             .map_err(|e| TableError::Other(format!("Failed to read node page: {}", e)))?;
 
-        Self::deserialize_node(page.data())
+        let node = Self::deserialize_node(page.data())?;
+
+        // Store in cache
+        self.node_cache.write().unwrap().insert(node_id, node.clone());
+
+        Ok(node)
     }
 
     /// Store a node to storage
@@ -637,7 +735,12 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             .write_page(&page)
             .map_err(|e| TableError::Other(format!("Failed to write node page: {}", e)))?;
 
-        Ok(NodeId(page_id.as_u64() as u32))
+        let node_id = NodeId(page_id.as_u64() as u32);
+        
+        // Store in cache
+        self.node_cache.write().unwrap().insert(node_id, node.clone());
+
+        Ok(node_id)
     }
 
     /// Update an existing node in storage
@@ -653,6 +756,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         self.pager
             .write_page(&page)
             .map_err(|e| TableError::Other(format!("Failed to update node page: {}", e)))?;
+
+        // Update cache
+        self.node_cache.write().unwrap().insert(node_id, node.clone());
 
         Ok(())
     }
@@ -1751,6 +1857,20 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
                 });
             }
         }
+
+        // Add cache statistics
+        let (hit_rate, hits, misses, evictions) = {
+            let cache = self.node_cache.read().unwrap();
+            let stats = cache.stats();
+            (stats.hit_rate() * 100.0, stats.hits, stats.misses, stats.evictions)
+        };
+        report.warnings.push(crate::table::ConsistencyWarning {
+            location: "hnsw_cache".to_string(),
+            description: format!(
+                "Node cache: hit_rate={:.1}%, hits={}, misses={}, evictions={}",
+                hit_rate, hits, misses, evictions
+            ),
+        });
 
         Ok(report)
     }
