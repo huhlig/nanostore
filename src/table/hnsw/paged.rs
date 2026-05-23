@@ -1086,16 +1086,19 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         Ok(())
     }
 
-    /// Select M neighbors from candidates using bounded diversity pruning
+    /// Select M neighbors from candidates using the HNSW paper's SELECT-NEIGHBORS-HEURISTIC
     ///
-    /// This implements a practical middle-ground between greedy k-NN and full RobustPrune:
+    /// This implements Algorithm 4 from the HNSW paper with bounded candidate pool:
     /// 1. Sort candidates by distance to query
-    /// 2. Keep top K candidates (K = M * 3) as pruning pool
-    /// 3. Apply diversity heuristic within this bounded pool
-    /// 4. This gives O((3M)²) instead of O(candidates²) complexity
+    /// 2. Limit pool to top 3*M candidates (bounded diversity pruning)
+    /// 3. For each candidate in order, check if it's closer to query than to any selected neighbor
+    /// 4. If yes (diverse), add to result; if no (redundant), skip
     ///
-    /// The diversity check prevents redundant edges: if a candidate is closer to an
-    /// already-selected neighbor than to the query, it's redundant and skipped.
+    /// The diversity check prevents redundant edges by ensuring each selected neighbor
+    /// provides a unique direction from the query point. This preserves bridge edges
+    /// between clusters while limiting complexity to O((3M)²) instead of O(candidates²).
+    ///
+    /// Vectors are loaded on-demand during diversity checks, not pre-loaded.
     fn select_neighbors(
         &self,
         mut candidates: Vec<Candidate>,
@@ -1120,20 +1123,11 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         }
 
         // Bounded diversity pruning: limit pool size to 3*M
+        // This is the key optimization - we only apply the heuristic to the closest 3*M candidates
         let pool_size = (m * 3).min(candidates.len());
         let prune_pool: Vec<Candidate> = candidates.into_iter().take(pool_size).collect();
 
-        // Pre-load vectors for the pruning pool only
-        let mut candidate_vectors: std::collections::HashMap<NodeId, Vec<f32>> =
-            std::collections::HashMap::with_capacity(pool_size);
-        
-        for candidate in &prune_pool {
-            if let Ok(node) = self.load_node(candidate.node_id) {
-                candidate_vectors.insert(candidate.node_id, node.vector);
-            }
-        }
-
-        // Select diverse neighbors from the pool
+        // Select diverse neighbors using the paper's heuristic (Algorithm 4, lines 9-14)
         let mut result = Vec::with_capacity(m);
         let mut selected_vectors: Vec<Vec<f32>> = Vec::with_capacity(m);
 
@@ -1142,22 +1136,21 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                 break;
             }
             
-            // Get candidate vector (already loaded)
-            let candidate_vector = match candidate_vectors.get(&candidate.node_id) {
-                Some(v) => v,
-                None => continue, // Skip if we couldn't load it
+            // Load candidate vector on-demand (only when checking this candidate)
+            let candidate_vector = match self.load_node(candidate.node_id) {
+                Ok(node) => node.vector,
+                Err(_) => continue, // Skip if we can't load it
             };
             
-            // Check if this candidate is diverse enough
+            // Check if this candidate is closer to query than to any already-selected neighbor
+            // This is the core of the diversity heuristic from Algorithm 4
             let mut is_diverse = true;
             
-            // Check distance to already-selected neighbors
             for selected_vector in &selected_vectors {
-                // Calculate distance between candidate and selected neighbor
-                let dist_to_selected = self.distance(candidate_vector, selected_vector);
+                let dist_to_selected = self.distance(&candidate_vector, selected_vector);
                 
-                // If candidate is closer to an already-selected neighbor than to the query,
-                // it's redundant (not diverse enough)
+                // If candidate is closer to a selected neighbor than to query, it's redundant
+                // (the selected neighbor already "covers" this direction from the query)
                 if dist_to_selected < candidate.distance {
                     is_diverse = false;
                     break;
@@ -1166,7 +1159,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             
             if is_diverse {
                 result.push(candidate.node_id);
-                selected_vectors.push(candidate_vector.to_vec());
+                selected_vectors.push(candidate_vector);
             }
         }
 

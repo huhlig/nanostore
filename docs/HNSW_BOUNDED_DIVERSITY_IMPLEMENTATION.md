@@ -6,32 +6,40 @@
 
 ## Summary
 
-Implemented a practical bounded diversity pruning heuristic as a middle-ground between greedy k-NN selection and full RobustPrune. This approach provides diversity benefits while maintaining reasonable performance.
+Implemented Algorithm 4 (SELECT-NEIGHBORS-HEURISTIC) from the HNSW paper with a bounded candidate pool optimization. This provides a faithful implementation of the paper's diversity heuristic while limiting complexity through a bounded pruning pool.
 
 ## Approach
 
-### Bounded Diversity Pruning
+### Paper's Algorithm 4: SELECT-NEIGHBORS-HEURISTIC
 
-Instead of applying diversity checks to all candidates (O(candidates²)) or just using greedy selection (O(candidates log candidates)), we:
+The HNSW paper describes a diversity heuristic that:
+1. Examines candidates in distance order (closest first)
+2. For each candidate, checks if it's closer to the query than to any already-selected neighbor
+3. If yes (diverse), adds it to result; if no (redundant), skips it
+
+**Key Insight**: This preserves "bridge edges" between clusters. A candidate that's closer to an already-selected neighbor than to the query is redundant - the selected neighbor already "covers" that direction from the query.
+
+### Our Optimization: Bounded Pool
+
+Instead of applying the heuristic to all candidates (O(candidates²)), we:
 
 1. **Sort candidates by distance** to query (O(candidates log candidates))
 2. **Limit pruning pool** to top K candidates where K = M × 3
-3. **Apply diversity heuristic** within this bounded pool (O((3M)²))
-4. **Pre-load vectors** for the pruning pool only
+3. **Apply paper's heuristic** within this bounded pool (O((3M)²))
+4. **Load vectors on-demand** during diversity checks (not pre-loaded)
 
 This gives us:
 - **Complexity**: O(candidates log candidates + 9M²) instead of O(candidates²)
 - **For 15K insertions with M=16**: ~3.5K distance calculations instead of ~3.8M
-- **Expected speedup**: 1000x reduction in distance calculations
+- **Expected speedup**: 1000x reduction in distance calculations vs full RobustPrune
 
-### Diversity Heuristic
+### Why On-Demand Loading?
 
-For each candidate in the pruning pool:
-- Check distance to already-selected neighbors
-- If candidate is closer to a selected neighbor than to the query, skip it (redundant)
-- Otherwise, add it to the result set
+The paper's algorithm processes candidates sequentially and only needs:
+- Current candidate's vector (when checking it)
+- Already-selected neighbors' vectors (accumulated as we go)
 
-This preserves "bridge edges" between clusters while avoiding redundant intra-cluster edges.
+This means we load at most M vectors (the selected neighbors) plus 1 (current candidate), not the entire pool. This is more memory-efficient and cache-friendly than pre-loading all 3M vectors.
 
 ## Implementation Details
 
@@ -46,23 +54,29 @@ Method: `select_neighbors()`
 let pool_size = (m * 3).min(candidates.len());
 let prune_pool: Vec<Candidate> = candidates.into_iter().take(pool_size).collect();
 
-// Pre-load vectors for the pruning pool only
-let mut candidate_vectors: HashMap<NodeId, Vec<f32>> = 
-    HashMap::with_capacity(pool_size);
+// Apply paper's Algorithm 4 heuristic within bounded pool
+let mut result = Vec::with_capacity(m);
+let mut selected_vectors: Vec<Vec<f32>> = Vec::with_capacity(m);
 
-for candidate in &prune_pool {
-    if let Ok(node) = self.load_node(candidate.node_id) {
-        candidate_vectors.insert(candidate.node_id, node.vector);
-    }
-}
-
-// Apply diversity check within bounded pool
 for candidate in prune_pool {
-    let candidate_vector = candidate_vectors.get(&candidate.node_id)?;
+    if result.len() >= m {
+        break;
+    }
     
+    // Load candidate vector on-demand (only when checking this candidate)
+    let candidate_vector = match self.load_node(candidate.node_id) {
+        Ok(node) => node.vector,
+        Err(_) => continue,
+    };
+    
+    // Check if candidate is closer to query than to any already-selected neighbor
+    // This is Algorithm 4, line 11: "if e is closer to q compared to any element from R"
     let mut is_diverse = true;
+    
     for selected_vector in &selected_vectors {
-        let dist_to_selected = self.distance(candidate_vector, selected_vector);
+        let dist_to_selected = self.distance(&candidate_vector, selected_vector);
+        
+        // If candidate is closer to a selected neighbor than to query, it's redundant
         if dist_to_selected < candidate.distance {
             is_diverse = false;
             break;
@@ -71,7 +85,7 @@ for candidate in prune_pool {
     
     if is_diverse {
         result.push(candidate.node_id);
-        selected_vectors.push(candidate_vector.to_vec());
+        selected_vectors.push(candidate_vector);
     }
 }
 ```
@@ -176,10 +190,11 @@ Use AVX2/AVX-512 for vectorized distance computations:
 
 ## Lessons Learned
 
-1. **Start Simple**: Bounded approach is more practical than jumping to full RobustPrune
-2. **Measure First**: Need actual performance data before further optimization
-3. **Incremental Improvement**: Better to ship working code than perfect code that's too slow
-4. **Cache Wisely**: Pre-loading bounded pool is key to performance
+1. **Read the Paper Carefully**: The paper's Algorithm 4 is simpler and more efficient than initially implemented
+2. **On-Demand Loading**: Loading vectors as needed is more memory-efficient than pre-loading entire pools
+3. **Bounded Pool Optimization**: Limiting to 3×M candidates preserves algorithm semantics while reducing complexity
+4. **Start Simple**: Bounded approach is more practical than jumping to full RobustPrune
+5. **Measure First**: Need actual performance data before further optimization
 
 ## References
 
