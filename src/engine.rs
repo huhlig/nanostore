@@ -49,23 +49,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-/// Configuration for automatic vacuum operations.
-#[derive(Debug, Clone)]
-pub struct VacuumConfig {
-    /// Enable automatic background vacuum
-    pub enabled: bool,
-    /// Interval between vacuum runs (default: 5 minutes)
-    pub interval: Duration,
-}
-
-impl Default for VacuumConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            interval: Duration::from_secs(300), // 5 minutes
-        }
-    }
-}
 
 /// Metrics for a single vacuum operation.
 #[derive(Debug, Clone, Default)]
@@ -271,17 +254,8 @@ pub struct StorageEngine<FS: FileSystem> {
     engine_registry: Arc<TableEngineRegistry<FS>>,
 
     // Vacuum management
-    /// Configuration for automatic vacuum
-    vacuum_config: Arc<RwLock<VacuumConfig>>,
-
     /// Aggregated vacuum statistics
     vacuum_stats: Arc<RwLock<VacuumStats>>,
-
-    /// Flag to signal vacuum thread shutdown
-    vacuum_shutdown: Arc<AtomicBool>,
-
-    /// Handle to the background vacuum thread
-    vacuum_thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
 }
 
 impl<FS: FileSystem> StorageEngine<FS> {
@@ -299,10 +273,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
-
-        let vacuum_config = Arc::new(RwLock::new(VacuumConfig::default()));
         let vacuum_stats = Arc::new(RwLock::new(VacuumStats::default()));
-        let vacuum_shutdown = Arc::new(AtomicBool::new(false));
 
         let db = Self {
             conflict_detector: Arc::new(Mutex::new(ConflictDetector::new())),
@@ -314,17 +285,11 @@ impl<FS: FileSystem> StorageEngine<FS> {
             wal: Arc::new(wal),
             pager,
             engine_registry: engine_registry.clone(),
-            vacuum_config: vacuum_config.clone(),
             vacuum_stats: vacuum_stats.clone(),
-            vacuum_shutdown: vacuum_shutdown.clone(),
-            vacuum_thread: Arc::new(Mutex::new(None)),
         };
 
         // Initialize empty catalog page
         db.persist_catalog()?;
-
-        // Start background vacuum thread
-        db.start_vacuum_thread();
 
         Ok(db)
     }
@@ -345,10 +310,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
-
-        let vacuum_config = Arc::new(RwLock::new(VacuumConfig::default()));
         let vacuum_stats = Arc::new(RwLock::new(VacuumStats::default()));
-        let vacuum_shutdown = Arc::new(AtomicBool::new(false));
 
         let db = Self {
             conflict_detector: Arc::new(Mutex::new(ConflictDetector::new())),
@@ -360,17 +322,11 @@ impl<FS: FileSystem> StorageEngine<FS> {
             wal: Arc::new(wal),
             pager,
             engine_registry: engine_registry.clone(),
-            vacuum_config: vacuum_config.clone(),
             vacuum_stats: vacuum_stats.clone(),
-            vacuum_shutdown: vacuum_shutdown.clone(),
-            vacuum_thread: Arc::new(Mutex::new(None)),
         };
 
         // Recover catalog from disk
         db.recover_catalog()?;
-
-        // Start background vacuum thread
-        db.start_vacuum_thread();
 
         Ok(db)
     }
@@ -1027,18 +983,6 @@ impl<FS: FileSystem> StorageEngine<FS> {
         self.vacuum_stats.read().unwrap().clone()
     }
 
-    /// Get current vacuum configuration.
-    pub fn vacuum_config(&self) -> VacuumConfig {
-        self.vacuum_config.read().unwrap().clone()
-    }
-
-    /// Update vacuum configuration.
-    ///
-    /// Changes take effect on the next vacuum cycle. If vacuum is disabled,
-    /// the background thread will stop after the current cycle completes.
-    pub fn set_vacuum_config(&self, config: VacuumConfig) {
-        *self.vacuum_config.write().unwrap() = config;
-    }
 
     /// Perform VACUUM PAGER to compact the page file.
     ///
@@ -1078,98 +1022,6 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(full_stats)
     }
 
-    /// Start the background vacuum thread.
-    ///
-    /// This is called automatically by `new()` and `open()`.
-    fn start_vacuum_thread(&self) {
-        let config = self.vacuum_config.clone();
-        let stats = self.vacuum_stats.clone();
-        let shutdown = self.vacuum_shutdown.clone();
-        let engine_registry = self.engine_registry.clone();
-        let snapshots = self.snapshots.clone();
-        let current_lsn = self.current_lsn.clone();
-        let table_catalog = self.table_catalog.clone();
-
-        let handle = std::thread::spawn(move || {
-            loop {
-                // Check if we should shutdown
-                if shutdown.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                // Get current config
-                let cfg = config.read().unwrap().clone();
-
-                // Sleep for the configured interval
-                std::thread::sleep(cfg.interval);
-
-                // Check again after sleep
-                if shutdown.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                // Skip if vacuum is disabled
-                if !cfg.enabled {
-                    continue;
-                }
-
-                // Perform vacuum with metrics
-                let mut metrics = VacuumMetrics::new();
-
-                // Get minimum visible LSN
-                let min_visible_lsn = {
-                    let snapshots_guard = snapshots.read().unwrap();
-                    snapshots_guard
-                        .values()
-                        .map(|snapshot| snapshot.lsn)
-                        .min()
-                        .unwrap_or_else(|| *current_lsn.read().unwrap())
-                };
-
-                // Get all tables
-                let tables: Vec<TableInfo> = {
-                    let catalog = table_catalog.read().unwrap();
-                    catalog.values().cloned().collect()
-                };
-
-                // Vacuum each table
-                for table_info in tables {
-                    match engine_registry.vacuum_table(table_info.id, min_visible_lsn) {
-                        Ok(removed) => {
-                            if removed > 0 {
-                                metrics.add_table_result(table_info.id, removed);
-                            }
-                        }
-                        Err(_) => {
-                            // Skip tables that don't support vacuuming
-                            continue;
-                        }
-                    }
-                }
-
-                metrics.complete();
-
-                // Update stats
-                let mut stats_guard = stats.write().unwrap();
-                stats_guard.record_vacuum(metrics);
-            }
-        });
-
-        *self.vacuum_thread.lock().unwrap() = Some(handle);
-    }
-
-    /// Stop the background vacuum thread.
-    ///
-    /// This is called automatically by `close()` and `Drop`.
-    fn stop_vacuum_thread(&self) {
-        // Signal shutdown
-        self.vacuum_shutdown.store(true, Ordering::Relaxed);
-
-        // Wait for thread to finish
-        if let Some(handle) = self.vacuum_thread.lock().unwrap().take() {
-            let _ = handle.join();
-        }
-    }
 
     /// Get the consistency guarantees provided by this storage engine.
     ///
@@ -1232,9 +1084,6 @@ impl<FS: FileSystem> StorageEngine<FS> {
         // flush memtables when the engine registry is dropped.
         // We just need to ensure WAL and pager are flushed.
 
-        // Step 0: Stop vacuum thread
-        self.stop_vacuum_thread();
-
         // Step 1: Flush WAL buffer
         self.wal.flush().map_err(|e| {
             StorageEngineError::wal_failed(format!("Failed to flush WAL during close: {}", e))
@@ -1264,9 +1113,6 @@ impl<FS: FileSystem> Drop for StorageEngine<FS> {
     ///
     /// Note: Errors during drop are logged but not propagated since Drop cannot return errors.
     fn drop(&mut self) {
-        // Step 0: Stop vacuum thread
-        self.stop_vacuum_thread();
-
         // Step 1: Flush WAL buffer
         if let Err(e) = self.wal.flush() {
             eprintln!(
