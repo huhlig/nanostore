@@ -186,22 +186,39 @@ impl<FS: FileSystem> PagedRTree<FS> {
 
     /// Write a node to a page.
     fn write_node(pager: &Pager<FS>, page_id: PageId, node: &RTreeNode) -> TableResult<()> {
-        let mut page =
-            crate::pager::Page::new(page_id, PageType::RTreeNode, pager.page_size().data_size());
-        page.data_mut().extend_from_slice(&node.to_bytes());
-        let page_len = page.data().len();
+        let node_bytes = node.to_bytes();
+        let page_len = node_bytes.len();
         let header_len = crate::pager::PageHeader::SIZE;
         let checksum_len = crate::pager::Page::CHECKSUM_SIZE;
         let total_page_size = pager.page_size().to_u32() as usize;
-        if header_len + page_len + checksum_len > total_page_size {
+        let available_space = total_page_size - header_len - checksum_len;
+        
+        if page_len > available_space {
             return Err(TableError::Other(format!(
-                "R-Tree node too large for page {page_id}: payload={} total_limit={}",
+                "R-Tree node too large for page {page_id}: payload={} available={} (entries={})",
                 page_len,
-                total_page_size - header_len - checksum_len
+                available_space,
+                node.entry_count()
             )));
         }
+        
+        let mut page =
+            crate::pager::Page::new(page_id, PageType::RTreeNode, pager.page_size().data_size());
+        page.data_mut().extend_from_slice(&node_bytes);
         pager.write_page(&page)?;
         Ok(())
+    }
+    
+    /// Check if a node would fit in a page after adding an entry.
+    fn would_fit_in_page(pager: &Pager<FS>, node: &RTreeNode) -> bool {
+        let node_bytes = node.to_bytes();
+        let page_len = node_bytes.len();
+        let header_len = crate::pager::PageHeader::SIZE;
+        let checksum_len = crate::pager::Page::CHECKSUM_SIZE;
+        let total_page_size = pager.page_size().to_u32() as usize;
+        let available_space = total_page_size - header_len - checksum_len;
+        
+        page_len <= available_space
     }
 
     /// Calculate the height of the tree.
@@ -222,10 +239,26 @@ impl<FS: FileSystem> PagedRTree<FS> {
         }
     }
 
-    /// Count the total number of objects in the tree.
+    /// Count the total number of visible (non-tombstoned) objects in the tree.
     fn count_objects(pager: &Pager<FS>, _page_id: PageId, node: &RTreeNode) -> TableResult<usize> {
         match node {
-            RTreeNode::Leaf { entries, .. } => Ok(entries.len()),
+            RTreeNode::Leaf { entries, .. } => {
+                // Count only entries where the latest version is not a tombstone
+                let count = entries.iter().filter(|entry| {
+                    // Check the latest version's value directly
+                    match &entry.version_chain.value {
+                        crate::txn::VersionValue::Inline(data) => {
+                            // Check if it's not a tombstone (tombstone is [0xFF])
+                            data.as_slice() != &[0xFF]
+                        }
+                        crate::txn::VersionValue::External(_) => {
+                            // External values are never tombstones
+                            true
+                        }
+                    }
+                }).count();
+                Ok(count)
+            },
             RTreeNode::Internal { entries, .. } => {
                 let mut count = 0;
                 for entry in entries {
@@ -295,8 +328,11 @@ impl<FS: FileSystem> PagedRTree<FS> {
         // Add entry to leaf
         leaf_node.add_leaf_entry(entry).map_err(TableError::Other)?;
 
-        // Check if split is needed
-        if leaf_node.entry_count() > self.config.max_entries_per_node {
+        // Check if split is needed - either by entry count or by page size
+        let needs_split = leaf_node.entry_count() > self.config.max_entries_per_node
+            || !Self::would_fit_in_page(&self.pager, &leaf_node);
+            
+        if needs_split {
             self.split_node(leaf_page_id, leaf_node)?;
         } else {
             Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
@@ -706,7 +742,11 @@ impl<FS: FileSystem> PagedRTree<FS> {
 
             leaf_node.add_leaf_entry(entry).map_err(TableError::Other)?;
 
-            if leaf_node.entry_count() > self.config.max_entries_per_node {
+            // Check if split is needed - either by entry count or by page size
+            let needs_split = leaf_node.entry_count() > self.config.max_entries_per_node
+                || !Self::would_fit_in_page(&self.pager, &leaf_node);
+                
+            if needs_split {
                 self.split_node(leaf_page_id, leaf_node)?;
             } else {
                 Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
@@ -1104,6 +1144,14 @@ impl<FS: FileSystem> PagedRTree<FS> {
                             if !entry.is_visible(snap) {
                                 continue;
                             }
+                        } else {
+                            // No snapshot: check if latest version is not a tombstone
+                            match &entry.version_chain.value {
+                                crate::txn::VersionValue::Inline(data) if data.as_slice() == &[0xFF] => {
+                                    continue; // Skip tombstoned entries
+                                }
+                                _ => {} // Not a tombstone, continue processing
+                            }
                         }
                         results.push(GeoHit {
                             id: entry.object_id.clone(),
@@ -1142,23 +1190,30 @@ impl<FS: FileSystem> PagedRTree<FS> {
     #[instrument(skip(self))]
     fn search_nearest(&self, point: GeoPoint, limit: usize) -> TableResult<Vec<GeoHit>> {
         let mut heap = BinaryHeap::new();
-        let mut results = Vec::new();
+        let mut results: Vec<(f64, KeyBuf)> = Vec::new();
 
         let root_page_id = self.root_page_id();
         let root_node = Self::read_node(&self.pager, root_page_id)?;
 
-        // Priority queue entry: (negative distance, page_id, is_leaf)
+        // Priority queue entry: (negative distance in microns, page_id, is_leaf)
+        // Use microns (distance * 1_000_000) to avoid floating point comparison issues
+        let root_dist = (root_node
+            .calculate_mbr(self.config.dimensions)
+            .min_distance(point) * 1_000_000.0) as i64;
         heap.push(std::cmp::Reverse((
-            -root_node
-                .calculate_mbr(self.config.dimensions)
-                .min_distance(point) as i64,
+            -root_dist,
             root_page_id,
             matches!(root_node, RTreeNode::Leaf { .. }),
         )));
 
-        while let Some(std::cmp::Reverse((_neg_dist, page_id, _is_leaf))) = heap.pop() {
+        while let Some(std::cmp::Reverse((neg_dist, page_id, _is_leaf))) = heap.pop() {
+            // Early termination: if we have enough results and the next node is farther
+            // than our worst result, we can stop
             if results.len() >= limit {
-                break;
+                let worst_result_dist = (results.last().unwrap().0 * 1_000_000.0) as i64;
+                if -neg_dist > worst_result_dist {
+                    break;
+                }
             }
 
             let node = Self::read_node(&self.pager, page_id)?;
@@ -1166,15 +1221,27 @@ impl<FS: FileSystem> PagedRTree<FS> {
             match node {
                 RTreeNode::Leaf { entries, .. } => {
                     for entry in entries {
+                        // Skip tombstoned entries
+                        match &entry.version_chain.value {
+                            crate::txn::VersionValue::Inline(data) if data.as_slice() == &[0xFF] => {
+                                continue; // Skip tombstoned entries
+                            }
+                            _ => {} // Not a tombstone, continue processing
+                        }
+                        
                         let distance = entry.mbr.min_distance(point);
                         results.push((distance, entry.object_id.clone()));
                     }
+                    // Sort and keep only top limit after processing each leaf
+                    results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                    results.truncate(limit);
                 }
                 RTreeNode::Internal { entries, .. } => {
                     for entry in entries {
                         let distance = entry.mbr.min_distance(point);
+                        let dist_microns = (distance * 1_000_000.0) as i64;
                         heap.push(std::cmp::Reverse((
-                            -(distance as i64),
+                            -dist_microns,
                             entry.child_page_id,
                             false,
                         )));
@@ -1183,8 +1250,8 @@ impl<FS: FileSystem> PagedRTree<FS> {
             }
         }
 
-        // Sort by distance and take top limit
-        results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        // Final sort by distance
+        results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(limit);
 
         Ok(results
@@ -1728,10 +1795,11 @@ impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
     fn delete_geometry(
         &self,
         id: &[u8],
-        _tx_id: TransactionId,
+        tx_id: TransactionId,
         _commit_lsn: crate::wal::LogSequenceNumber,
     ) -> TableResult<()> {
-        self.delete_internal(id)
+        // Use MVCC tombstone deletion instead of physical removal
+        self.delete_geometry_tx(id, tx_id)
     }
 
     fn intersects(&self, query: GeometryRef<'_>, limit: usize) -> TableResult<Vec<GeoHit>> {
@@ -1743,7 +1811,10 @@ impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
     }
 
     fn stats(&self) -> TableResult<SpecialtyTableStats> {
-        let count = *self.object_count.read().unwrap() as u64;
+        // Count actual visible entries by traversing the tree
+        let root_page_id = self.root_page_id();
+        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let count = Self::count_objects(&self.pager, root_page_id, &root_node)? as u64;
         let height = *self.height.read().unwrap() as u64;
 
         // Estimate size based on tree structure
