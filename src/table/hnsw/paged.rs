@@ -980,15 +980,29 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         Ok(())
     }
 
-    /// Select M neighbors from candidates using heuristic
+    /// Select M neighbors from candidates using simple greedy selection
+    ///
+    /// For now, we use greedy k-NN selection for performance.
+    /// TODO: Implement RobustPrune diversity heuristic with proper caching
     fn select_neighbors(
         &self,
-        candidates: Vec<Candidate>,
+        mut candidates: Vec<Candidate>,
         m: usize,
         _layer: usize,
         _extend_candidates: bool,
     ) -> Vec<NodeId> {
-        // Simple heuristic: select M closest neighbors
+        if candidates.is_empty() {
+            return Vec::new();
+        }
+
+        // Sort candidates by distance (closest first)
+        candidates.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Return M closest neighbors
         candidates.into_iter().take(m).map(|c| c.node_id).collect()
     }
 
@@ -1027,6 +1041,9 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     }
 
     /// Prune connections if a node has too many neighbors
+    ///
+    /// Keeps the M closest neighbors and removes reverse edges from pruned neighbors
+    /// to maintain bidirectional consistency.
     fn prune_connections(&self, node_id: NodeId, layer: usize) -> TableResult<()> {
         let max_connections = if layer == 0 {
             self.config.read().unwrap().max_connections_layer0
@@ -1036,12 +1053,13 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         let mut node = self.load_node(node_id)?;
         if layer < node.neighbors.len() && node.neighbors[layer].len() > max_connections {
-            // CRITICAL FIX: Select the M closest neighbors, not just the first M
-            // This maintains graph connectivity by keeping the best connections
             let node_vector = node.vector.clone();
+            let old_neighbors = node.neighbors[layer].clone();
+            
+            // Build candidates from current neighbors
             let mut candidates: Vec<Candidate> = Vec::new();
             
-            for &neighbor_id in &node.neighbors[layer] {
+            for &neighbor_id in &old_neighbors {
                 let neighbor = self.load_node(neighbor_id)?;
                 let dist = self.distance(&node_vector, &neighbor.vector);
                 candidates.push(Candidate {
@@ -1057,13 +1075,31 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
             
-            node.neighbors[layer] = candidates
+            let selected: Vec<NodeId> = candidates
                 .into_iter()
                 .take(max_connections)
                 .map(|c| c.node_id)
                 .collect();
             
+            // Identify which neighbors were pruned
+            let pruned: Vec<NodeId> = old_neighbors
+                .iter()
+                .filter(|&n| !selected.contains(n))
+                .copied()
+                .collect();
+            
+            // Update node's neighbors
+            node.neighbors[layer] = selected;
             self.update_node(node_id, &node)?;
+            
+            // Remove reverse edges from pruned neighbors to maintain bidirectional consistency
+            for pruned_neighbor_id in pruned {
+                let mut pruned_neighbor = self.load_node(pruned_neighbor_id)?;
+                if layer < pruned_neighbor.neighbors.len() {
+                    pruned_neighbor.neighbors[layer].retain(|&n| n != node_id);
+                    self.update_node(pruned_neighbor_id, &pruned_neighbor)?;
+                }
+            }
         }
 
         Ok(())
@@ -1637,6 +1673,80 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
                         "Graph may be disconnected: {} nodes exist but only {} reachable from entry point",
                         id_to_node.len(),
                         reachable
+                    ),
+                });
+            }
+        }
+
+        // Add graph quality diagnostics
+        if !id_to_node.is_empty() {
+            let mut total_degree = 0;
+            let mut degree_by_layer: Vec<usize> = vec![0; max_layer + 1];
+            let mut reciprocal_edges = 0;
+            let mut total_edges = 0;
+            
+            for &node_id in id_to_node.values() {
+                if let Ok(node) = self.load_node(node_id) {
+                    for (layer_idx, layer_neighbors) in node.neighbors.iter().enumerate() {
+                        total_degree += layer_neighbors.len();
+                        degree_by_layer[layer_idx] += layer_neighbors.len();
+                        total_edges += layer_neighbors.len();
+                        
+                        // Check bidirectionality
+                        for &neighbor_id in layer_neighbors {
+                            if let Ok(neighbor) = self.load_node(neighbor_id) {
+                                if layer_idx < neighbor.neighbors.len()
+                                    && neighbor.neighbors[layer_idx].contains(&node_id) {
+                                    reciprocal_edges += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Calculate average degree per layer
+            let num_nodes = id_to_node.len();
+            for (layer_idx, &total_degree_at_layer) in degree_by_layer.iter().enumerate() {
+                let avg_degree = if num_nodes > 0 {
+                    total_degree_at_layer as f64 / num_nodes as f64
+                } else {
+                    0.0
+                };
+                
+                report.warnings.push(crate::table::ConsistencyWarning {
+                    location: format!("hnsw_layer_{}", layer_idx),
+                    description: format!(
+                        "Layer {} statistics: avg_degree={:.2}, total_edges={}",
+                        layer_idx, avg_degree, total_degree_at_layer
+                    ),
+                });
+            }
+            
+            // Report reciprocal edge ratio (should be close to 100% for bidirectional graph)
+            let reciprocal_ratio = if total_edges > 0 {
+                (reciprocal_edges as f64 / total_edges as f64) * 100.0
+            } else {
+                0.0
+            };
+            
+            report.warnings.push(crate::table::ConsistencyWarning {
+                location: "hnsw_graph".to_string(),
+                description: format!(
+                    "Graph quality: reciprocal_edge_ratio={:.1}%, total_edges={}, avg_degree={:.2}",
+                    reciprocal_ratio,
+                    total_edges,
+                    if num_nodes > 0 { total_degree as f64 / num_nodes as f64 } else { 0.0 }
+                ),
+            });
+            
+            // Warn if reciprocal ratio is low (indicates asymmetric graph)
+            if reciprocal_ratio < 90.0 {
+                report.warnings.push(crate::table::ConsistencyWarning {
+                    location: "hnsw_graph".to_string(),
+                    description: format!(
+                        "Low reciprocal edge ratio ({:.1}%) indicates graph is not properly bidirectional",
+                        reciprocal_ratio
                     ),
                 });
             }
