@@ -962,12 +962,11 @@ fn test_update_nonexistent_key_error() {
 #[test]
 fn test_operation_on_nonexistent_table() {
     let db = create_test_db();
-    let result = db
-        .table(TableId::from(999))
-        .unwrap()
-        .insert(b"key", b"value");
+    let result = db.table(TableId::from(999));
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
+    if let Err(e) = result {
+        assert_eq!(e.kind, StorageEngineErrorKind::NotATable);
+    }
 }
 
 #[test]

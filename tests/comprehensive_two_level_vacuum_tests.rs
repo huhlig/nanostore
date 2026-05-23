@@ -75,8 +75,8 @@ fn test_comprehensive_two_level_vacuum_single_table() {
 
     // Phase 3: Perform table-level vacuum (condense B-tree nodes, free pages)
     println!("\nPhase 3: Performing table-level vacuum (vacuum_table)...");
-    let versions_removed = db.vacuum_table(table_id).expect("Failed to vacuum");
-    println!("✓ Table vacuum removed {} versions", versions_removed);
+    let _stats = db.vacuum_table(table_id).expect("Failed to vacuum");
+    println!("Vacuum completed");
 
     // Phase 4: Perform pager-level compaction (repack physical pages)
     println!("\nPhase 4: Performing pager-level compaction (vacuum_table)...");
@@ -221,12 +221,12 @@ fn test_comprehensive_two_level_vacuum_multiple_tables_sequential() {
 
     // Phase 4: Perform table-level vacuum on each table
     println!("\nPhase 4: Performing table-level vacuum on each table...");
-    let v1 = db.vacuum_table(table1).expect("Failed to vacuum table1");
-    let v2 = db.vacuum_table(table2).expect("Failed to vacuum table2");
-    let v3 = db.vacuum_table(table3).expect("Failed to vacuum table3");
-    println!("✓ Table1 vacuum: {} versions removed", v1);
-    println!("✓ Table2 vacuum: {} versions removed", v2);
-    println!("✓ Table3 vacuum: {} versions removed", v3);
+    let _stats = db.vacuum_table(table1).expect("Failed to vacuum table1");
+    let _stats = db.vacuum_table(table2).expect("Failed to vacuum table2");
+    let _stats = db.vacuum_table(table3).expect("Failed to vacuum table3");
+    println!("Vacuum completed");
+    println!("Vacuum completed");
+    println!("Vacuum completed");
 
     // Phase 5: Perform pager-level compaction on each table SEQUENTIALLY
     println!("\nPhase 5: Performing pager-level compaction on each table sequentially...");

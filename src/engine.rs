@@ -115,7 +115,7 @@ impl VacuumMetrics {
 ///
 /// VACUUM PAGER is a blocking operation that compacts the database file by moving
 /// data from high-numbered pages to low-numbered pages, then truncating the file.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VacuumPagerStats {
     /// Number of pages moved during compaction
     pub pages_moved: u64,
@@ -129,6 +129,17 @@ pub struct VacuumPagerStats {
     pub file_size_after: u64,
     /// Duration of the operation
     pub duration: Duration,
+}
+
+impl std::fmt::Display for VacuumPagerStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "VacuumPagerStats(pages_moved: {}, pages_truncated: {}, bytes_reclaimed: {}, file_size: {} -> {})",
+            self.pages_moved, self.pages_truncated, self.bytes_reclaimed,
+            self.file_size_before, self.file_size_after
+        )
+    }
 }
 
 impl VacuumPagerStats {
@@ -150,6 +161,39 @@ impl VacuumPagerStats {
         if self.file_size_before > self.file_size_after {
             self.bytes_reclaimed = self.file_size_before - self.file_size_after;
         }
+    }
+}
+
+/// Statistics for a complete VACUUM ALL operation.
+///
+/// This includes both table-level version cleanup and pager-level compaction.
+#[derive(Debug, Clone, Default)]
+pub struct VacuumFullStats {
+    /// Per-table breakdown of versions removed
+    pub versions_removed_per_table: HashMap<TableId, usize>,
+    /// Total versions removed across all tables
+    pub total_versions_removed: usize,
+    /// Pager-level compaction statistics
+    pub pager_stats: VacuumPagerStats,
+    /// Total duration of the entire operation
+    pub total_duration: Duration,
+}
+
+impl VacuumFullStats {
+    /// Create a new stats instance
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Display for VacuumFullStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "VacuumFullStats(total_versions_removed: {}, pager: {})",
+            self.total_versions_removed, self.pager_stats
+        )
     }
 }
 
@@ -857,10 +901,11 @@ impl<FS: FileSystem> StorageEngine<FS> {
         snapshots.values().map(|snapshot| snapshot.lsn).min()
     }
 
-    /// Vacuum a specific table to remove obsolete version chains.
+    /// Vacuum a specific table to remove obsolete version chains and compact pages.
     ///
-    /// This removes versions older than the minimum visible LSN across all active
-    /// snapshots. The vacuum is performed atomically per table.
+    /// This performs a two-phase vacuum:
+    /// 1. Remove versions older than the minimum visible LSN (table-level cleanup)
+    /// 2. Compact the page file by moving data and truncating (pager-level cleanup)
     ///
     /// # Arguments
     ///
@@ -868,17 +913,17 @@ impl<FS: FileSystem> StorageEngine<FS> {
     ///
     /// # Returns
     ///
-    /// Returns the number of versions removed, or an error if the table doesn't exist
-    /// or doesn't support vacuuming.
+    /// Returns statistics about the pager-level compaction including pages moved,
+    /// bytes reclaimed, and file size reduction.
     ///
     /// # Examples
     ///
     /// ```ignore
     /// // Vacuum a specific table
-    /// let removed = db.vacuum_table(table_id)?;
-    /// println!("Removed {} obsolete versions", removed);
+    /// let stats = db.vacuum_table(table_id)?;
+    /// println!("Reclaimed {} bytes", stats.bytes_reclaimed);
     /// ```
-    pub fn vacuum_table(&self, table_id: TableId) -> Result<usize, StorageEngineError> {
+    pub fn vacuum_table(&self, table_id: TableId) -> Result<VacuumPagerStats, StorageEngineError> {
         // Get minimum visible LSN
         let min_visible_lsn = match self.min_visible_lsn() {
             Some(lsn) => lsn,
@@ -894,47 +939,61 @@ impl<FS: FileSystem> StorageEngine<FS> {
             .get_object_info(table_id)?
             .ok_or_else(|| StorageEngineError::not_found(table_id))?;
 
-        // Vacuum the table through the engine registry
+        // Phase 1: Vacuum the table through the engine registry (remove old versions)
         let registry = self.engine_registry.clone();
-        registry.vacuum_table(table_id, min_visible_lsn)
+        let _versions_removed = registry.vacuum_table(table_id, min_visible_lsn)?;
+
+        // Phase 2: Perform pager-level compaction
+        self.vacuum_pager()
     }
 
     /// Vacuum all tables in the storage engine.
     ///
-    /// This is a convenience method that vacuums all tables that support it,
-    /// then calls vacuum_pager() to compact the page file.
+    /// This performs a complete vacuum operation:
+    /// 1. Remove obsolete versions from all tables
+    /// 2. Compact the page file to reclaim disk space
+    ///
     /// Tables that don't support vacuuming are skipped.
     ///
     /// # Returns
     ///
-    /// Returns detailed metrics about the vacuum operation including versions
-    /// removed per table and duration.
+    /// Returns detailed statistics including per-table version cleanup and
+    /// pager-level compaction metrics.
     ///
     /// # Examples
     ///
     /// ```ignore
     /// // Vacuum all tables
-    /// let metrics = db.vacuum_all()?;
-    /// println!("Removed {} versions in {:?}",
-    ///          metrics.total_versions_removed,
-    ///          metrics.duration);
+    /// let stats = db.vacuum_all()?;
+    /// println!("Removed {} versions", stats.total_versions_removed);
+    /// println!("Reclaimed {} bytes", stats.pager_stats.bytes_reclaimed);
     /// // Access per-table results
-    /// for (table_id, removed) in &metrics.versions_removed_per_table {
+    /// for (table_id, removed) in &stats.versions_removed_per_table {
     ///     println!("Table {}: removed {} versions", table_id, removed);
     /// }
     /// ```
-    pub fn vacuum_all(&self) -> Result<VacuumMetrics, StorageEngineError> {
-        let mut metrics = VacuumMetrics::new();
+    pub fn vacuum_all(&self) -> Result<VacuumFullStats, StorageEngineError> {
+        let start = Instant::now();
+        let mut full_stats = VacuumFullStats::new();
+
+        // Get minimum visible LSN
+        let min_visible_lsn = match self.min_visible_lsn() {
+            Some(lsn) => lsn,
+            None => self.current_snapshot_lsn()
+        };
 
         // Get all tables
         let tables = self.list_tables()?;
 
+        // Phase 1: Vacuum all tables (remove old versions)
+        let registry = self.engine_registry.clone();
         for table_info in tables {
             // Try to vacuum each table, but don't fail if a table doesn't support it
-            match self.vacuum_table(table_info.id) {
+            match registry.vacuum_table(table_info.id, min_visible_lsn) {
                 Ok(removed) => {
                     if removed > 0 {
-                        metrics.add_table_result(table_info.id, removed);
+                        full_stats.versions_removed_per_table.insert(table_info.id, removed);
+                        full_stats.total_versions_removed += removed;
                     }
                 }
                 Err(_) => {
@@ -944,13 +1003,21 @@ impl<FS: FileSystem> StorageEngine<FS> {
             }
         }
 
-        metrics.complete();
+        // Phase 2: Perform pager-level compaction
+        full_stats.pager_stats = self.vacuum_pager()?;
+        full_stats.total_duration = start.elapsed();
 
-        // Update stats
+        // Update legacy stats for backward compatibility
+        let mut legacy_metrics = VacuumMetrics::new();
+        legacy_metrics.total_versions_removed = full_stats.total_versions_removed;
+        legacy_metrics.versions_removed_per_table = full_stats.versions_removed_per_table.clone();
+        legacy_metrics.duration = Some(full_stats.total_duration);
+        legacy_metrics.complete();
+
         let mut stats = self.vacuum_stats.write().unwrap();
-        stats.record_vacuum(metrics.clone());
+        stats.record_vacuum(legacy_metrics);
 
-        Ok(metrics)
+        Ok(full_stats)
     }
 
     /// Get current vacuum statistics.

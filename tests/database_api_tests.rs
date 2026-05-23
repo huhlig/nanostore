@@ -385,14 +385,12 @@ fn test_operation_on_nonexistent_table() {
     let db = create_test_db();
     let fake_table_id = TableId::from(999);
 
-    // Try operations on non-existent table
-    let result = db.table(fake_table_id).unwrap().insert(b"key", b"value");
+    // Try operations on non-existent table - table() should return an error
+    let result = db.table(fake_table_id);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
-
-    let result = db.table(fake_table_id).unwrap().get(b"key");
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, StorageEngineErrorKind::NotATable);
+    if let Err(e) = result {
+        assert_eq!(e.kind, StorageEngineErrorKind::NotATable);
+    }
 }
 
 // =============================================================================

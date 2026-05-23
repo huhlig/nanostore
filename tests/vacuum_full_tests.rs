@@ -109,8 +109,8 @@ fn test_vacuum_full_basic_compaction() {
     }
 
     // Run regular vacuum first to mark pages as free
-    let versions_removed = db.vacuum_table(table_id).expect("Failed to vacuum");
-    println!("Regular vacuum removed {} versions", versions_removed);
+    let _stats = db.vacuum_table(table_id).expect("Failed to vacuum");
+    println!("Vacuum completed");
 
     // Run VACUUM FULL
     let stats = db
