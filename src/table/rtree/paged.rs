@@ -184,6 +184,17 @@ impl<FS: FileSystem> PagedRTree<FS> {
         })
     }
 
+    /// Read a node using the table cache when available.
+    fn read_cached_node(&self, page_id: PageId) -> TableResult<RTreeNode> {
+        if let Some(node) = self.node_cache.read().unwrap().get(&page_id) {
+            return Ok(node.clone());
+        }
+
+        let node = Self::read_node(&self.pager, page_id)?;
+        self.node_cache.write().unwrap().insert(page_id, node.clone());
+        Ok(node)
+    }
+
     /// Write a node to a page.
     fn write_node(pager: &Pager<FS>, page_id: PageId, node: &RTreeNode) -> TableResult<()> {
         let node_bytes = node.to_bytes();
@@ -206,6 +217,13 @@ impl<FS: FileSystem> PagedRTree<FS> {
             crate::pager::Page::new(page_id, PageType::RTreeNode, pager.page_size().data_size());
         page.data_mut().extend_from_slice(&node_bytes);
         pager.write_page(&page)?;
+        Ok(())
+    }
+
+    /// Write a node and keep the table cache coherent.
+    fn write_cached_node(&self, page_id: PageId, node: &RTreeNode) -> TableResult<()> {
+        Self::write_node(&self.pager, page_id, node)?;
+        self.node_cache.write().unwrap().insert(page_id, node.clone());
         Ok(())
     }
     
@@ -282,7 +300,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         let object_id = KeyBuf(id.to_vec());
 
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id).map_err(|e| {
+        let root_node = self.read_cached_node(root_page_id).map_err(|e| {
             TableError::Other(format!(
                 "Failed to read root node {root_page_id} before insert of {:?}: {e}",
                 id
@@ -294,7 +312,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             self.find_leaf_entry(root_page_id, &root_node, id)?
         {
             // Entry exists - update its version chain and MBR
-            let mut leaf_node = Self::read_node(&self.pager, leaf_page_id)?;
+            let mut leaf_node = self.read_cached_node(leaf_page_id)?;
 
             if let Some(entries) = leaf_node.leaf_entries_mut() {
                 if let Some(entry) = entries.get_mut(entry_index) {
@@ -302,7 +320,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
                     entry.mbr = mbr;
                     // Prepend a new version to the chain
                     entry.prepend_version(tx_id);
-                    Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
+                    self.write_cached_node(leaf_page_id, &leaf_node)?;
                     return Ok(());
                 }
             }
@@ -318,7 +336,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
 
         // Find the appropriate leaf node
         let leaf_page_id = self.choose_leaf(root_page_id, &root_node, &entry.mbr)?;
-        let mut leaf_node = Self::read_node(&self.pager, leaf_page_id).map_err(|e| {
+        let mut leaf_node = self.read_cached_node(leaf_page_id).map_err(|e| {
             TableError::Other(format!(
                 "Failed to read leaf node {leaf_page_id} before insert of {:?}: {e}",
                 id
@@ -335,7 +353,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         if needs_split {
             self.split_node(leaf_page_id, leaf_node)?;
         } else {
-            Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
+            self.write_cached_node(leaf_page_id, &leaf_node)?;
         }
 
         // Increment object count
@@ -366,7 +384,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
                 }
 
                 let child_page_id = entries[best_idx].child_page_id;
-                let child_node = Self::read_node(&self.pager, child_page_id).map_err(|e| {
+                let child_node = self.read_cached_node(child_page_id).map_err(|e| {
                     TableError::Other(format!(
                         "Failed to read child node {child_page_id} during choose_leaf: {e}"
                     ))
@@ -421,8 +439,8 @@ impl<FS: FileSystem> PagedRTree<FS> {
                 }
 
                 // Write nodes
-                Self::write_node(&self.pager, page_id, &left_node)?;
-                Self::write_node(&self.pager, new_page_id, &right_node)?;
+                self.write_cached_node(page_id, &left_node)?;
+                self.write_cached_node(new_page_id, &right_node)?;
 
                 // Update parent
                 let left_mbr = left_node.calculate_mbr(self.config.dimensions);
@@ -449,9 +467,9 @@ impl<FS: FileSystem> PagedRTree<FS> {
                         .add_internal_entry(InternalEntry::new(right_mbr, new_page_id))
                         .map_err(TableError::Other)?;
 
-                    Self::write_node(&self.pager, left_page_id, &left_node)?;
-                    Self::write_node(&self.pager, new_page_id, &right_node)?;
-                    Self::write_node(&self.pager, page_id, &root_node)?;
+                    self.write_cached_node(left_page_id, &left_node)?;
+                    self.write_cached_node(new_page_id, &right_node)?;
+                    self.write_cached_node(page_id, &root_node)?;
                     *self.height.write().unwrap() += 1;
                 } else {
                     // Update existing parent
@@ -493,8 +511,8 @@ impl<FS: FileSystem> PagedRTree<FS> {
                         .map_err(TableError::Other)?;
                 }
 
-                Self::write_node(&self.pager, page_id, &left_node)?;
-                Self::write_node(&self.pager, new_page_id, &right_node)?;
+                self.write_cached_node(page_id, &left_node)?;
+                self.write_cached_node(new_page_id, &right_node)?;
                 self.update_children_parent_page_ids(page_id, &left_node)?;
                 self.update_children_parent_page_ids(new_page_id, &right_node)?;
 
@@ -520,9 +538,9 @@ impl<FS: FileSystem> PagedRTree<FS> {
                         .add_internal_entry(InternalEntry::new(right_mbr, new_page_id))
                         .map_err(TableError::Other)?;
 
-                    Self::write_node(&self.pager, left_page_id, &left_node)?;
-                    Self::write_node(&self.pager, new_page_id, &right_node)?;
-                    Self::write_node(&self.pager, page_id, &root_node)?;
+                    self.write_cached_node(left_page_id, &left_node)?;
+                    self.write_cached_node(new_page_id, &right_node)?;
+                    self.write_cached_node(page_id, &root_node)?;
                     self.update_children_parent_page_ids(left_page_id, &left_node)?;
                     self.update_children_parent_page_ids(new_page_id, &right_node)?;
                     *self.height.write().unwrap() += 1;
@@ -549,9 +567,9 @@ impl<FS: FileSystem> PagedRTree<FS> {
     ) -> TableResult<()> {
         if let Some(entries) = node.internal_entries() {
             for entry in entries {
-                let mut child_node = Self::read_node(&self.pager, entry.child_page_id)?;
+                let mut child_node = self.read_cached_node(entry.child_page_id)?;
                 child_node.set_parent_page_id(parent_page_id);
-                Self::write_node(&self.pager, entry.child_page_id, &child_node)?;
+                self.write_cached_node(entry.child_page_id, &child_node)?;
             }
         }
 
@@ -564,7 +582,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         page_id: PageId,
         object_id: &[u8],
     ) -> TableResult<Option<PageId>> {
-        let node = Self::read_node(&self.pager, page_id)?;
+        let node = self.read_cached_node(page_id)?;
         match node {
             RTreeNode::Leaf { entries, .. } => Ok(entries
                 .iter()
@@ -590,7 +608,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             return Ok(());
         };
 
-        let mut leaf_node = Self::read_node(&self.pager, leaf_page_id)?;
+        let mut leaf_node = self.read_cached_node(leaf_page_id)?;
         let parent_page_id = leaf_node.parent_page_id();
 
         let removed = if let Some(entries) = leaf_node.leaf_entries_mut() {
@@ -611,7 +629,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             return Ok(());
         }
 
-        Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
+        self.write_cached_node(leaf_page_id, &leaf_node)?;
         self.condense_tree(leaf_page_id, leaf_node, parent_page_id)?;
 
         let mut object_count = self.object_count.write().unwrap();
@@ -642,7 +660,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
                 let orphaned_entries = self.collect_entries_for_reinsertion(&node);
                 self.remove_child_from_parent(parent_page_id, page_id)?;
 
-                let parent_node = Self::read_node(&self.pager, parent_page_id)?;
+                let parent_node = self.read_cached_node(parent_page_id)?;
                 page_id = parent_page_id;
                 parent_page_id = parent_node.parent_page_id();
                 node = parent_node;
@@ -652,7 +670,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             }
 
             self.update_node_mbr_in_parent(parent_page_id, page_id, &node)?;
-            let parent_node = Self::read_node(&self.pager, parent_page_id)?;
+            let parent_node = self.read_cached_node(parent_page_id)?;
             page_id = parent_page_id;
             parent_page_id = parent_node.parent_page_id();
             node = parent_node;
@@ -665,7 +683,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         parent_page_id: PageId,
         child_page_id: PageId,
     ) -> TableResult<()> {
-        let mut parent_node = Self::read_node(&self.pager, parent_page_id)?;
+        let mut parent_node = self.read_cached_node(parent_page_id)?;
         if let Some(entries) = parent_node.internal_entries_mut()
             && let Some(index) = entries
                 .iter()
@@ -673,7 +691,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         {
             entries.remove(index);
         }
-        Self::write_node(&self.pager, parent_page_id, &parent_node)
+        self.write_cached_node(parent_page_id, &parent_node)
     }
 
     /// Update a node's MBR entry inside its parent.
@@ -683,7 +701,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         child_page_id: PageId,
         child_node: &RTreeNode,
     ) -> TableResult<()> {
-        let mut parent_node = Self::read_node(&self.pager, parent_page_id)?;
+        let mut parent_node = self.read_cached_node(parent_page_id)?;
         if let Some(entries) = parent_node.internal_entries_mut()
             && let Some(entry) = entries
                 .iter_mut()
@@ -691,7 +709,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         {
             entry.mbr = child_node.calculate_mbr(self.config.dimensions);
         }
-        Self::write_node(&self.pager, parent_page_id, &parent_node)
+        self.write_cached_node(parent_page_id, &parent_node)
     }
 
     /// Adjust the root node after deletion, shrinking tree height when possible.
@@ -703,9 +721,9 @@ impl<FS: FileSystem> PagedRTree<FS> {
         match root_node {
             RTreeNode::Internal { entries, .. } if entries.len() == 1 => {
                 let child_page_id = entries[0].child_page_id;
-                let mut child_node = Self::read_node(&self.pager, child_page_id)?;
+                let mut child_node = self.read_cached_node(child_page_id)?;
                 child_node.set_parent_page_id(PageId::from(0));
-                Self::write_node(&self.pager, child_page_id, &child_node)?;
+                self.write_cached_node(child_page_id, &child_node)?;
                 *self.root_page_id.write().unwrap() = child_page_id;
 
                 let mut height = self.height.write().unwrap();
@@ -716,17 +734,17 @@ impl<FS: FileSystem> PagedRTree<FS> {
             }
             RTreeNode::Internal { entries, level, .. } if entries.is_empty() => {
                 let empty_root = RTreeNode::new_internal(level);
-                Self::write_node(&self.pager, root_page_id, &empty_root)?;
+                self.write_cached_node(root_page_id, &empty_root)?;
                 Ok(())
             }
             RTreeNode::Leaf { entries, .. } if entries.is_empty() => {
                 let empty_root = RTreeNode::new_leaf();
-                Self::write_node(&self.pager, root_page_id, &empty_root)?;
+                self.write_cached_node(root_page_id, &empty_root)?;
                 *self.height.write().unwrap() = 1;
                 Ok(())
             }
             other => {
-                Self::write_node(&self.pager, root_page_id, &other)?;
+                self.write_cached_node(root_page_id, &other)?;
                 Ok(())
             }
         }
@@ -736,9 +754,9 @@ impl<FS: FileSystem> PagedRTree<FS> {
     fn reinsert_entries(&self, entries: Vec<LeafEntry>) -> TableResult<()> {
         for entry in entries {
             let root_page_id = self.root_page_id();
-            let root_node = Self::read_node(&self.pager, root_page_id)?;
+            let root_node = self.read_cached_node(root_page_id)?;
             let leaf_page_id = self.choose_leaf(root_page_id, &root_node, &entry.mbr)?;
-            let mut leaf_node = Self::read_node(&self.pager, leaf_page_id)?;
+            let mut leaf_node = self.read_cached_node(leaf_page_id)?;
 
             leaf_node.add_leaf_entry(entry).map_err(TableError::Other)?;
 
@@ -749,7 +767,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             if needs_split {
                 self.split_node(leaf_page_id, leaf_node)?;
             } else {
-                Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
+                self.write_cached_node(leaf_page_id, &leaf_node)?;
             }
         }
 
@@ -763,7 +781,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             RTreeNode::Internal { entries, .. } => {
                 let mut collected = Vec::new();
                 for entry in entries {
-                    if let Ok(child_node) = Self::read_node(&self.pager, entry.child_page_id) {
+                    if let Ok(child_node) = self.read_cached_node(entry.child_page_id) {
                         collected.extend(self.collect_entries_for_reinsertion(&child_node));
                     }
                 }
@@ -790,15 +808,15 @@ impl<FS: FileSystem> PagedRTree<FS> {
             .add_internal_entry(InternalEntry::new(right_mbr, right_page_id))
             .map_err(TableError::Other)?;
 
-        let mut left_node = Self::read_node(&self.pager, left_page_id)?;
+        let mut left_node = self.read_cached_node(left_page_id)?;
         left_node.set_parent_page_id(new_root_page_id);
-        Self::write_node(&self.pager, left_page_id, &left_node)?;
+        self.write_cached_node(left_page_id, &left_node)?;
 
-        let mut right_node = Self::read_node(&self.pager, right_page_id)?;
+        let mut right_node = self.read_cached_node(right_page_id)?;
         right_node.set_parent_page_id(new_root_page_id);
-        Self::write_node(&self.pager, right_page_id, &right_node)?;
+        self.write_cached_node(right_page_id, &right_node)?;
 
-        Self::write_node(&self.pager, new_root_page_id, &new_root).map_err(|e| {
+        self.write_cached_node(new_root_page_id, &new_root).map_err(|e| {
             TableError::Other(format!(
                 "Failed to write new root page {new_root_page_id}: {e}"
             ))
@@ -826,7 +844,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         new_child_id: PageId,
         new_mbr: Mbr,
     ) -> TableResult<()> {
-        let mut parent_node = Self::read_node(&self.pager, parent_page_id)?;
+        let mut parent_node = self.read_cached_node(parent_page_id)?;
 
         // Find and update the old entry
         if let Some(entries) = parent_node.internal_entries_mut() {
@@ -844,7 +862,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         if parent_node.entry_count() > self.config.max_entries_per_node {
             self.split_node(parent_page_id, parent_node)?;
         } else {
-            Self::write_node(&self.pager, parent_page_id, &parent_node)?;
+            self.write_cached_node(parent_page_id, &parent_node)?;
         }
 
         Ok(())
@@ -1107,7 +1125,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         let mut results = Vec::new();
 
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
 
         self.search_intersects_recursive(
             root_page_id,
@@ -1166,7 +1184,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             RTreeNode::Internal { entries, .. } => {
                 for entry in entries {
                     if entry.mbr.intersects(query_mbr) {
-                        let child_node = Self::read_node(&self.pager, entry.child_page_id)?;
+                        let child_node = self.read_cached_node(entry.child_page_id)?;
                         self.search_intersects_recursive(
                             entry.child_page_id,
                             &child_node,
@@ -1189,70 +1207,76 @@ impl<FS: FileSystem> PagedRTree<FS> {
     /// Search for the nearest geometries to a point.
     #[instrument(skip(self))]
     fn search_nearest(&self, point: GeoPoint, limit: usize) -> TableResult<Vec<GeoHit>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
         let mut heap = BinaryHeap::new();
         let mut results: Vec<(f64, KeyBuf)> = Vec::new();
 
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
 
-        // Priority queue entry: (negative distance in microns, page_id, is_leaf)
-        // Use microns (distance * 1_000_000) to avoid floating point comparison issues
         let root_dist = (root_node
             .calculate_mbr(self.config.dimensions)
-            .min_distance(point) * 1_000_000.0) as i64;
-        heap.push(std::cmp::Reverse((
-            -root_dist,
-            root_page_id,
-            matches!(root_node, RTreeNode::Leaf { .. }),
-        )));
+            .min_distance(point)
+            * 1_000_000.0) as i64;
+        heap.push(std::cmp::Reverse((root_dist, root_page_id)));
 
-        while let Some(std::cmp::Reverse((neg_dist, page_id, _is_leaf))) = heap.pop() {
-            // Early termination: if we have enough results and the next node is farther
-            // than our worst result, we can stop
+        while let Some(std::cmp::Reverse((next_dist, page_id))) = heap.pop() {
             if results.len() >= limit {
-                let worst_result_dist = (results.last().unwrap().0 * 1_000_000.0) as i64;
-                if -neg_dist > worst_result_dist {
+                let worst_result_dist = results
+                    .iter()
+                    .map(|(distance, _)| (*distance * 1_000_000.0) as i64)
+                    .fold(i64::MIN, i64::max);
+                if next_dist > worst_result_dist {
                     break;
                 }
             }
 
-            let node = Self::read_node(&self.pager, page_id)?;
+            let node = self.read_cached_node(page_id)?;
 
             match node {
                 RTreeNode::Leaf { entries, .. } => {
                     for entry in entries {
-                        // Skip tombstoned entries
                         match &entry.version_chain.value {
                             crate::txn::VersionValue::Inline(data) if data.as_slice() == &[0xFF] => {
-                                continue; // Skip tombstoned entries
+                                continue;
                             }
-                            _ => {} // Not a tombstone, continue processing
+                            _ => {}
                         }
-                        
+
                         let distance = entry.mbr.min_distance(point);
-                        results.push((distance, entry.object_id.clone()));
+                        if results.len() < limit {
+                            results.push((distance, entry.object_id.clone()));
+                            continue;
+                        }
+
+                        let mut worst_idx = 0;
+                        let mut worst_dist = results[0].0;
+                        for (idx, (existing_dist, _)) in results.iter().enumerate().skip(1) {
+                            if *existing_dist > worst_dist {
+                                worst_dist = *existing_dist;
+                                worst_idx = idx;
+                            }
+                        }
+
+                        if distance < worst_dist {
+                            results[worst_idx] = (distance, entry.object_id.clone());
+                        }
                     }
-                    // Sort and keep only top limit after processing each leaf
-                    results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-                    results.truncate(limit);
                 }
                 RTreeNode::Internal { entries, .. } => {
                     for entry in entries {
                         let distance = entry.mbr.min_distance(point);
                         let dist_microns = (distance * 1_000_000.0) as i64;
-                        heap.push(std::cmp::Reverse((
-                            -dist_microns,
-                            entry.child_page_id,
-                            false,
-                        )));
+                        heap.push(std::cmp::Reverse((dist_microns, entry.child_page_id)));
                     }
                 }
             }
         }
 
-        // Final sort by distance
         results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        results.truncate(limit);
 
         Ok(results
             .into_iter()
@@ -1277,19 +1301,19 @@ impl<FS: FileSystem> PagedRTree<FS> {
         // For delete, we mark the entry with a tombstone version
         // The actual deletion happens during vacuum
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
 
         // Find the leaf containing this object
         if let Some((leaf_page_id, entry_index)) =
             self.find_leaf_entry(root_page_id, &root_node, id)?
         {
-            let mut leaf_node = Self::read_node(&self.pager, leaf_page_id)?;
+            let mut leaf_node = self.read_cached_node(leaf_page_id)?;
 
             if let Some(entries) = leaf_node.leaf_entries_mut() {
                 if let Some(entry) = entries.get_mut(entry_index) {
                     // Prepend a tombstone version to mark as deleted
                     entry.prepend_tombstone(tx_id);
-                    Self::write_node(&self.pager, leaf_page_id, &leaf_node)?;
+                    self.write_cached_node(leaf_page_id, &leaf_node)?;
                     return Ok(());
                 }
             }
@@ -1312,7 +1336,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         let mut results = Vec::new();
 
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
 
         self.search_intersects_recursive(
             root_page_id,
@@ -1333,52 +1357,73 @@ impl<FS: FileSystem> PagedRTree<FS> {
         limit: usize,
         snapshot: &Snapshot,
     ) -> TableResult<Vec<GeoHit>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
         let mut heap = BinaryHeap::new();
         let mut results = Vec::new();
 
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
 
-        heap.push(std::cmp::Reverse((
-            -root_node
-                .calculate_mbr(self.config.dimensions)
-                .min_distance(point) as i64,
-            root_page_id,
-            matches!(root_node, RTreeNode::Leaf { .. }),
-        )));
+        let root_dist = (root_node
+            .calculate_mbr(self.config.dimensions)
+            .min_distance(point)
+            * 1_000_000.0) as i64;
+        heap.push(std::cmp::Reverse((root_dist, root_page_id)));
 
-        while let Some(std::cmp::Reverse((_neg_dist, page_id, _is_leaf))) = heap.pop() {
+        while let Some(std::cmp::Reverse((next_dist, page_id))) = heap.pop() {
             if results.len() >= limit {
-                break;
+                let worst_result_dist = results
+                    .iter()
+                    .map(|(distance, _)| (*distance * 1_000_000.0) as i64)
+                    .fold(i64::MIN, i64::max);
+                if next_dist > worst_result_dist {
+                    break;
+                }
             }
 
-            let node = Self::read_node(&self.pager, page_id)?;
+            let node = self.read_cached_node(page_id)?;
 
             match node {
                 RTreeNode::Leaf { entries, .. } => {
                     for entry in entries {
-                        // Check visibility
-                        if entry.is_visible(snapshot) {
-                            let distance = entry.mbr.min_distance(point);
+                        if !entry.is_visible(snapshot) {
+                            continue;
+                        }
+
+                        let distance = entry.mbr.min_distance(point);
+                        if results.len() < limit {
                             results.push((distance, entry.object_id.clone()));
+                            continue;
+                        }
+
+                        let mut worst_idx = 0;
+                        let mut worst_dist = results[0].0;
+                        for (idx, (existing_dist, _)) in results.iter().enumerate().skip(1) {
+                            if *existing_dist > worst_dist {
+                                worst_dist = *existing_dist;
+                                worst_idx = idx;
+                            }
+                        }
+
+                        if distance < worst_dist {
+                            results[worst_idx] = (distance, entry.object_id.clone());
                         }
                     }
                 }
                 RTreeNode::Internal { entries, .. } => {
                     for entry in entries {
                         let distance = entry.mbr.min_distance(point);
-                        heap.push(std::cmp::Reverse((
-                            -(distance as i64),
-                            entry.child_page_id,
-                            false,
-                        )));
+                        let dist_microns = (distance * 1_000_000.0) as i64;
+                        heap.push(std::cmp::Reverse((dist_microns, entry.child_page_id)));
                     }
                 }
             }
         }
 
-        results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        results.truncate(limit);
+        results.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(results
             .into_iter()
@@ -1396,7 +1441,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
         commit_lsn: LogSequenceNumber,
     ) -> TableResult<()> {
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
         self.commit_versions_recursive(root_page_id, root_node, tx_id, commit_lsn)
     }
 
@@ -1420,12 +1465,12 @@ impl<FS: FileSystem> PagedRTree<FS> {
                     }
                 }
                 if modified {
-                    Self::write_node(&self.pager, page_id, &node)?;
+                    self.write_cached_node(page_id, &node)?;
                 }
             }
             RTreeNode::Internal { entries, .. } => {
                 for entry in entries {
-                    let child_node = Self::read_node(&self.pager, entry.child_page_id)?;
+                    let child_node = self.read_cached_node(entry.child_page_id)?;
                     self.commit_versions_recursive(
                         entry.child_page_id,
                         child_node,
@@ -1441,7 +1486,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
     /// Vacuum old versions that are no longer visible.
     pub fn vacuum(&self, min_visible_lsn: LogSequenceNumber) -> TableResult<usize> {
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
         self.vacuum_recursive(root_page_id, root_node, min_visible_lsn)
     }
 
@@ -1471,12 +1516,12 @@ impl<FS: FileSystem> PagedRTree<FS> {
                     }
                 }
                 if modified {
-                    Self::write_node(&self.pager, page_id, &node)?;
+                    self.write_cached_node(page_id, &node)?;
                 }
             }
             RTreeNode::Internal { entries, .. } => {
                 for entry in entries {
-                    let child_node = Self::read_node(&self.pager, entry.child_page_id)?;
+                    let child_node = self.read_cached_node(entry.child_page_id)?;
                     total_removed +=
                         self.vacuum_recursive(entry.child_page_id, child_node, min_visible_lsn)?;
                 }
@@ -1505,7 +1550,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
             RTreeNode::Internal { entries, .. } => {
                 // Search all children (we don't have spatial info for the ID)
                 for entry in entries {
-                    let child_node = Self::read_node(&self.pager, entry.child_page_id)?;
+                    let child_node = self.read_cached_node(entry.child_page_id)?;
                     if let Some(result) =
                         self.find_leaf_entry(entry.child_page_id, &child_node, id)?
                     {
@@ -1676,7 +1721,7 @@ impl<FS: FileSystem> PagedRTree<FS> {
                         });
                     }
 
-                    match Self::read_node(&self.pager, entry.child_page_id) {
+                    match self.read_cached_node(entry.child_page_id) {
                         Ok(child_node) => {
                             if child_node.level() != level - 1 {
                                 report.errors.push(crate::table::ConsistencyError {
@@ -1813,7 +1858,7 @@ impl<FS: FileSystem> GeoSpatial for PagedRTree<FS> {
     fn stats(&self) -> TableResult<SpecialtyTableStats> {
         // Count actual visible entries by traversing the tree
         let root_page_id = self.root_page_id();
-        let root_node = Self::read_node(&self.pager, root_page_id)?;
+        let root_node = self.read_cached_node(root_page_id)?;
         let count = Self::count_objects(&self.pager, root_page_id, &root_node)? as u64;
         let height = *self.height.read().unwrap() as u64;
 
