@@ -1314,15 +1314,12 @@ impl<FS: FileSystem> PagedRTree<FS> {
                     // Prepend a tombstone version to mark as deleted
                     entry.prepend_tombstone(tx_id);
                     self.write_cached_node(leaf_page_id, &leaf_node)?;
-                    return Ok(());
                 }
             }
         }
 
-        Err(TableError::key_not_found(format!(
-            "Geometry {:?} not found",
-            id
-        )))
+        // Deleting a non-existent key is a no-op (idempotent delete)
+        Ok(())
     }
 
     /// Search for geometries that intersect with the query, respecting snapshot visibility.
