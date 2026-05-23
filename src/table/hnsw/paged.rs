@@ -1086,10 +1086,19 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
         Ok(())
     }
 
-    /// Select M neighbors from candidates using simple greedy selection
+    /// Select M neighbors from candidates using a simple greedy selection
     ///
-    /// For now, we use greedy k-NN selection for performance.
-    /// TODO: Implement RobustPrune diversity heuristic with proper caching
+    /// NOTE: This uses greedy k-NN selection for performance. The proper RobustPrune
+    /// diversity heuristic from the HNSW paper would provide better cluster navigation
+    /// but requires significant optimization (batching, better caching) to be practical.
+    ///
+    /// Current performance: ~400s for 15K vectors with greedy
+    /// RobustPrune attempt: >1500s for 15K vectors (too slow)
+    ///
+    /// TODO: Implement optimized RobustPrune with:
+    /// - Batch distance calculations
+    /// - GPU acceleration for distance computations
+    /// - Approximate diversity checks
     fn select_neighbors(
         &self,
         mut candidates: Vec<Candidate>,
