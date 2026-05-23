@@ -39,6 +39,7 @@ use crate::vfs::FileSystem;
 use crate::wal::LogSequenceNumber;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
+use tracing::instrument;
 /// Cache statistics
 #[derive(Debug, Clone, Default)]
 struct CacheStats {
@@ -776,6 +777,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     }
 
     /// Search for nearest neighbors at a specific layer
+    #[instrument(skip(self, query, entry_points), fields(ef, layer))]
     fn search_layer(
         &self,
         query: &[f32],
@@ -1269,6 +1271,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     /// between clusters while limiting complexity to O((3M)²) instead of O(candidates²).
     ///
     /// Pre-loading vectors for the bounded pool amortizes the I/O cost across all diversity checks.
+    #[instrument(skip(self, candidates), fields(m, layer, extend_candidates, num_candidates = candidates.len()))]
     fn select_neighbors(
         &self,
         mut candidates: Vec<Candidate>,
@@ -1363,6 +1366,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     }
 
     /// Add bidirectional connections between nodes
+    #[instrument(skip(self, neighbors), fields(node_id = ?node_id, layer, num_neighbors = neighbors.len()))]
     fn connect_nodes(
         &self,
         node_id: NodeId,
@@ -1401,6 +1405,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
     /// Uses greedy k-NN selection for performance. The diversity heuristic is applied
     /// during initial neighbor selection in select_neighbors, not during pruning.
     /// Maintains bidirectional consistency by removing reverse edges from pruned neighbors.
+    #[instrument(skip(self), fields(node_id = ?node_id, layer))]
     fn prune_connections(&self, node_id: NodeId, layer: usize) -> TableResult<()> {
         let max_connections = if layer == 0 {
             self.config.read().unwrap().max_connections_layer0
@@ -1690,6 +1695,7 @@ impl<FS: FileSystem> VectorSearch for PagedHnswVector<FS> {
         self.config.read().unwrap().metric
     }
 
+    #[instrument(skip(self, id, vector), fields(id_len = id.len(), vector_len = vector.len()))]
     fn insert_vector(
         &self,
         id: &[u8],
