@@ -550,13 +550,18 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             }
         }
 
-        // Greedy search
+        // Greedy search - explore the graph to find nearest neighbors
         while let Some(current) = candidates.pop() {
-            // Check if we should continue
-            if let Some(furthest) = results.peek()
-                && current.distance > furthest.distance
-            {
-                break;
+            // Early termination: In HNSW, we stop when the closest unexplored candidate
+            // is further than the furthest result we're keeping. This only makes sense
+            // when we have a full result set.
+            if results.len() >= ef {
+                if let Some(furthest) = results.peek() {
+                    // current is the closest candidate (min-heap), furthest is the worst result (max-heap)
+                    if current.distance > furthest.distance {
+                        break;
+                    }
+                }
             }
 
             // Get neighbors at this layer
@@ -571,11 +576,18 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
                             distance: dist,
                         };
 
-                        if results.len() < ef || dist < results.peek().unwrap().distance {
+                        // Always add to candidates for exploration if it might improve results
+                        // or if we don't have enough results yet
+                        let furthest_dist = results.peek().map(|r| r.distance);
+                        if results.len() < ef || furthest_dist.map_or(true, |fd| dist < fd) {
                             candidates.push(candidate.clone());
+                        }
+
+                        // Add to results if we don't have enough or if it's better than worst result
+                        if results.len() < ef || dist < results.peek().unwrap().distance {
                             results.push(candidate);
 
-                            // Prune results if needed
+                            // Prune results to maintain ef size
                             if results.len() > ef {
                                 results.pop();
                             }
@@ -585,7 +597,7 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
             }
         }
 
-        // Convert to sorted vector
+        // Convert to sorted vector (closest first)
         let mut result_vec: Vec<_> = results.into_iter().collect();
         result_vec.sort_by(|a, b| {
             a.distance
@@ -1024,8 +1036,33 @@ impl<FS: FileSystem> PagedHnswVector<FS> {
 
         let mut node = self.load_node(node_id)?;
         if layer < node.neighbors.len() && node.neighbors[layer].len() > max_connections {
-            // Keep only the closest neighbors (simple heuristic: keep first M)
-            node.neighbors[layer].truncate(max_connections);
+            // CRITICAL FIX: Select the M closest neighbors, not just the first M
+            // This maintains graph connectivity by keeping the best connections
+            let node_vector = node.vector.clone();
+            let mut candidates: Vec<Candidate> = Vec::new();
+            
+            for &neighbor_id in &node.neighbors[layer] {
+                let neighbor = self.load_node(neighbor_id)?;
+                let dist = self.distance(&node_vector, &neighbor.vector);
+                candidates.push(Candidate {
+                    node_id: neighbor_id,
+                    distance: dist,
+                });
+            }
+            
+            // Sort by distance and keep only the closest M neighbors
+            candidates.sort_by(|a, b| {
+                a.distance
+                    .partial_cmp(&b.distance)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            
+            node.neighbors[layer] = candidates
+                .into_iter()
+                .take(max_connections)
+                .map(|c| c.node_id)
+                .collect();
+            
             self.update_node(node_id, &node)?;
         }
 
