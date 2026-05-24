@@ -45,10 +45,9 @@ use crate::types::{TableId, ValueBuf};
 use crate::vfs::FileSystem;
 use crate::wal::{LogSequenceNumber, WalWriter, WalWriterConfig};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
 
 /// Metrics for a single vacuum operation.
 #[derive(Debug, Clone, Default)]
@@ -119,8 +118,11 @@ impl std::fmt::Display for VacuumPagerStats {
         write!(
             f,
             "VacuumPagerStats(pages_moved: {}, pages_truncated: {}, bytes_reclaimed: {}, file_size: {} -> {})",
-            self.pages_moved, self.pages_truncated, self.bytes_reclaimed,
-            self.file_size_before, self.file_size_after
+            self.pages_moved,
+            self.pages_truncated,
+            self.bytes_reclaimed,
+            self.file_size_before,
+            self.file_size_after
         )
     }
 }
@@ -204,10 +206,9 @@ impl VacuumStats {
 
         // Update average duration
         if let Some(duration) = metrics.duration {
-            let total_duration = self
-                .avg_duration
-                .map(|avg| avg * (self.total_runs - 1) as u32 + duration)
-                .unwrap_or(duration);
+            let total_duration = self.avg_duration.map_or(duration, |avg| {
+                avg * (self.total_runs - 1) as u32 + duration
+            });
             self.avg_duration = Some(total_duration / self.total_runs as u32);
         }
 
@@ -263,12 +264,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
     pub fn new(fs: &FS, wal_path: &str, db_path: &str) -> Result<Self, StorageEngineError> {
         let wal_config = WalWriterConfig::default();
         let wal = WalWriter::create(fs, wal_path, wal_config)
-            .map_err(|e| StorageEngineError::wal_failed(format!("Failed to create WAL: {}", e)))?;
+            .map_err(|e| StorageEngineError::wal_failed(format!("Failed to create WAL: {e}")))?;
 
         // Create pager for database file with default config
         let pager_config = PagerConfig::default();
         let pager = Pager::create(fs, db_path, pager_config).map_err(|e| {
-            StorageEngineError::pager_failed(format!("Failed to create pager: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to create pager: {e}"))
         })?;
         let pager = Arc::new(pager);
 
@@ -298,15 +299,14 @@ impl<FS: FileSystem> StorageEngine<FS> {
     pub fn open(fs: &FS, wal_path: &str, db_path: &str) -> Result<Self, StorageEngineError> {
         let wal_config = WalWriterConfig::default();
         let wal = WalWriter::open(fs, wal_path, wal_config)
-            .map_err(|e| StorageEngineError::wal_failed(format!("Failed to open WAL: {}", e)))?;
+            .map_err(|e| StorageEngineError::wal_failed(format!("Failed to open WAL: {e}")))?;
 
         // Get current LSN from WAL
         let current_lsn = wal.current_lsn();
 
         // Open pager for database file
-        let pager = Pager::open(fs, db_path).map_err(|e| {
-            StorageEngineError::pager_failed(format!("Failed to open pager: {}", e))
-        })?;
+        let pager = Pager::open(fs, db_path)
+            .map_err(|e| StorageEngineError::pager_failed(format!("Failed to open pager: {e}")))?;
         let pager = Arc::new(pager);
 
         let engine_registry = Arc::new(TableEngineRegistry::new(pager.clone()));
@@ -351,8 +351,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         if lsn > latest_readable_lsn {
             return Err(StorageEngineError::invalid_operation(format!(
-                "Snapshot LSN {} is not yet committed; latest readable LSN is {}",
-                lsn, latest_readable_lsn
+                "Snapshot LSN {lsn} is not yet committed; latest readable LSN is {latest_readable_lsn}"
             )));
         }
 
@@ -366,8 +365,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         if !is_pinned {
             return Err(StorageEngineError::invalid_operation(format!(
-                "Snapshot LSN {} is not pinned by an active named snapshot",
-                lsn
+                "Snapshot LSN {lsn} is not pinned by an active named snapshot"
             )));
         }
 
@@ -517,9 +515,8 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let tables: Vec<TableInfo> = catalog.values().cloned().collect();
 
         // Serialize to JSON
-        let json_data = serde_json::to_vec(&tables).map_err(|e| {
-            StorageEngineError::other(format!("Failed to serialize catalog: {}", e))
-        })?;
+        let json_data = serde_json::to_vec(&tables)
+            .map_err(|e| StorageEngineError::other(format!("Failed to serialize catalog: {e}")))?;
 
         // Catalog page is always page 2 (page 0 = header, page 1 = superblock, page 2 = catalog)
         // We use a fixed page ID rather than allocating to ensure consistency
@@ -544,7 +541,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         // Write to catalog page
         self.pager.write_page(&page).map_err(|e| {
-            StorageEngineError::pager_failed(format!("Failed to write catalog page: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to write catalog page: {e}"))
         })?;
 
         Ok(())
@@ -560,7 +557,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         // Read catalog page
         let page = self.pager.read_page(catalog_page_id).map_err(|e| {
-            StorageEngineError::pager_failed(format!("Failed to read catalog page: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to read catalog page: {e}"))
         })?;
 
         // Check if page is empty (new database)
@@ -575,15 +572,14 @@ impl<FS: FileSystem> StorageEngine<FS> {
         // Validate version
         if version != 1 {
             return Err(StorageEngineError::other(format!(
-                "Unsupported catalog version: {}",
-                version
+                "Unsupported catalog version: {version}"
             )));
         }
 
         // Deserialize JSON data
         let json_data = &page.data[8..];
         let tables: Vec<TableInfo> = serde_json::from_slice(json_data).map_err(|e| {
-            StorageEngineError::other(format!("Failed to deserialize catalog: {}", e))
+            StorageEngineError::other(format!("Failed to deserialize catalog: {e}"))
         })?;
 
         // Validate count
@@ -678,12 +674,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
             .engine_registry
             .create_engine(table_id, name.to_string(), &options)
             .map_err(|e| {
-                StorageEngineError::other(format!("Failed to create storage engine: {}", e))
+                StorageEngineError::other(format!("Failed to create storage engine: {e}"))
             })?;
 
         // Register the engine
         self.engine_registry.register(engine).map_err(|e| {
-            StorageEngineError::other(format!("Failed to register storage engine: {}", e))
+            StorageEngineError::other(format!("Failed to register storage engine: {e}"))
         })?;
 
         // Create table info with root page location
@@ -751,7 +747,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(catalog.get(name).map(|info| info.id))
     }
 
-    /// Get table or index info by TableId.
+    /// Get table or index info by `TableId`.
     pub fn get_object_info(&self, id: TableId) -> Result<Option<TableInfo>, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.values().find(|info| info.id == id).cloned())
@@ -766,7 +762,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(catalog.get(name).cloned())
     }
 
-    /// Check if a TableId refers to a table.
+    /// Check if a `TableId` refers to a table.
     pub fn is_table(&self, id: TableId) -> Result<bool, StorageEngineError> {
         let catalog = self.table_catalog.read().unwrap();
         Ok(catalog.values().any(|info| info.id == id))
@@ -778,7 +774,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(catalog.values().cloned().collect())
     }
 
-    /// Return all catalog objects (alias for list_tables since indexes are just tables).
+    /// Return all catalog objects (alias for `list_tables` since indexes are just tables).
     pub fn list_all_objects(&self) -> Result<Vec<TableInfo>, StorageEngineError> {
         self.list_tables()
     }
@@ -799,8 +795,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let mut snapshots = self.snapshots.write().unwrap();
         if snapshots.values().any(|snapshot| snapshot.name == name) {
             return Err(StorageEngineError::invalid_operation(format!(
-                "Snapshot '{}' already exists",
-                name
+                "Snapshot '{name}' already exists"
             )));
         }
 
@@ -810,7 +805,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
             self.current_snapshot_lsn(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .map_err(|e| StorageEngineError::other(format!("System time error: {}", e)))?
+                .map_err(|e| StorageEngineError::other(format!("System time error: {e}")))?
                 .as_secs() as i64,
             0,
             self.wal.active_transactions(),
@@ -836,8 +831,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
             Ok(())
         } else {
             Err(StorageEngineError::invalid_operation(format!(
-                "Snapshot {} not found",
-                snapshot_id
+                "Snapshot {snapshot_id} not found"
             )))
         }
     }
@@ -845,11 +839,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// Compute the minimum visible LSN across all active snapshots and transactions.
     ///
     /// This is the watermark below which version chains can be safely vacuumed.
-    /// Any version with commit_lsn < min_visible_lsn is guaranteed to be invisible
+    /// Any version with `commit_lsn` < `min_visible_lsn` is guaranteed to be invisible
     /// to all current and future transactions.
     ///
     /// Returns None if there are no active snapshots (meaning all committed versions
     /// are potentially visible).
+    #[must_use]
     pub fn min_visible_lsn(&self) -> Option<LogSequenceNumber> {
         let snapshots = self.snapshots.read().unwrap();
 
@@ -935,7 +930,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         // Get minimum visible LSN
         let min_visible_lsn = match self.min_visible_lsn() {
             Some(lsn) => lsn,
-            None => self.current_snapshot_lsn()
+            None => self.current_snapshot_lsn(),
         };
 
         // Get all tables
@@ -948,7 +943,9 @@ impl<FS: FileSystem> StorageEngine<FS> {
             match registry.vacuum_table(table_info.id, min_visible_lsn) {
                 Ok(removed) => {
                     if removed > 0 {
-                        full_stats.versions_removed_per_table.insert(table_info.id, removed);
+                        full_stats
+                            .versions_removed_per_table
+                            .insert(table_info.id, removed);
                         full_stats.total_versions_removed += removed;
                     }
                 }
@@ -979,10 +976,10 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// Get current vacuum statistics.
     ///
     /// Returns aggregated statistics about all vacuum operations performed.
+    #[must_use]
     pub fn vacuum_stats(&self) -> VacuumStats {
         self.vacuum_stats.read().unwrap().clone()
     }
-
 
     /// Perform VACUUM PAGER to compact the page file.
     ///
@@ -1014,7 +1011,7 @@ impl<FS: FileSystem> StorageEngine<FS> {
         let mut full_stats = self
             .pager
             .compact_and_truncate()
-            .map_err(|e| StorageEngineError::pager_failed(format!("Compaction failed: {}", e)))?;
+            .map_err(|e| StorageEngineError::pager_failed(format!("Compaction failed: {e}")))?;
 
         // Update duration
         full_stats.duration = start.elapsed();
@@ -1022,13 +1019,13 @@ impl<FS: FileSystem> StorageEngine<FS> {
         Ok(full_stats)
     }
 
-
     /// Get the consistency guarantees provided by this storage engine.
     ///
     /// This documents the ACID properties, isolation levels, and crash
     /// recovery semantics. Query planners and applications can use this
     /// to make informed decisions about transaction boundaries and
     /// error handling.
+    #[must_use]
     pub fn consistency_guarantees(&self) -> ConsistencyGuarantees {
         // Conservative default
         ConsistencyGuarantees {
@@ -1065,12 +1062,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
     /// Explicitly close the storage engine with controlled shutdown.
     ///
     /// This method provides a controlled shutdown sequence:
-    /// 1. Flushes all LSM tree memtables to SSTables
+    /// 1. Flushes all LSM tree memtables to `SSTables`
     /// 2. Flushes WAL buffer to disk
     /// 3. Syncs pager (flushes cache and syncs database file)
     ///
     /// Unlike Drop, this method returns errors for proper error handling.
-    /// The Drop implementation will still run if close() is not called,
+    /// The Drop implementation will still run if `close()` is not called,
     /// but errors will only be logged, not returned.
     ///
     /// # Errors
@@ -1086,12 +1083,12 @@ impl<FS: FileSystem> StorageEngine<FS> {
 
         // Step 1: Flush WAL buffer
         self.wal.flush().map_err(|e| {
-            StorageEngineError::wal_failed(format!("Failed to flush WAL during close: {}", e))
+            StorageEngineError::wal_failed(format!("Failed to flush WAL during close: {e}"))
         })?;
 
         // Step 2: Sync pager (flushes cache and syncs file)
         self.pager.sync().map_err(|e| {
-            StorageEngineError::pager_failed(format!("Failed to sync pager during close: {}", e))
+            StorageEngineError::pager_failed(format!("Failed to sync pager during close: {e}"))
         })?;
 
         // Step 3: Drop self, which will trigger Drop implementations for all engines
@@ -1115,18 +1112,12 @@ impl<FS: FileSystem> Drop for StorageEngine<FS> {
     fn drop(&mut self) {
         // Step 1: Flush WAL buffer
         if let Err(e) = self.wal.flush() {
-            eprintln!(
-                "Warning: Failed to flush WAL during storage engine shutdown: {}",
-                e
-            );
+            eprintln!("Warning: Failed to flush WAL during storage engine shutdown: {e}");
         }
 
         // Step 2: Sync pager (flushes cache and syncs file)
         if let Err(e) = self.pager.sync() {
-            eprintln!(
-                "Warning: Failed to sync pager during storage engine shutdown: {}",
-                e
-            );
+            eprintln!("Warning: Failed to sync pager during storage engine shutdown: {e}");
         }
 
         // Note: WAL sync is handled by flush() if sync_on_write is enabled,
@@ -1147,8 +1138,9 @@ pub struct TableHandle<'db, FS: FileSystem> {
     table_id: TableId,
 }
 
-impl<'db, FS: FileSystem> TableHandle<'db, FS> {
+impl<FS: FileSystem> TableHandle<'_, FS> {
     /// Get the table ID.
+    #[must_use]
     pub fn id(&self) -> TableId {
         self.table_id
     }
@@ -1181,7 +1173,7 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Insert commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Insert commit failed: {e}"))
         })?;
 
         Ok(())
@@ -1210,7 +1202,7 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Update commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Update commit failed: {e}"))
         })?;
 
         Ok(())
@@ -1233,7 +1225,7 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Upsert commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Upsert commit failed: {e}"))
         })?;
 
         Ok(is_update)
@@ -1245,7 +1237,7 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
     pub fn get(&self, key: &[u8]) -> Result<Option<ValueBuf>, StorageEngineError> {
         let txn = self.db.begin_read()?;
         txn.get(self.table_id, key)
-            .map_err(|e| StorageEngineError::transaction_failed(format!("Get failed: {}", e)))
+            .map_err(|e| StorageEngineError::transaction_failed(format!("Get failed: {e}")))
     }
 
     /// Delete a key with auto-transaction.
@@ -1268,7 +1260,7 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
 
         // Commit transaction
         txn.commit().map_err(|e| {
-            StorageEngineError::transaction_failed(format!("Delete commit failed: {}", e))
+            StorageEngineError::transaction_failed(format!("Delete commit failed: {e}"))
         })?;
 
         Ok(deleted)
@@ -1285,7 +1277,9 @@ impl<'db, FS: FileSystem> TableHandle<'db, FS> {
 /// Storage engine error type with enhanced context.
 #[derive(Debug)]
 pub struct StorageEngineError {
+    /// The kind of error that occurred
     pub kind: StorageEngineErrorKind,
+    /// Human-readable error message with context
     pub message: String,
 }
 
@@ -1321,90 +1315,110 @@ pub enum StorageEngineErrorKind {
 }
 
 impl StorageEngineError {
+    /// Create a "not found" error for a table or index
+    #[must_use]
     pub fn not_found(object: TableId) -> Self {
         Self {
             kind: StorageEngineErrorKind::NotFound,
-            message: format!("Object {:?} not found", object),
+            message: format!("Object {object:?} not found"),
         }
     }
 
+    /// Create an error indicating the object exists but is not a table
+    #[must_use]
     pub fn not_a_table(object: TableId) -> Self {
         Self {
             kind: StorageEngineErrorKind::NotATable,
-            message: format!("Object {:?} is not a table", object),
+            message: format!("Object {object:?} is not a table"),
         }
     }
 
+    /// Create an error indicating the object exists but is not an index
+    #[must_use]
     pub fn not_an_index(object: TableId) -> Self {
         Self {
             kind: StorageEngineErrorKind::NotAnIndex,
-            message: format!("Object {:?} is not an index", object),
+            message: format!("Object {object:?} is not an index"),
         }
     }
 
+    /// Create an error for duplicate key insertion
+    #[must_use]
     pub fn key_already_exists(table: TableId, key: &[u8]) -> Self {
         Self {
             kind: StorageEngineErrorKind::KeyAlreadyExists,
-            message: format!("Key {:?} already exists in table {:?}", key, table),
+            message: format!("Key {key:?} already exists in table {table:?}"),
         }
     }
 
+    /// Create an error for key not found during update
+    #[must_use]
     pub fn key_not_found(table: TableId, key: &[u8]) -> Self {
         Self {
             kind: StorageEngineErrorKind::KeyNotFound,
-            message: format!("Key {:?} not found in table {:?}", key, table),
+            message: format!("Key {key:?} not found in table {table:?}"),
         }
     }
 
+    /// Create an error for duplicate table creation
+    #[must_use]
     pub fn table_already_exists(name: &str) -> Self {
         Self {
             kind: StorageEngineErrorKind::TableAlreadyExists,
-            message: format!("Table '{}' already exists", name),
+            message: format!("Table '{name}' already exists"),
         }
     }
 
+    /// Create an error for duplicate index creation
+    #[must_use]
     pub fn index_already_exists(name: &str) -> Self {
         Self {
             kind: StorageEngineErrorKind::IndexAlreadyExists,
-            message: format!("Index '{}' already exists", name),
+            message: format!("Index '{name}' already exists"),
         }
     }
 
+    #[must_use]
     pub fn index_maintenance_failed(index: TableId, details: String) -> Self {
         Self {
             kind: StorageEngineErrorKind::IndexMaintenanceFailed,
-            message: format!("Index {:?} maintenance failed: {}", index, details),
+            message: format!("Index {index:?} maintenance failed: {details}"),
         }
     }
 
+    #[must_use]
     pub fn transaction_failed(details: String) -> Self {
         Self {
             kind: StorageEngineErrorKind::TransactionFailed,
-            message: format!("Transaction failed: {}", details),
+            message: format!("Transaction failed: {details}"),
         }
     }
 
+    #[must_use]
     pub fn wal_failed(details: String) -> Self {
         Self {
             kind: StorageEngineErrorKind::WalFailed,
-            message: format!("WAL operation failed: {}", details),
+            message: format!("WAL operation failed: {details}"),
         }
     }
 
+    #[must_use]
     pub fn pager_failed(details: String) -> Self {
         Self {
             kind: StorageEngineErrorKind::PagerFailed,
-            message: format!("Pager operation failed: {}", details),
+            message: format!("Pager operation failed: {details}"),
         }
     }
 
+    #[must_use]
     pub fn invalid_operation(details: String) -> Self {
         Self {
             kind: StorageEngineErrorKind::InvalidOperation,
-            message: format!("Invalid operation: {}", details),
+            message: format!("Invalid operation: {details}"),
         }
     }
 
+    #[must_use]
     pub fn other(message: String) -> Self {
         Self {
             kind: StorageEngineErrorKind::Other,
